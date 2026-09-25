@@ -1,0 +1,10 @@
+# Hosting links (project/org IDs) and local env files
+.vercel/
+dist/.vercel/
+.env*
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Local Claude Code settings
+.claude/settings.local.json

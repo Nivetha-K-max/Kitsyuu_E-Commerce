@@ -1,0 +1,101 @@
+[
+  {
+    "name": "hero",
+    "prompt": "Cinematic luxury underground streetwear campaign still. One oversized charcoal washed-black distressed patchwork denim sleeveless jacket floating in mid-air center-right at approximately 60% across the frame, full garment visible, under one narrow amber atelier spotlight. Black cavernous studio, wet concrete floor subtly reflecting warm light, frayed raw seams and tactile heavy denim, faint cool edge light. Huge very dark empty negative space covering left 40% of composition for a website title. Garment should fit a narrow mobile crop centered around it. No person, no mannequin, no hanger, no visible support, no text, no logos, no UI. Restrained cinematic high-end photography, dramatic sculptural volume, subtle grain.",
+    "actions": [
+      {
+        "iconHint": "upscale",
+        "id": "enhance_image",
+        "label": "Enhance"
+      },
+      {
+        "iconHint": "eraser",
+        "id": "remove_background",
+        "label": "Remove Background"
+      }
+    ],
+    "canDownload": true,
+    "canFullView": true,
+    "canUse": true,
+    "id": "a1f768cf-41cc-4bf7-8240-7b51e361f3ab",
+    "mediaUrl": "https://asset.imagine.art/processed/a1f768cf-41cc-4bf7-8240-7b51e361f3ab",
+    "metadata": {
+      "file_size": 1553161,
+      "format_type": ".png",
+      "has_audio": false,
+      "height": 1024,
+      "mime_type": "image/png",
+      "type": "image",
+      "width": 1024
+    },
+    "status": "complete",
+    "thumbnailUrl": "https://asset.imagine.art/video/thumbnails/a1f768cf-41cc-4bf7-8240-7b51e361f3ab",
+    "type": "image"
+  },
+  {
+    "name": "editorial",
+    "prompt": "Luxury underground street fashion editorial photograph, full body adult model in oversized washed black layered top with distressed raw seams and huge balloon cargo trousers. Japanese concrete alley at night, restrained amber practical light, raw muted monochrome palette with one subtle burgundy accent, candid stance, striking sculptural clothing silhouette. Tall portrait composition, all clothing visible. No readable text, no logos, no other brands, no UI. Cinematic fashion photography with natural fabric detail.",
+    "actions": [
+      {
+        "iconHint": "upscale",
+        "id": "enhance_image",
+        "label": "Enhance"
+      },
+      {
+        "iconHint": "eraser",
+        "id": "remove_background",
+        "label": "Remove Background"
+      }
+    ],
+    "canDownload": true,
+    "canFullView": true,
+    "canUse": true,
+    "id": "c582616f-0a6d-4689-8fad-6adeb82fa139",
+    "mediaUrl": "https://asset.imagine.art/processed/c582616f-0a6d-4689-8fad-6adeb82fa139",
+    "metadata": {
+      "file_size": 2276534,
+      "format_type": ".png",
+      "has_audio": false,
+      "height": 1024,
+      "mime_type": "image/png",
+      "type": "image",
+      "width": 1024
+    },
+    "status": "complete",
+    "thumbnailUrl": "https://asset.imagine.art/video/thumbnails/c582616f-0a6d-4689-8fad-6adeb82fa139",
+    "type": "image"
+  },
+  {
+    "name": "logo",
+    "prompt": "Create a single flat high contrast logo concept: exact uppercase word KIETSU, spelled K I E T S U, tightly composed custom tall condensed industrial wordmark with angular slit cuts and minimal surface wear. Pure solid black lettering on pure white background. Strong readable letter forms with narrow spacing, suitable for an underground luxury streetwear clothing label. Wordmark only. No other words, no icon, no mockup, no scene, no shadows, no gradients, no border.",
+    "actions": [
+      {
+        "iconHint": "upscale",
+        "id": "enhance_image",
+        "label": "Enhance"
+      },
+      {
+        "iconHint": "eraser",
+        "id": "remove_background",
+        "label": "Remove Background"
+      }
+    ],
+    "canDownload": true,
+    "canFullView": true,
+    "canUse": true,
+    "id": "c1aa74ad-76fc-49aa-bd87-8bf4f24710d3",
+    "mediaUrl": "https://asset.imagine.art/processed/c1aa74ad-76fc-49aa-bd87-8bf4f24710d3",
+    "metadata": {
+      "file_size": 144129,
+      "format_type": ".png",
+      "has_audio": false,
+      "height": 1024,
+      "mime_type": "image/png",
+      "type": "image",
+      "width": 1024
+    },
+    "status": "complete",
+    "thumbnailUrl": "https://asset.imagine.art/video/thumbnails/c1aa74ad-76fc-49aa-bd87-8bf4f24710d3",
+    "type": "image"
+  }
+]

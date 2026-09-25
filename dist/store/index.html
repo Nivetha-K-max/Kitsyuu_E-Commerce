@@ -1,0 +1,53 @@
+<!doctype html><html lang="en" class="st"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101011">
+<title>KITSYUU Store: Japanese streetwear (prototype)</title><meta name="description" content="Prototype KITSYUU store: Japanese streetwear brought to India. Tops, bottoms and outerwear from the prototype catalogue.">
+<link rel="icon" type="image/svg+xml" href="../assets/kitsyuu-icon.svg">
+<link rel="stylesheet" href="../fonts.css"><link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="store.css"><script defer src="store.js"></script></head>
+<body class="store" data-page="home"><a class="skip" href="#main">Skip to content</a>
+<p class="st-notice"><b>Prototype store.</b> Products, sizes and prices are estimates. Nothing can be purchased yet.</p>
+<header class="st-header" data-store-header></header>
+<main id="main" tabindex="-1">
+<!-- Turntable integration point: set data-turntable to the KTS-OUT-001 sequence manifest (see TurntablePlayer in store.js). Empty = hero.webp only. -->
+<section class="st-hero" aria-labelledby="st-hero-title" data-turntable="" data-turntable-product="ky-proto-015">
+<img class="st-hero-img" src="../assets/hero.webp" alt="" width="1024" height="1024" fetchpriority="high"><canvas class="st-hero-sequence" aria-hidden="true" hidden></canvas><div class="st-hero-shade"></div>
+<div class="st-hero-copy st-wrap"><p class="eyebrow"><span></span>KITSYUU STORE / JAPAN → INDIA</p><h1 id="st-hero-title">Shop the<br><em>rotation.</em></h1><p>Japanese streetwear, brought to India. Oversized shapes, washed layers and hardware details, piece by piece.</p><div class="st-hero-actions"><a class="button" href="shop.html">Shop all products</a><a class="text-link" href="shop.html?collection=new-arrivals">New arrivals <span aria-hidden="true">↗</span></a></div></div>
+<span class="st-caption" aria-hidden="true">Concept image / not a catalogue item</span>
+</section>
+
+<section class="st-section" aria-labelledby="st-na-title"><div class="st-wrap">
+<div class="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals"></span></div>
+<div class="st-section-head"><h2 id="st-na-title">New<br><em>arrivals.</em></h2><a class="text-link" href="shop.html?collection=new-arrivals">View all new arrivals <span aria-hidden="true">↗</span></a></div>
+<p class="st-status" data-slot="new-arrivals">Loading products…</p>
+</div></section>
+
+<section class="st-section" aria-labelledby="st-cat-title"><div class="st-wrap">
+<div class="section-label"><span>02 — SHOP BY CATEGORY</span><span>TOPS / BOTTOMS / OUTERWEAR</span></div>
+<div class="st-section-head"><h2 id="st-cat-title">Start with<br><em>the shape.</em></h2><a class="text-link" href="shop.html">All products <span aria-hidden="true">↗</span></a></div>
+<p class="st-status" data-slot="categories">Loading categories…</p>
+</div></section>
+
+<section class="st-editorial" aria-labelledby="st-ed-title">
+<div class="st-editorial-img"><img src="../assets/editorial.webp" alt="Oversized washed streetwear layers photographed in a narrow Japanese alley" width="1024" height="1024" loading="lazy"><span class="st-caption">Concept editorial / not a catalogue item</span></div>
+<div class="st-editorial-copy"><p class="eyebrow">03 — AFTER HOURS</p><h2 id="st-ed-title">Wide legs.<br>Washed<br><em>layers.</em></h2><p>Balloon trousers, wide denim and washed tops. Start with the volume below and build the rest around it.</p><a class="text-link" href="shop.html?category=bottoms">Shop bottoms <span aria-hidden="true">↗</span></a></div>
+</section>
+
+<section class="st-section" aria-labelledby="st-ft-title"><div class="st-wrap">
+<div class="section-label"><span>04 — FEATURED</span><span data-count="featured"></span></div>
+<div class="st-section-head"><h2 id="st-ft-title">Featured<br><em>pieces.</em></h2><p>A prototype selection from the catalogue, chosen for store development.</p></div>
+<p class="st-status" data-slot="featured">Loading products…</p>
+</div></section>
+
+<section class="st-section" aria-labelledby="st-ow-title"><div class="st-wrap st-feature">
+<div class="st-feature-copy"><p class="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br><em>closures.</em></h2><p>Cropped and stand-collar jackets from the prototype catalogue.</p><a class="button button-outline" href="shop.html?category=outerwear">Shop outerwear</a></div>
+<p class="st-status" data-slot="outerwear">Loading products…</p>
+</div></section>
+
+<section class="st-news" aria-labelledby="st-news-title"><div class="st-wrap st-news-inner">
+<div><p class="eyebrow">06 — LETTERS</p><h2 id="st-news-title">First to<br>know.</h2></div>
+<form class="st-news-form" novalidate><label for="st-news-email">Email address</label><div class="st-news-row"><input id="st-news-email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required aria-describedby="st-news-note"><button class="button" type="submit">Sign up</button></div><p class="st-note" id="st-news-note">Prototype form. Email addresses are not sent, collected or stored.</p><p class="st-news-msg" role="status" aria-live="polite"></p></form>
+</div></section>
+<noscript><div class="st-wrap"><p class="st-status">The store needs JavaScript to load the prototype catalogue.</p></div></noscript>
+</main>
+<footer class="st-footer" data-store-footer></footer>
+<p class="st-toast" role="status" aria-live="polite"></p>
+</body></html>

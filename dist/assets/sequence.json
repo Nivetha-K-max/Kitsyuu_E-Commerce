@@ -1,0 +1,51 @@
+{
+  "count": 241,
+  "width": 2560,
+  "height": 1440,
+  "padding": 4,
+  "pattern": "assets/upscaled-1440/frame-{index}.webp",
+  "poster": "assets/upscaled-poster.webp",
+  "fps": 24,
+  "sourceDuration": 10.04,
+  "usedDuration": 10.04,
+  "totalBytes": 102622242,
+  "travelVH": 480,
+  "beats": [
+    {
+      "name": "Form hold",
+      "startVH": 0,
+      "endVH": 35,
+      "startFrame": 0,
+      "endFrame": 0
+    },
+    {
+      "name": "Unravel",
+      "startVH": 35,
+      "endVH": 210,
+      "startFrame": 0,
+      "endFrame": 120
+    },
+    {
+      "name": "Take shape",
+      "startVH": 210,
+      "endVH": 380,
+      "startFrame": 120,
+      "endFrame": 210
+    },
+    {
+      "name": "Reveal",
+      "startVH": 380,
+      "endVH": 425,
+      "startFrame": 210,
+      "endFrame": 240
+    },
+    {
+      "name": "Collection hold",
+      "startVH": 425,
+      "endVH": 480,
+      "startFrame": 240,
+      "endFrame": 240
+    }
+  ],
+  "encoding": "WebP quality 100, full source resolution"
+}

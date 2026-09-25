@@ -1,0 +1,2390 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "brand": "KITSYUU",
+    "dataStatus": "prototype",
+    "updated": "2026-09-25",
+    "currency": "INR",
+    "priceIncludesTax": null,
+    "notice": "Prototype data for UI development. SKUs, names, categories, sizes, prices and descriptions come from the team's prototype catalogue (2026-09-25) and are estimates, not verified company data. Replace before launch. See PRODUCT-DATA.md.",
+    "fieldStatus": {
+      "prototypeCatalogue": [
+        "sku",
+        "name",
+        "category",
+        "subcategory",
+        "variants",
+        "price",
+        "description",
+        "colour.label"
+      ],
+      "observed": [
+        "catalogueRef",
+        "features",
+        "colour.swatches",
+        "styledWith",
+        "media.catalogueSource"
+      ],
+      "estimated": [
+        "slug",
+        "availability",
+        "featured",
+        "tags"
+      ],
+      "pending": [
+        "compareAtPrice",
+        "material",
+        "care",
+        "origin",
+        "media.gallery"
+      ],
+      "catalogueImage": [
+        "media.primary"
+      ]
+    },
+    "catalogueSource": {
+      "document": "kitsyuu india catalogue.pdf",
+      "pageImage": "catalogue_page_{page}.png",
+      "location": "Workspace root, outside KITSYUU-Website2",
+      "pageSize": [
+        3000,
+        1688
+      ],
+      "regionFormat": "[x0, y0, x1, y1] in page-image pixels; approximate, may include neighbouring items"
+    },
+    "images": {
+      "basePath": "Image paths are relative to the site root (dist/).",
+      "source": "Transparent cutouts extracted from the photos embedded in kitsyuu india catalogue.pdf, limited to the area the catalogue shows. Not generated, not upscaled.",
+      "quality": "prototype",
+      "zoom": false,
+      "placeholder": "store/images/placeholder.svg",
+      "statuses": {
+        "prototype": "Catalogue cutout shown as a single prototype-quality image. No zoom.",
+        "held": "Source image withheld pending company clearance. Show the placeholder.",
+        "official": "Company-supplied product photography."
+      }
+    }
+  },
+  "categories": [
+    {
+      "id": "tops",
+      "label": "Tops",
+      "parent": null
+    },
+    {
+      "id": "tops.shirts",
+      "label": "Shirts",
+      "parent": "tops"
+    },
+    {
+      "id": "tops.tops",
+      "label": "Tops",
+      "parent": "tops"
+    },
+    {
+      "id": "tops.hoodies",
+      "label": "Hoodies",
+      "parent": "tops"
+    },
+    {
+      "id": "bottoms",
+      "label": "Bottoms",
+      "parent": null
+    },
+    {
+      "id": "bottoms.trousers",
+      "label": "Trousers",
+      "parent": "bottoms"
+    },
+    {
+      "id": "bottoms.jeans",
+      "label": "Jeans",
+      "parent": "bottoms"
+    },
+    {
+      "id": "bottoms.shorts-skirts",
+      "label": "Shorts / Skirts",
+      "parent": "bottoms"
+    },
+    {
+      "id": "outerwear",
+      "label": "Outerwear",
+      "parent": null
+    },
+    {
+      "id": "outerwear.jackets",
+      "label": "Jackets",
+      "parent": "outerwear"
+    }
+  ],
+  "collections": [
+    {
+      "id": "new-arrivals",
+      "label": "New Arrivals",
+      "dataStatus": "prototype",
+      "productIds": [
+        "ky-proto-017",
+        "ky-proto-015",
+        "ky-proto-022",
+        "ky-proto-004"
+      ],
+      "note": "Prototype selection for UI development (KTS-BTM-008, KTS-OUT-001, KTS-BTM-010, KTS-BTM-002). Estimated, not officially confirmed new arrivals."
+    }
+  ],
+  "navigation": [
+    {
+      "label": "New Arrivals",
+      "collection": "new-arrivals"
+    },
+    {
+      "label": "Tops",
+      "category": "tops"
+    },
+    {
+      "label": "Bottoms",
+      "category": "bottoms"
+    },
+    {
+      "label": "Outerwear",
+      "category": "outerwear"
+    },
+    {
+      "label": "All Products",
+      "all": true
+    }
+  ],
+  "products": [
+    {
+      "id": "ky-proto-001",
+      "sku": "KTS-TOP-001",
+      "catalogueRef": "P2-1",
+      "dataStatus": "prototype",
+      "slug": "asymmetric-zip-collar-top",
+      "name": "Asymmetric Zip Collar Top",
+      "category": "tops",
+      "subcategory": "tops.tops",
+      "description": "A statement long-sleeve top featuring an oversized asymmetric collar, zip-front construction and lace-up detailing near the hem. The washed taupe and grey visual treatment gives the piece an experimental Japanese-streetwear character.",
+      "features": [
+        "Asymmetric oversized collar",
+        "Front zip",
+        "Smudged graphic print",
+        "Lace-up detail at hem",
+        "Long sleeves"
+      ],
+      "colour": {
+        "label": "Taupe / Grey",
+        "swatches": [
+          "#7c6e5d"
+        ]
+      },
+      "price": 2499,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers"
+      ],
+      "styledWith": [
+        "ky-proto-002"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-001.webp",
+          "width": 370,
+          "height": 526,
+          "alt": "Asymmetric Zip Collar Top, Taupe / Grey",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            412,
+            55,
+            878,
+            604
+          ],
+          "pdfPhoto": {
+            "object": 23,
+            "size": [
+              516,
+              687
+            ],
+            "crop": [
+              81,
+              89,
+              435,
+              599
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-002",
+      "sku": "KTS-BTM-001",
+      "catalogueRef": "P2-2",
+      "dataStatus": "prototype",
+      "slug": "draped-utility-wide-trousers",
+      "name": "Draped Utility Wide Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Wide-leg trousers featuring a relaxed silhouette and a distinctive draped wrap-style panel around the upper leg. Designed as a statement oversized bottom for layered streetwear styling.",
+      "features": [
+        "Elasticated drawstring waist",
+        "Draped wrap panel with tie",
+        "Wide leg"
+      ],
+      "colour": {
+        "label": "Khaki / Taupe",
+        "swatches": [
+          "#786b59"
+        ]
+      },
+      "price": 2999,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-001"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-002.webp",
+          "width": 343,
+          "height": 766,
+          "alt": "Draped Utility Wide Trousers, Khaki / Taupe",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            411,
+            604,
+            861,
+            1656
+          ],
+          "pdfPhoto": {
+            "object": 25,
+            "size": [
+              663,
+              883
+            ],
+            "crop": [
+              180,
+              66,
+              507,
+              816
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-003",
+      "sku": "KTS-TOP-002",
+      "catalogueRef": "P2-3",
+      "dataStatus": "prototype",
+      "slug": "washed-lace-up-pointed-shirt",
+      "name": "Washed Lace-Up Pointed Shirt",
+      "category": "tops",
+      "subcategory": "tops.shirts",
+      "description": "A washed blue-grey long-sleeve shirt with an elongated pointed silhouette and lace-up detailing. Pale cuffs contrast against the distressed printed body.",
+      "features": [
+        "Lace-up front",
+        "Washed all-over print",
+        "Pointed hem",
+        "Contrast cuffs",
+        "Pointed collar"
+      ],
+      "colour": {
+        "label": "Washed Blue / Grey",
+        "swatches": [
+          "#899394"
+        ]
+      },
+      "price": 2799,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers"
+      ],
+      "styledWith": [
+        "ky-proto-004"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-003.webp",
+          "width": 489,
+          "height": 593,
+          "alt": "Washed Lace-Up Pointed Shirt, Washed Blue / Grey",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            1154,
+            78,
+            1745,
+            760
+          ],
+          "pdfPhoto": {
+            "object": 27,
+            "size": [
+              516,
+              687
+            ],
+            "crop": [
+              20,
+              53,
+              493,
+              630
+            ]
+          }
+        },
+        "aiRenders": [
+          "moodboard/ChatGPT Image Sep 11, 2026, 03_24_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-004",
+      "sku": "KTS-BTM-002",
+      "catalogueRef": "P2-4",
+      "dataStatus": "prototype",
+      "slug": "check-buckle-mini-skirt",
+      "name": "Check Buckle Mini Skirt",
+      "category": "bottoms",
+      "subcategory": "bottoms.shorts-skirts",
+      "description": "A statement check mini skirt combining a light-blue and red checked pattern with an oversized buckle belt and asymmetrical handkerchief-style hem.",
+      "features": [
+        "Oversized buckle belt",
+        "Ruffled handkerchief hem",
+        "Check pattern"
+      ],
+      "colour": {
+        "label": "Light Blue / Red",
+        "swatches": [
+          "#b5c6d1",
+          "#9d7f88"
+        ]
+      },
+      "price": 2299,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": true,
+      "tags": [
+        "pattern"
+      ],
+      "styledWith": [
+        "ky-proto-003"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-004.webp",
+          "width": 525,
+          "height": 371,
+          "alt": "Check Buckle Mini Skirt, Light Blue / Red",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            1098,
+            760,
+            1768,
+            1250
+          ],
+          "pdfPhoto": {
+            "object": 26,
+            "size": [
+              516,
+              688
+            ],
+            "crop": [
+              4,
+              166,
+              513,
+              521
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-005",
+      "sku": "KTS-TOP-003",
+      "catalogueRef": "P2-5",
+      "dataStatus": "prototype",
+      "slug": "sheer-floral-lace-up-top",
+      "name": "Sheer Floral Lace-Up Top",
+      "category": "tops",
+      "subcategory": "tops.tops",
+      "description": "A lightweight-looking sheer sleeveless top featuring floral embroidery and adjustable lace-up detailing along the sides. Designed as a layering-focused statement piece.",
+      "features": [
+        "Sheer body",
+        "Floral embroidery",
+        "Side lace-up ties",
+        "Sleeveless"
+      ],
+      "colour": {
+        "label": "Off White",
+        "swatches": [
+          "#babbb9"
+        ]
+      },
+      "price": 2199,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers"
+      ],
+      "styledWith": [
+        "ky-proto-006"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-005.webp",
+          "width": 440,
+          "height": 616,
+          "alt": "Sheer Floral Lace-Up Top, Off White",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            2015,
+            84,
+            2525,
+            676
+          ],
+          "pdfPhoto": {
+            "object": 24,
+            "size": [
+              588,
+              669
+            ],
+            "crop": [
+              92,
+              69,
+              516,
+              669
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-006",
+      "sku": "KTS-BTM-003",
+      "catalogueRef": "P2-6",
+      "dataStatus": "prototype",
+      "slug": "charcoal-pleated-balloon-trousers",
+      "name": "Charcoal Pleated Balloon Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Relaxed charcoal trousers with deep pleats and a dramatic balloon-leg silhouette. The oversized shape gives the piece a strong contemporary streetwear profile.",
+      "features": [
+        "Front pleats",
+        "Balloon leg",
+        "Button and zip fly",
+        "Belt loops"
+      ],
+      "colour": {
+        "label": "Charcoal / Black",
+        "swatches": [
+          "#19191f"
+        ]
+      },
+      "price": 2999,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-005"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-006.webp",
+          "width": 274,
+          "height": 575,
+          "alt": "Charcoal Pleated Balloon Trousers, Charcoal / Black",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 2,
+          "region": [
+            2015,
+            676,
+            2525,
+            1688
+          ],
+          "pdfPhoto": {
+            "object": 28,
+            "size": [
+              736,
+              887
+            ],
+            "crop": [
+              131,
+              324,
+              389,
+              883
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-007",
+      "sku": "KTS-TOP-004",
+      "catalogueRef": "P3-1",
+      "dataStatus": "prototype",
+      "slug": "acid-wash-gothic-hooded-top",
+      "name": "Acid Wash Gothic Hooded Top",
+      "category": "tops",
+      "subcategory": "tops.hoodies",
+      "description": "A sleeveless hooded top featuring an acid-washed grey appearance, eyelet details and a gothic-inspired graphic across the front.",
+      "features": [
+        "Acid-wash finish",
+        "Hood",
+        "Eyelet trim at armholes",
+        "Front graphic",
+        "Distressed detailing"
+      ],
+      "colour": {
+        "label": "Grey / Acid Wash",
+        "swatches": [
+          "#3f3e38"
+        ]
+      },
+      "price": 2499,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "washed",
+        "graphic"
+      ],
+      "styledWith": [
+        "ky-proto-008"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-007.webp",
+          "width": 409,
+          "height": 693,
+          "alt": "Acid Wash Gothic Hooded Top, Grey / Acid Wash",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            200,
+            45,
+            666,
+            782
+          ],
+          "pdfPhoto": {
+            "object": 33,
+            "size": [
+              589,
+              736
+            ],
+            "crop": [
+              106,
+              59,
+              499,
+              736
+            ]
+          }
+        },
+        "aiRenders": [
+          "ChatGPT Image Sep 11, 2026, 03_34_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-008",
+      "sku": "KTS-BTM-004",
+      "catalogueRef": "P3-2",
+      "dataStatus": "prototype",
+      "slug": "faded-black-wide-leg-jeans",
+      "name": "Faded Black Wide-Leg Jeans",
+      "category": "bottoms",
+      "subcategory": "bottoms.jeans",
+      "description": "Wide-leg black denim featuring a faded wash and visible seam detailing. The relaxed proportions create an oversized streetwear silhouette.",
+      "features": [
+        "Faded wash",
+        "Wide leg",
+        "Front seam lines",
+        "Five-pocket styling"
+      ],
+      "colour": {
+        "label": "Faded Black",
+        "swatches": [
+          "#272729"
+        ]
+      },
+      "price": 3499,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "28",
+          "available": true
+        },
+        {
+          "size": "30",
+          "available": true
+        },
+        {
+          "size": "32",
+          "available": true
+        },
+        {
+          "size": "34",
+          "available": true
+        },
+        {
+          "size": "36",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "washed",
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-007"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-008.webp",
+          "width": 396,
+          "height": 793,
+          "alt": "Faded Black Wide-Leg Jeans, Faded Black",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            203,
+            782,
+            636,
+            1667
+          ],
+          "pdfPhoto": {
+            "object": 32,
+            "size": [
+              442,
+              785
+            ],
+            "crop": [
+              28,
+              0,
+              408,
+              777
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-009",
+      "sku": "KTS-TOP-005",
+      "catalogueRef": "P3-3",
+      "dataStatus": "prototype",
+      "slug": "layered-pinstripe-waffle-shirt",
+      "name": "Layered Pinstripe Waffle Shirt",
+      "category": "tops",
+      "subcategory": "tops.shirts",
+      "description": "A short-sleeve black pinstripe shirt styled over a contrasting light-grey long-sleeve layer, creating a layered streetwear look with contrasting textures.",
+      "features": [
+        "Pinstripe",
+        "Short sleeve over long waffle sleeve",
+        "Button front",
+        "Boxy cut"
+      ],
+      "colour": {
+        "label": "Black / Light Grey",
+        "swatches": [
+          "#252323"
+        ]
+      },
+      "price": 2799,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers",
+        "pattern"
+      ],
+      "styledWith": [
+        "ky-proto-010"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-009.webp",
+          "width": 464,
+          "height": 587,
+          "alt": "Layered Pinstripe Waffle Shirt, Black / Light Grey",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            866,
+            89,
+            1423,
+            800
+          ],
+          "pdfPhoto": {
+            "object": 31,
+            "size": [
+              589,
+              773
+            ],
+            "crop": [
+              86,
+              59,
+              534,
+              630
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-010",
+      "sku": "KTS-BTM-005",
+      "catalogueRef": "P3-4",
+      "dataStatus": "prototype",
+      "slug": "grey-pleated-drawstring-trousers",
+      "name": "Grey Pleated Drawstring Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Relaxed grey trousers combining wide proportions with pleated construction and a drawstring waist. Designed around a loose, oversized silhouette.",
+      "features": [
+        "Front pleats",
+        "Drawstring waist",
+        "Wide leg",
+        "Side pockets"
+      ],
+      "colour": {
+        "label": "Grey",
+        "swatches": [
+          "#46454c"
+        ]
+      },
+      "price": 2899,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-009"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-010.webp",
+          "width": 418,
+          "height": 691,
+          "alt": "Grey Pleated Drawstring Trousers, Grey",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            879,
+            800,
+            1372,
+            1628
+          ],
+          "pdfPhoto": {
+            "object": 34,
+            "size": [
+              663,
+              776
+            ],
+            "crop": [
+              131,
+              94,
+              533,
+              769
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-011",
+      "sku": "KTS-TOP-006",
+      "catalogueRef": "P3-5",
+      "dataStatus": "prototype",
+      "slug": "flame-print-washed-zip-hoodie",
+      "name": "Flame Print Washed Zip Hoodie",
+      "category": "tops",
+      "subcategory": "tops.hoodies",
+      "description": "A charcoal-washed zip hoodie featuring contrasting flame graphics along the sleeves. The oversized streetwear profile makes it suitable as a statement outer layer.",
+      "features": [
+        "Washed finish",
+        "Full zip",
+        "Hood",
+        "Flame print on sleeves",
+        "Kangaroo pockets"
+      ],
+      "colour": {
+        "label": "Charcoal / Magenta / Cream",
+        "swatches": [
+          "#363736"
+        ]
+      },
+      "price": 3499,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "washed",
+        "graphic"
+      ],
+      "styledWith": [
+        "ky-proto-012"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-011.webp",
+          "width": 432,
+          "height": 562,
+          "alt": "Flame Print Washed Zip Hoodie, Charcoal / Magenta / Cream",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            1559,
+            75,
+            2138,
+            833
+          ],
+          "pdfPhoto": {
+            "object": 35,
+            "size": [
+              719,
+              1204
+            ],
+            "crop": [
+              102,
+              25,
+              518,
+              571
+            ]
+          }
+        },
+        "aiRenders": [
+          "ChatGPT Image Sep 11, 2026, 03_34_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-012",
+      "sku": "KTS-BTM-006",
+      "catalogueRef": "P3-6",
+      "dataStatus": "prototype",
+      "slug": "flame-edge-wide-joggers",
+      "name": "Flame Edge Wide Joggers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Wide charcoal-wash joggers featuring contrasting flame artwork near the lower leg. Designed to pair visually with oversized streetwear tops and hoodies.",
+      "features": [
+        "Washed finish",
+        "Elasticated waist",
+        "Flame print at hem",
+        "Wide leg"
+      ],
+      "colour": {
+        "label": "Charcoal / Magenta / Cream",
+        "swatches": [
+          "#312f31"
+        ]
+      },
+      "price": 2999,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "washed",
+        "graphic",
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-011"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-012.webp",
+          "width": 394,
+          "height": 602,
+          "alt": "Flame Edge Wide Joggers, Charcoal / Magenta / Cream",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            1564,
+            833,
+            2091,
+            1648
+          ],
+          "pdfPhoto": {
+            "object": 35,
+            "size": [
+              719,
+              1204
+            ],
+            "crop": [
+              106,
+              571,
+              484,
+              1157
+            ]
+          }
+        },
+        "aiRenders": [
+          "ChatGPT Image Sep 11, 2026, 03_34_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-013",
+      "sku": "KTS-TOP-007",
+      "catalogueRef": "P3-7",
+      "dataStatus": "prototype",
+      "slug": "red-plaid-layered-graphic-top",
+      "name": "Red Plaid Layered Graphic Top",
+      "category": "tops",
+      "subcategory": "tops.tops",
+      "description": "A layered statement top combining a black base with a red graphic lace-up panel, red plaid sleeves and a mesh layer for a multi-texture streetwear look.",
+      "features": [
+        "Layered construction",
+        "Lace-up graphic panel",
+        "Plaid sleeves",
+        "Mesh underlayer",
+        "Raw edges"
+      ],
+      "colour": {
+        "label": "Black / Red / Grey",
+        "swatches": [
+          "#1f1c22",
+          "#591b2b"
+        ]
+      },
+      "price": 2699,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers",
+        "graphic"
+      ],
+      "styledWith": [
+        "ky-proto-014"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-013.webp",
+          "width": 444,
+          "height": 600,
+          "alt": "Red Plaid Layered Graphic Top, Black / Red / Grey",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            2336,
+            78,
+            2793,
+            701
+          ],
+          "pdfPhoto": {
+            "object": 36,
+            "size": [
+              442,
+              589
+            ],
+            "crop": [
+              14,
+              5,
+              442,
+              589
+            ]
+          }
+        },
+        "aiRenders": [
+          "ChatGPT Image Sep 11, 2026, 03_34_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-014",
+      "sku": "KTS-BTM-007",
+      "catalogueRef": "P3-8",
+      "dataStatus": "prototype",
+      "slug": "red-star-wide-utility-shorts",
+      "name": "Red Star Wide Utility Shorts",
+      "category": "bottoms",
+      "subcategory": "bottoms.shorts-skirts",
+      "description": "Relaxed wide shorts featuring a contrasting red star panel, vertical black-and-white stripes and a drawstring waist.",
+      "features": [
+        "Star appliqué panel",
+        "Side stripes",
+        "Drawstring waist",
+        "Below-knee length"
+      ],
+      "colour": {
+        "label": "Light Grey / Red / Black",
+        "swatches": [
+          "#9e9d97"
+        ]
+      },
+      "price": 2399,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "graphic"
+      ],
+      "styledWith": [
+        "ky-proto-013"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-014.webp",
+          "width": 368,
+          "height": 753,
+          "alt": "Red Star Wide Utility Shorts, Light Grey / Red / Black",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 3,
+          "region": [
+            2356,
+            711,
+            2804,
+            1648
+          ],
+          "pdfPhoto": {
+            "object": 37,
+            "size": [
+              663,
+              882
+            ],
+            "crop": [
+              155,
+              90,
+              507,
+              827
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-015",
+      "sku": "KTS-OUT-001",
+      "catalogueRef": "P4-1",
+      "dataStatus": "prototype",
+      "slug": "hook-closure-cropped-jacket",
+      "name": "Hook Closure Cropped Jacket",
+      "category": "outerwear",
+      "subcategory": "outerwear.jackets",
+      "description": "A cropped dark jacket with a structured stand collar, metal hook-style closures and a chest pocket detail. Designed around a compact, industrial-inspired silhouette.",
+      "features": [
+        "Stand collar with zip",
+        "Asymmetric metal hook closures",
+        "Chest pocket",
+        "Elasticated hem and cuffs"
+      ],
+      "colour": {
+        "label": "Black / Charcoal",
+        "swatches": [
+          "#343434"
+        ]
+      },
+      "price": 3799,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": true,
+      "tags": [
+        "hardware"
+      ],
+      "styledWith": [
+        "ky-proto-017"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-015.webp",
+          "width": 467,
+          "height": 495,
+          "alt": "Hook Closure Cropped Jacket, Black / Charcoal",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            157,
+            279,
+            775,
+            935
+          ],
+          "pdfPhoto": {
+            "object": 42,
+            "size": [
+              589,
+              589
+            ],
+            "crop": [
+              70,
+              54,
+              521,
+              533
+            ]
+          }
+        },
+        "aiRenders": [
+          "moodboard/ChatGPT Image Sep 11, 2026, 03_24_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-016",
+      "sku": "KTS-OUT-002",
+      "catalogueRef": "P4-2",
+      "dataStatus": "prototype",
+      "slug": "faded-navy-stand-collar-jacket",
+      "name": "Faded Navy Stand-Collar Jacket",
+      "category": "outerwear",
+      "subcategory": "outerwear.jackets",
+      "description": "A faded navy-and-black zip jacket featuring a stand collar, metal hook closures and a small chest detail. Its washed appearance gives it a worn-in streetwear aesthetic.",
+      "features": [
+        "Faded finish",
+        "High stand collar",
+        "Two-way zip",
+        "Metal hook closures",
+        "Chest badge"
+      ],
+      "colour": {
+        "label": "Navy / Black",
+        "swatches": [
+          "#261e22"
+        ]
+      },
+      "price": 3799,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": true,
+      "tags": [
+        "hardware",
+        "washed"
+      ],
+      "styledWith": [
+        "ky-proto-017"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-016.webp",
+          "width": 416,
+          "height": 496,
+          "alt": "Faded Navy Stand-Collar Jacket, Navy / Black",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            766,
+            21,
+            1310,
+            664
+          ],
+          "pdfPhoto": {
+            "object": 43,
+            "size": [
+              400,
+              534
+            ],
+            "crop": [
+              0,
+              38,
+              400,
+              518
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-017",
+      "sku": "KTS-BTM-008",
+      "catalogueRef": "P4-3",
+      "dataStatus": "prototype",
+      "slug": "olive-balloon-utility-trousers",
+      "name": "Olive Balloon Utility Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Oversized olive-green trousers with a balloon-leg silhouette and adjustable drawstring detailing. Built visually around volume and relaxed proportions.",
+      "features": [
+        "Toggle drawstring waist",
+        "Balloon leg",
+        "Gathered ankle",
+        "Side pockets"
+      ],
+      "colour": {
+        "label": "Olive Green",
+        "swatches": [
+          "#464933"
+        ]
+      },
+      "price": 2999,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": true,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-015",
+        "ky-proto-016"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-017.webp",
+          "width": 383,
+          "height": 702,
+          "alt": "Olive Balloon Utility Trousers, Olive Green",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            743,
+            664,
+            1240,
+            1576
+          ],
+          "pdfPhoto": {
+            "object": 44,
+            "size": [
+              576,
+              759
+            ],
+            "crop": [
+              86,
+              58,
+              453,
+              744
+            ]
+          }
+        },
+        "aiRenders": [
+          "moodboard/ChatGPT Image Sep 11, 2026, 03_24_38 PM.png"
+        ]
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-018",
+      "sku": "KTS-TOP-008",
+      "catalogueRef": "P4-4",
+      "dataStatus": "prototype",
+      "slug": "navy-side-tie-boxy-top",
+      "name": "Navy Side-Tie Boxy Top",
+      "category": "tops",
+      "subcategory": "tops.tops",
+      "description": "A sleeveless boxy top in deep navy and black featuring side-tie details. Its simple construction works as a foundation piece for layered styling.",
+      "features": [
+        "Boxy cut",
+        "Extended shoulders",
+        "Side ties",
+        "Split hem"
+      ],
+      "colour": {
+        "label": "Navy / Black",
+        "swatches": [
+          "#1b1b21"
+        ]
+      },
+      "price": 2199,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers"
+      ],
+      "styledWith": [
+        "ky-proto-019",
+        "ky-proto-020"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-018.webp",
+          "width": 349,
+          "height": 353,
+          "alt": "Navy Side-Tie Boxy Top, Navy / Black",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            1496,
+            339,
+            1938,
+            786
+          ],
+          "pdfPhoto": {
+            "object": 40,
+            "size": [
+              663,
+              1178
+            ],
+            "crop": [
+              11,
+              204,
+              344,
+              541
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-019",
+      "sku": "KTS-TOP-009",
+      "catalogueRef": "P4-5",
+      "dataStatus": "prototype",
+      "slug": "oversized-white-shirt",
+      "name": "Oversized White Shirt",
+      "category": "tops",
+      "subcategory": "tops.shirts",
+      "description": "A clean oversized white shirt designed around a relaxed silhouette. Its minimal appearance allows it to work as a standalone piece or as a layering base.",
+      "features": [
+        "Dropped shoulder",
+        "Curved hem",
+        "Button cuffs",
+        "Point collar"
+      ],
+      "colour": {
+        "label": "White",
+        "swatches": [
+          "#e4e3e8"
+        ]
+      },
+      "price": 2499,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers"
+      ],
+      "styledWith": [
+        "ky-proto-018",
+        "ky-proto-020"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-019.webp",
+          "width": 311,
+          "height": 363,
+          "alt": "Oversized White Shirt, White",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            1938,
+            251,
+            2330,
+            711
+          ],
+          "pdfPhoto": {
+            "object": 40,
+            "size": [
+              663,
+              1178
+            ],
+            "crop": [
+              344,
+              137,
+              639,
+              484
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": true,
+        "personVisible": false,
+        "otherItemsInFrame": false
+      }
+    },
+    {
+      "id": "ky-proto-020",
+      "sku": "KTS-BTM-009",
+      "catalogueRef": "P4-6",
+      "dataStatus": "prototype",
+      "slug": "check-sash-balloon-trousers",
+      "name": "Check Sash Balloon Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.trousers",
+      "description": "Black balloon trousers featuring a contrasting black-and-white checked sash detail. The exaggerated silhouette gives the piece a strong editorial streetwear profile.",
+      "features": [
+        "Balloon leg",
+        "Check sash tie",
+        "Gathered ankle"
+      ],
+      "colour": {
+        "label": "Black / White",
+        "swatches": [
+          "#0d0d14"
+        ]
+      },
+      "price": 2999,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-018",
+        "ky-proto-019"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-020.webp",
+          "width": 299,
+          "height": 568,
+          "alt": "Check Sash Balloon Trousers, Black / White",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            1520,
+            786,
+            1911,
+            1519
+          ],
+          "pdfPhoto": {
+            "object": 40,
+            "size": [
+              663,
+              1178
+            ],
+            "crop": [
+              32,
+              541,
+              315,
+              1093
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": false,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-021",
+      "sku": "KTS-TOP-010",
+      "catalogueRef": "P4-7",
+      "dataStatus": "prototype",
+      "slug": "striped-frog-button-layered-shirt",
+      "name": "Striped Frog-Button Layered Shirt",
+      "category": "tops",
+      "subcategory": "tops.shirts",
+      "description": "A cropped blue-and-white striped shirt featuring distinctive knotted frog-style buttons and layered styling over a white long-sleeve base.",
+      "features": [
+        "Stripe",
+        "Asymmetric knotted-button closure",
+        "Cropped length",
+        "Short sleeves"
+      ],
+      "colour": {
+        "label": "Blue / White",
+        "swatches": [
+          "#9c99a0"
+        ]
+      },
+      "price": 2699,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "layers",
+        "pattern"
+      ],
+      "styledWith": [
+        "ky-proto-022"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-021.webp",
+          "width": 349,
+          "height": 493,
+          "alt": "Striped Frog-Button Layered Shirt, Blue / White",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            2358,
+            223,
+            2808,
+            866
+          ],
+          "pdfPhoto": {
+            "object": 41,
+            "size": [
+              736,
+              981
+            ],
+            "crop": [
+              171,
+              20,
+              504,
+              497
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    },
+    {
+      "id": "ky-proto-022",
+      "sku": "KTS-BTM-010",
+      "catalogueRef": "P4-8",
+      "dataStatus": "prototype",
+      "slug": "dark-denim-pleated-balloon-trousers",
+      "name": "Dark Denim Pleated Balloon Trousers",
+      "category": "bottoms",
+      "subcategory": "bottoms.jeans",
+      "description": "Dark denim trousers combining pleated construction with an oversized balloon silhouette. Designed as a statement bottom with a structured yet relaxed appearance.",
+      "features": [
+        "Dark denim",
+        "Front pleats",
+        "Balloon leg",
+        "Side pockets"
+      ],
+      "colour": {
+        "label": "Dark Denim",
+        "swatches": [
+          "#1b1a1f"
+        ]
+      },
+      "price": 3199,
+      "compareAtPrice": null,
+      "variants": [
+        {
+          "size": "XS",
+          "available": true
+        },
+        {
+          "size": "S",
+          "available": true
+        },
+        {
+          "size": "M",
+          "available": true
+        },
+        {
+          "size": "L",
+          "available": true
+        },
+        {
+          "size": "XL",
+          "available": true
+        }
+      ],
+      "availability": "in_stock",
+      "material": null,
+      "care": null,
+      "origin": null,
+      "featured": false,
+      "tags": [
+        "volume"
+      ],
+      "styledWith": [
+        "ky-proto-021"
+      ],
+      "media": {
+        "status": "prototype",
+        "primary": {
+          "src": "store/images/products/ky-proto-022.webp",
+          "width": 314,
+          "height": 500,
+          "alt": "Dark Denim Pleated Balloon Trousers, Dark Denim",
+          "quality": "prototype",
+          "zoom": false
+        },
+        "placeholder": "store/images/placeholder.svg",
+        "gallery": [],
+        "catalogueSource": {
+          "page": 4,
+          "region": [
+            2415,
+            866,
+            2817,
+            1519
+          ],
+          "pdfPhoto": {
+            "object": 41,
+            "size": [
+              736,
+              981
+            ],
+            "crop": [
+              213,
+              497,
+              511,
+              981
+            ]
+          }
+        },
+        "aiRenders": []
+      },
+      "review": {
+        "imageRights": "unconfirmed",
+        "thirdPartyMarks": false,
+        "personVisible": true,
+        "otherItemsInFrame": true
+      }
+    }
+  ]
+}

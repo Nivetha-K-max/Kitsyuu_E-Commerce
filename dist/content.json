@@ -1,0 +1,61 @@
+{
+  "brand": "Kitsyuu",
+  "hero": {
+    "eyebrow": "KITSYUU \u2014 FROM JAPAN TO INDIA",
+    "line1": "KITSYUU",
+    "line2": "",
+    "description": "Japanese streetwear. Unconventional shapes. Made personal.",
+    "cta": "Explore the edit"
+  },
+  "street": {
+    "line1": "FIND YOUR",
+    "line2": "OWN",
+    "line3": "SHAPE.",
+    "description": "Volume, layers and a little rebellion. Wear it your way."
+  },
+  "edit": {
+    "line1": "THE NEW",
+    "line2": "ROTATION.",
+    "description": "Soft volume. Raw edges. Pieces that leave room for you. Explore the shapes and textures behind Kitsyuu."
+  },
+  "looks": [
+    {
+      "title": "Room to move.",
+      "description": "Balloon proportions. Wide legs. A silhouette that takes up space."
+    },
+    {
+      "title": "Nothing too polished.",
+      "description": "Frayed denim, washed finishes, and layers with their own character."
+    },
+    {
+      "title": "Wear it your way.",
+      "description": "Dark tones. Unexpected proportions. A personal take on the everyday."
+    }
+  ],
+  "editorial": {
+    "line1": "THE STREET",
+    "line2": "IS YOUR",
+    "line3": "ATELIER.",
+    "description": "Start with a shape. Add a layer. Break the symmetry. The best combinations are the ones that feel like you."
+  },
+  "about": {
+    "line1": "DIFFERENT STREETS.",
+    "line2": "SAME INSTINCT.",
+    "lead": "Japanese streetwear. A new context.",
+    "description": "Kitsyuu brings streetwear from Japan to India. An approach to getting dressed that starts with shape, builds through layers, and becomes your own.",
+    "detail": "From quiet minimalism to distressed textures, the common thread is freedom to wear something differently."
+  },
+  "closing": "MAKE IT YOURS.",
+  "media": {
+    "poster": "assets/upscaled-poster.webp",
+    "editorial": "assets/editorial.webp",
+    "sequence": "assets/sequence.json",
+    "logo": "assets/kitsyuu-icon.svg",
+    "volume": "assets/volume.webp",
+    "layers": "assets/layers.webp"
+  },
+  "primaryAction": {
+    "href": "#edit",
+    "label": "Explore the edit"
+  }
+}
