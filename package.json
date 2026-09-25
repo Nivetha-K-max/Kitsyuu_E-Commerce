@@ -18,7 +18,9 @@
     "db:apply": "node --env-file=apps/website/.env.local database/scripts/db-apply.mjs",
     "db:upload-images": "node --env-file=apps/website/.env.local database/scripts/upload-images.mjs",
     "db:verify": "node --env-file=apps/website/.env.local database/scripts/verify-supabase.mjs",
-    "db:promote-admin": "node --env-file=apps/website/.env.local database/scripts/promote-admin.mjs"
+    "db:promote-admin": "node --env-file=apps/website/.env.local database/scripts/promote-admin.mjs",
+    "db:snapshot": "node --env-file=apps/website/.env.local database/scripts/db-snapshot.mjs",
+    "db:verify-platform": "node --env-file=apps/website/.env.local database/scripts/verify-platform.mjs"
   },
   "engines": {
     "node": ">=20.9"

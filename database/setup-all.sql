@@ -346,6 +346,920 @@ create policy "product-images: admin delete" on storage.objects for delete to au
   using (bucket_id = 'product-images' and (select public.is_admin()));
 
 
+-- ===== 20260925000400_staff_access.sql =====
+-- KITSYUU platform M2: staff accounts, roles and permissions (additive only).
+-- Staff are a separate account type from customers: nothing on the public website can create a staff user.
+-- Authorization is by permission code (e.g. 'inventory.adjust'). Roles and their permissions are rows, not code.
+-- The staff login flow itself is built in M3; this migration only creates the tables and seeds roles/permissions.
+-- Safe to re-run: every statement is guarded (if not exists / on conflict do nothing).
+
+-- ---------- types ----------
+do $$ begin
+  create type public.staff_status as enum ('invited', 'active', 'disabled');
+exception when duplicate_object then null; end $$;
+
+-- ---------- staff users ----------
+create table if not exists public.staff_users (
+  id                  uuid primary key default gen_random_uuid(),
+  email               text not null check (email = lower(btrim(email)) and email like '%_@_%'),   -- stored normalised
+  full_name           text not null default '',
+  password_hash       text,                                   -- argon2id; null until the invitation is accepted
+  status              public.staff_status not null default 'invited',
+  email_verified_at   timestamptz,
+  password_changed_at timestamptz,
+  last_login_at       timestamptz,
+  invited_by          uuid references public.staff_users (id) on delete set null,
+  disabled_at         timestamptz,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  constraint staff_users_active_has_password check (status <> 'active' or password_hash is not null)
+);
+create unique index if not exists staff_users_email_key on public.staff_users (email);
+drop trigger if exists staff_users_updated_at on public.staff_users;
+create trigger staff_users_updated_at before update on public.staff_users for each row execute function public.set_updated_at();
+
+-- ---------- roles and permissions ----------
+create table if not exists public.roles (
+  id          uuid primary key default gen_random_uuid(),
+  code        text not null unique check (code ~ '^[a-z][a-z0-9_]*$'),
+  name        text not null,
+  description text not null default '',
+  is_system   boolean not null default false,               -- seeded roles; the admin app must not delete them
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+drop trigger if exists roles_updated_at on public.roles;
+create trigger roles_updated_at before update on public.roles for each row execute function public.set_updated_at();
+
+-- A permission code names one capability the code checks with can(staff, '<code>'). New codes arrive with the
+-- migration that ships the feature using them (and are granted to super_admin in that same migration).
+create table if not exists public.permissions (
+  code        text primary key check (code ~ '^[a-z][a-z_]*\.[a-z][a-z_]*$'),
+  module      text not null,
+  description text not null default '',
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.role_permissions (
+  role_id         uuid not null references public.roles (id) on delete cascade,
+  permission_code text not null references public.permissions (code) on delete cascade,
+  granted_at      timestamptz not null default now(),
+  primary key (role_id, permission_code)
+);
+create index if not exists role_permissions_permission_idx on public.role_permissions (permission_code);
+
+create table if not exists public.staff_user_roles (
+  staff_user_id uuid not null references public.staff_users (id) on delete cascade,
+  role_id       uuid not null references public.roles (id) on delete restrict,   -- a role in use cannot be deleted
+  granted_by    uuid references public.staff_users (id) on delete set null,
+  granted_at    timestamptz not null default now(),
+  primary key (staff_user_id, role_id)
+);
+create index if not exists staff_user_roles_role_idx on public.staff_user_roles (role_id);
+
+-- ---------- staff sessions ----------
+-- Only a SHA-256 hash of the session token is stored, so a copy of this table gives no working sessions.
+create table if not exists public.staff_sessions (
+  id              uuid primary key default gen_random_uuid(),
+  staff_user_id   uuid not null references public.staff_users (id) on delete cascade,
+  token_hash      bytea not null unique check (octet_length(token_hash) = 32),
+  created_at      timestamptz not null default now(),
+  last_seen_at    timestamptz not null default now(),
+  idle_expires_at timestamptz not null,
+  expires_at      timestamptz not null,
+  revoked_at      timestamptz,
+  ip              inet,
+  user_agent      text
+);
+create index if not exists staff_sessions_user_idx on public.staff_sessions (staff_user_id);
+create index if not exists staff_sessions_expires_idx on public.staff_sessions (expires_at);
+
+-- ---------- lock down: RLS on, nothing for the public API roles ----------
+-- (Supabase's default privileges grant anon/authenticated everything on new tables; revoke that explicitly.)
+alter table public.staff_users      enable row level security;
+alter table public.roles            enable row level security;
+alter table public.permissions      enable row level security;
+alter table public.role_permissions enable row level security;
+alter table public.staff_user_roles enable row level security;
+alter table public.staff_sessions   enable row level security;
+revoke all on public.staff_users, public.roles, public.permissions, public.role_permissions, public.staff_user_roles, public.staff_sessions
+  from anon, authenticated;
+
+-- ---------- seed: permissions ----------
+insert into public.permissions (code, module, description) values
+  ('dashboard.read',       'dashboard',  'View the admin dashboard'),
+  ('staff.read',           'staff',      'View staff accounts'),
+  ('staff.manage',         'staff',      'Invite, edit, disable staff and assign roles'),
+  ('roles.read',           'roles',      'View roles and their permissions'),
+  ('roles.manage',         'roles',      'Create and edit roles and their permissions'),
+  ('audit.read',           'audit',      'View the audit log'),
+  ('settings.read',        'settings',   'View platform settings'),
+  ('settings.manage',      'settings',   'Change platform settings'),
+  ('products.read',        'products',   'View products, variants and images'),
+  ('products.write',       'products',   'Create and edit products, variants, SKUs, prices and images'),
+  ('categories.read',      'categories', 'View categories and collections'),
+  ('categories.write',     'categories', 'Create and edit categories and collections'),
+  ('inventory.read',       'inventory',  'View stock levels and stock movements'),
+  ('inventory.adjust',     'inventory',  'Adjust stock (recorded in the inventory ledger)'),
+  ('orders.read',          'orders',     'View orders'),
+  ('orders.update_status', 'orders',     'Change order status'),
+  ('customers.read',       'customers',  'View customers and their order history'),
+  ('customers.manage',     'customers',  'Edit or disable customer accounts'),
+  ('billing.read',         'billing',    'View invoices, payments and refunds'),
+  ('billing.manage',       'billing',    'Issue invoices and record payments'),
+  ('refunds.create',       'billing',    'Create refunds'),
+  ('reports.read',         'reports',    'View reports')
+on conflict (code) do nothing;
+
+-- ---------- seed: roles ----------
+insert into public.roles (code, name, description, is_system) values
+  ('super_admin',       'Super admin',       'Full access, including roles and permissions', true),
+  ('admin',             'Admin',             'Runs the store and manages staff; cannot change role definitions', true),
+  ('manager',           'Manager',           'Day-to-day operations: catalogue, stock, orders', true),
+  ('inventory_manager', 'Inventory manager', 'Stock levels and adjustments', true),
+  ('sales',             'Sales',             'Orders and customers', true),
+  ('accountant',        'Accountant',        'Billing, payments, refunds and reports', true),
+  ('support',           'Support',           'Read-only help for customers and orders', true)
+on conflict (code) do nothing;
+
+-- ---------- seed: role → permissions ----------
+-- super_admin holds every permission (future permission migrations grant new codes to it the same way).
+insert into public.role_permissions (role_id, permission_code)
+select r.id, p.code from public.roles r cross join public.permissions p where r.code = 'super_admin'
+on conflict do nothing;
+
+insert into public.role_permissions (role_id, permission_code)
+select r.id, p.code from public.roles r cross join public.permissions p
+where r.code = 'admin' and p.code <> 'roles.manage'
+on conflict do nothing;
+
+insert into public.role_permissions (role_id, permission_code)
+select r.id, x.code from public.roles r
+join (values
+  ('manager', 'dashboard.read'), ('manager', 'staff.read'), ('manager', 'roles.read'), ('manager', 'audit.read'), ('manager', 'settings.read'),
+  ('manager', 'products.read'), ('manager', 'products.write'), ('manager', 'categories.read'), ('manager', 'categories.write'),
+  ('manager', 'inventory.read'), ('manager', 'inventory.adjust'), ('manager', 'orders.read'), ('manager', 'orders.update_status'),
+  ('manager', 'customers.read'), ('manager', 'billing.read'), ('manager', 'reports.read'),
+  ('inventory_manager', 'dashboard.read'), ('inventory_manager', 'products.read'), ('inventory_manager', 'categories.read'),
+  ('inventory_manager', 'inventory.read'), ('inventory_manager', 'inventory.adjust'), ('inventory_manager', 'reports.read'),
+  ('sales', 'dashboard.read'), ('sales', 'products.read'), ('sales', 'inventory.read'), ('sales', 'orders.read'),
+  ('sales', 'orders.update_status'), ('sales', 'customers.read'),
+  ('accountant', 'dashboard.read'), ('accountant', 'orders.read'), ('accountant', 'customers.read'), ('accountant', 'billing.read'),
+  ('accountant', 'billing.manage'), ('accountant', 'refunds.create'), ('accountant', 'reports.read'),
+  ('support', 'dashboard.read'), ('support', 'products.read'), ('support', 'inventory.read'), ('support', 'orders.read'),
+  ('support', 'customers.read')
+) as x (role_code, code) on x.role_code = r.code
+on conflict do nothing;
+
+
+-- ===== 20260925000500_customers_auth_support.sql =====
+-- KITSYUU platform M2: customer accounts, sessions and auth support tables (additive only).
+-- Supabase Auth (auth.users + public.profiles) stays the live login system until M6. Nothing here reads or changes it
+-- except the one-way copy of existing accounts into public.customers at the bottom, which keeps each account's UUID.
+-- Safe to re-run: every statement is guarded.
+
+-- ---------- types ----------
+do $$ begin
+  create type public.customer_status as enum ('active', 'disabled');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.auth_token_purpose as enum ('email_verification', 'password_reset', 'staff_invitation');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.auth_realm as enum ('customer', 'staff');
+exception when duplicate_object then null; end $$;
+
+-- ---------- customers ----------
+create table if not exists public.customers (
+  id                  uuid primary key default gen_random_uuid(),   -- existing accounts keep their Supabase Auth user id
+  email               text not null check (email = lower(btrim(email)) and email like '%_@_%'),   -- stored normalised
+  full_name           text,
+  phone               text,
+  password_hash       text,                  -- argon2id, or a legacy bcrypt hash carried over in M6; null until then
+  status              public.customer_status not null default 'active',
+  email_verified_at   timestamptz,
+  last_login_at       timestamptz,
+  legacy_auth_user_id uuid unique,           -- the Supabase Auth user this row mirrors until M6 (no FK: auth.users is being retired)
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+create unique index if not exists customers_email_key on public.customers (email);
+drop trigger if exists customers_updated_at on public.customers;
+create trigger customers_updated_at before update on public.customers for each row execute function public.set_updated_at();
+
+-- ---------- customer sessions (same design as staff_sessions: only the token's SHA-256 is stored) ----------
+create table if not exists public.customer_sessions (
+  id              uuid primary key default gen_random_uuid(),
+  customer_id     uuid not null references public.customers (id) on delete cascade,
+  token_hash      bytea not null unique check (octet_length(token_hash) = 32),
+  created_at      timestamptz not null default now(),
+  last_seen_at    timestamptz not null default now(),
+  idle_expires_at timestamptz not null,
+  expires_at      timestamptz not null,
+  revoked_at      timestamptz,
+  ip              inet,
+  user_agent      text
+);
+create index if not exists customer_sessions_customer_idx on public.customer_sessions (customer_id);
+create index if not exists customer_sessions_expires_idx on public.customer_sessions (expires_at);
+
+-- ---------- one-time tokens: email verification, password reset, staff invitation ----------
+-- Only the SHA-256 of the token is stored; the token itself exists only in the emailed link.
+create table if not exists public.auth_tokens (
+  id            uuid primary key default gen_random_uuid(),
+  purpose       public.auth_token_purpose not null,
+  customer_id   uuid references public.customers (id) on delete cascade,
+  staff_user_id uuid references public.staff_users (id) on delete cascade,
+  token_hash    bytea not null unique check (octet_length(token_hash) = 32),
+  expires_at    timestamptz not null,
+  used_at       timestamptz,                                        -- set once; a used token is never accepted again
+  created_at    timestamptz not null default now(),
+  created_ip    inet,
+  metadata      jsonb not null default '{}'::jsonb,
+  constraint auth_tokens_one_subject check (num_nonnulls(customer_id, staff_user_id) = 1),
+  constraint auth_tokens_invitation_is_staff check (purpose <> 'staff_invitation' or staff_user_id is not null),
+  constraint auth_tokens_expiry_after_creation check (expires_at > created_at)
+);
+create index if not exists auth_tokens_customer_idx on public.auth_tokens (customer_id) where customer_id is not null;
+create index if not exists auth_tokens_staff_idx on public.auth_tokens (staff_user_id) where staff_user_id is not null;
+create index if not exists auth_tokens_expires_idx on public.auth_tokens (expires_at);
+
+-- ---------- login attempts (throttling) ----------
+-- Recorded for every attempt, including unknown emails, so throttling cannot reveal which emails have accounts.
+create table if not exists public.auth_attempts (
+  id             bigint generated always as identity primary key,
+  realm          public.auth_realm not null,
+  email          text not null,                                    -- normalised (lower-case, trimmed)
+  ip             inet,
+  succeeded      boolean not null,
+  failure_reason text,
+  attempted_at   timestamptz not null default now()
+);
+create index if not exists auth_attempts_email_idx on public.auth_attempts (realm, email, attempted_at desc);
+create index if not exists auth_attempts_ip_idx on public.auth_attempts (realm, ip, attempted_at desc);
+
+-- ---------- lock down ----------
+alter table public.customers         enable row level security;
+alter table public.customer_sessions enable row level security;
+alter table public.auth_tokens       enable row level security;
+alter table public.auth_attempts     enable row level security;
+revoke all on public.customers, public.customer_sessions, public.auth_tokens, public.auth_attempts from anon, authenticated;
+revoke all on sequence public.auth_attempts_id_seq from anon, authenticated;
+
+-- ---------- copy existing accounts (one-way, keeps the UUID) ----------
+-- Every Supabase Auth account that has a profile gets a customers row with the SAME id, so orders, carts and
+-- addresses can move to customers in M6 without re-keying. No password is copied here (that is M6), and
+-- auth.users / profiles are only read. Accounts created after this migration are copied by M6 with this same
+-- statement (on conflict do nothing).
+insert into public.customers (id, email, full_name, phone, email_verified_at, legacy_auth_user_id, created_at)
+select p.id, lower(btrim(u.email)), p.full_name, p.phone, u.email_confirmed_at, p.id, p.created_at
+from public.profiles p
+join auth.users u on u.id = p.id
+where u.email is not null
+on conflict do nothing;
+
+
+-- ===== 20260925000600_inventory_ledger.sql =====
+-- KITSYUU platform M2: inventory ledger (additive only).
+-- Stock changes only through public.adjust_stock(), which updates product_variants.stock_qty and writes the matching
+-- inventory_movements row (with balance_after) in the same transaction. A trigger rejects any other change to stock_qty.
+-- The existing 110 'seed' movements and every variant's stock_qty are left exactly as they are:
+-- new columns are nullable with no default, so existing rows are not rewritten.
+-- Safe to re-run: every statement is guarded.
+
+-- ---------- reasons are data, not a hard-coded list ----------
+create table if not exists public.inventory_reasons (
+  code       text primary key check (code ~ '^[a-z][a-z_]*$'),
+  label      text not null,
+  direction  text not null check (direction in ('in', 'out', 'any')),   -- which sign of delta the reason allows
+  is_system  boolean not null default false,       -- used by the platform itself (seed, sale, cancel), not for manual adjustments
+  is_active  boolean not null default true,
+  sort_order int not null default 0
+);
+insert into public.inventory_reasons (code, label, direction, is_system, sort_order) values
+  ('seed',         'Initial stock',           'in',  true,  0),
+  ('sale',         'Sale',                    'out', true,  1),
+  ('cancel',       'Order cancelled',         'in',  true,  2),
+  ('restock',      'Restock',                 'in',  false, 3),
+  ('return',       'Customer return',         'in',  false, 4),
+  ('damage',       'Damaged / written off',   'out', false, 5),
+  ('correction',   'Stock count correction',  'any', false, 6),
+  ('admin_adjust', 'Manual adjustment',       'any', false, 7)
+on conflict (code) do nothing;
+alter table public.inventory_reasons enable row level security;
+revoke all on public.inventory_reasons from anon, authenticated;
+
+-- The Phase 4.2 CHECK list (seed, sale, restock, admin_adjust, cancel) becomes a foreign key to inventory_reasons.
+-- Every existing value is in the new table, so no existing row changes; the FK is added before the CHECK is dropped.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'inventory_movements_reason_fkey' and conrelid = 'public.inventory_movements'::regclass) then
+    alter table public.inventory_movements add constraint inventory_movements_reason_fkey foreign key (reason) references public.inventory_reasons (code);
+  end if;
+end $$;
+alter table public.inventory_movements drop constraint if exists inventory_movements_reason_check;
+
+-- ---------- new ledger columns (nullable: the existing 110 rows keep null) ----------
+alter table public.inventory_movements add column if not exists staff_id uuid references public.staff_users (id) on delete restrict;
+alter table public.inventory_movements add column if not exists balance_after integer check (balance_after >= 0);
+create index if not exists inventory_movements_staff_idx on public.inventory_movements (staff_id) where staff_id is not null;
+comment on column public.inventory_movements.balance_after is 'stock_qty after this movement. Null for the Phase 4.2 seed rows (their balance equals their delta).';
+comment on column public.inventory_movements.created_by is 'Legacy (Supabase Auth user). New movements record staff_id instead.';
+
+-- Per-variant low-stock level. Null = use the inventory.low_stock_threshold setting.
+alter table public.product_variants add column if not exists reorder_level integer check (reorder_level >= 0);
+
+-- ---------- the only way to change stock ----------
+create or replace function public.adjust_stock(
+  p_variant_id uuid,
+  p_delta      integer,
+  p_reason     text,
+  p_staff_id   uuid default null,
+  p_note       text default null,
+  p_order_id   uuid default null
+) returns table (movement_id bigint, balance_after integer)
+language plpgsql security definer set search_path = '' as $$
+#variable_conflict use_column
+declare
+  v_direction text;
+  v_active    boolean;
+  v_stock     integer;
+  v_id        bigint;
+begin
+  if p_delta is null or p_delta = 0 then
+    raise exception 'adjust_stock: delta must be a non-zero integer' using errcode = '22023';
+  end if;
+
+  select r.direction, r.is_active into v_direction, v_active from public.inventory_reasons r where r.code = p_reason;
+  if not found then raise exception 'adjust_stock: unknown reason %', p_reason using errcode = '22023'; end if;
+  if not v_active then raise exception 'adjust_stock: reason % is not active', p_reason using errcode = '22023'; end if;
+  if (v_direction = 'in' and p_delta < 0) or (v_direction = 'out' and p_delta > 0) then
+    raise exception 'adjust_stock: reason % does not allow a change of %', p_reason, p_delta using errcode = '22023';
+  end if;
+  if p_staff_id is not null and not exists (select 1 from public.staff_users s where s.id = p_staff_id and s.status = 'active') then
+    raise exception 'adjust_stock: staff user % is not active', p_staff_id using errcode = '42501';
+  end if;
+
+  -- Row lock: concurrent adjustments of the same variant queue here instead of losing updates.
+  select v.stock_qty into v_stock from public.product_variants v where v.id = p_variant_id for update;
+  if not found then raise exception 'adjust_stock: variant % not found', p_variant_id using errcode = 'P0002'; end if;
+  if v_stock + p_delta < 0 then
+    raise exception 'adjust_stock: insufficient stock (have %, change %)', v_stock, p_delta using errcode = '23514';
+  end if;
+
+  perform set_config('kitsyuu.stock_adjust', 'on', true);
+  update public.product_variants set stock_qty = v_stock + p_delta where id = p_variant_id;
+  perform set_config('kitsyuu.stock_adjust', 'off', true);
+
+  insert into public.inventory_movements (variant_id, delta, reason, order_id, staff_id, note, balance_after)
+  values (p_variant_id, p_delta, p_reason, p_order_id, p_staff_id, p_note, v_stock + p_delta)
+  returning id into v_id;
+
+  return query select v_id, v_stock + p_delta;
+end $$;
+comment on function public.adjust_stock(uuid, integer, text, uuid, text, uuid) is
+  'Changes a variant''s stock and writes the inventory ledger row in one transaction. The only permitted way to change stock_qty. Callers are trusted server code, which passes the acting staff id.';
+
+-- Guard: any change to stock_qty outside adjust_stock() is rejected, whoever makes it.
+create or replace function public.guard_stock_qty() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.stock_qty is distinct from old.stock_qty and coalesce(current_setting('kitsyuu.stock_adjust', true), 'off') <> 'on' then
+    raise exception 'stock_qty can only be changed through public.adjust_stock()' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists product_variants_guard_stock on public.product_variants;
+create trigger product_variants_guard_stock before update of stock_qty on public.product_variants
+  for each row execute function public.guard_stock_qty();
+
+-- Supabase grants EXECUTE on new functions to anon/authenticated by default: the public API must never call these.
+revoke all on function public.adjust_stock(uuid, integer, text, uuid, text, uuid) from public, anon, authenticated;
+revoke all on function public.guard_stock_qty() from public, anon, authenticated;
+
+
+-- ===== 20260925000700_commerce_orders.sql =====
+-- KITSYUU platform M2: database carts and wishlists (for M8) and new order columns (additive only).
+-- The website keeps its browser (localStorage) cart and wishlist until M8; these tables start empty.
+-- cart_items and wishlist_items already exist from Phase 4.2 (empty, keyed by the Supabase Auth user), so they are
+-- extended with a link to the new carts / wishlists instead of being recreated.
+-- Safe to re-run: every statement is guarded.
+
+-- ---------- types ----------
+do $$ begin
+  create type public.cart_status as enum ('active', 'converted', 'merged', 'abandoned');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.payment_status as enum ('unpaid', 'pending', 'authorized', 'paid', 'failed', 'refunded', 'partially_refunded');
+exception when duplicate_object then null; end $$;
+
+-- ---------- carts ----------
+-- A cart belongs to a customer, or to a guest identified by the SHA-256 of a random cookie token.
+create table if not exists public.carts (
+  id               uuid primary key default gen_random_uuid(),
+  customer_id      uuid references public.customers (id) on delete cascade,
+  guest_token_hash bytea unique check (octet_length(guest_token_hash) = 32),
+  status           public.cart_status not null default 'active',
+  currency         text not null default 'INR',
+  expires_at       timestamptz,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint carts_has_owner check (customer_id is not null or guest_token_hash is not null)
+);
+create unique index if not exists carts_one_active_per_customer on public.carts (customer_id) where status = 'active' and customer_id is not null;
+drop trigger if exists carts_updated_at on public.carts;
+create trigger carts_updated_at before update on public.carts for each row execute function public.set_updated_at();
+
+alter table public.cart_items add column if not exists cart_id uuid references public.carts (id) on delete cascade;
+create unique index if not exists cart_items_cart_variant_key on public.cart_items (cart_id, variant_id) where cart_id is not null;
+comment on column public.cart_items.cart_id is 'M8 database cart. Legacy user_id (Supabase Auth) stays until M6/M8.';
+
+-- ---------- wishlists ----------
+create table if not exists public.wishlists (
+  id          uuid primary key default gen_random_uuid(),
+  customer_id uuid not null unique references public.customers (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+drop trigger if exists wishlists_updated_at on public.wishlists;
+create trigger wishlists_updated_at before update on public.wishlists for each row execute function public.set_updated_at();
+
+alter table public.wishlist_items add column if not exists wishlist_id uuid references public.wishlists (id) on delete cascade;
+create unique index if not exists wishlist_items_wishlist_product_key on public.wishlist_items (wishlist_id, product_id) where wishlist_id is not null;
+comment on column public.wishlist_items.wishlist_id is 'M8 database wishlist. Legacy user_id (Supabase Auth) stays until M6/M8.';
+
+-- ---------- orders: link to customers + payment status (nullable; there are no orders yet) ----------
+alter table public.orders add column if not exists customer_id uuid references public.customers (id) on delete restrict;
+alter table public.orders add column if not exists payment_status public.payment_status;
+create index if not exists orders_customer_idx on public.orders (customer_id, created_at desc) where customer_id is not null;
+
+-- ---------- lock down the new tables ----------
+alter table public.carts     enable row level security;
+alter table public.wishlists enable row level security;
+revoke all on public.carts, public.wishlists from anon, authenticated;
+
+
+-- ===== 20260925000800_billing.sql =====
+-- KITSYUU platform M2: billing foundation (additive only). Tables start empty apart from the prototype tax rate.
+-- Prototype prices are tax-inclusive with no GST line, so the one seeded rate is 0 % and inclusive.
+-- No invoice numbers, invoices, payments or refunds are created here.
+-- Safe to re-run: every statement is guarded.
+
+-- ---------- types ----------
+do $$ begin
+  create type public.payment_record_status as enum ('created', 'authorized', 'captured', 'failed', 'refunded', 'partially_refunded');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.refund_status as enum ('requested', 'pending', 'processed', 'failed');
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create type public.invoice_status as enum ('draft', 'issued', 'void');
+exception when duplicate_object then null; end $$;
+
+-- ---------- tax rates ----------
+create table if not exists public.tax_rates (
+  id           uuid primary key default gen_random_uuid(),
+  code         text not null unique check (code ~ '^[A-Z0-9_]+$'),
+  label        text not null,
+  rate_bp      integer not null check (rate_bp between 0 and 10000),   -- basis points: 1800 = 18 %
+  is_inclusive boolean not null default true,                          -- rate is already inside the listed price
+  is_active    boolean not null default true,
+  valid_from   date not null,
+  valid_to     date,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint tax_rates_valid_range check (valid_to is null or valid_to >= valid_from)
+);
+drop trigger if exists tax_rates_updated_at on public.tax_rates;
+create trigger tax_rates_updated_at before update on public.tax_rates for each row execute function public.set_updated_at();
+insert into public.tax_rates (code, label, rate_bp, is_inclusive, valid_from) values
+  ('PROTOTYPE_INCLUSIVE', 'Prototype prices: tax-inclusive, no GST line', 0, true, date '2026-09-25')
+on conflict (code) do nothing;
+
+-- ---------- payments (one row per provider payment attempt) ----------
+create table if not exists public.payments (
+  id                  uuid primary key default gen_random_uuid(),
+  order_id            uuid not null references public.orders (id) on delete restrict,
+  provider            text not null check (provider ~ '^[a-z][a-z0-9_]*$'),   -- e.g. 'razorpay'
+  provider_order_id   text,
+  provider_payment_id text,
+  amount_paise        integer not null check (amount_paise >= 0),
+  currency            text not null default 'INR',
+  status              public.payment_record_status not null default 'created',
+  method              text,
+  failure_reason      text,
+  raw                 jsonb not null default '{}'::jsonb,                    -- provider payload, for reconciliation
+  captured_at         timestamptz,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  constraint payments_provider_payment_key unique (provider, provider_payment_id)
+);
+create index if not exists payments_order_idx on public.payments (order_id);
+drop trigger if exists payments_updated_at on public.payments;
+create trigger payments_updated_at before update on public.payments for each row execute function public.set_updated_at();
+
+-- ---------- refunds ----------
+create table if not exists public.refunds (
+  id                 uuid primary key default gen_random_uuid(),
+  payment_id         uuid not null references public.payments (id) on delete restrict,
+  order_id           uuid not null references public.orders (id) on delete restrict,
+  amount_paise       integer not null check (amount_paise > 0),
+  reason             text not null default '',
+  status             public.refund_status not null default 'requested',
+  provider_refund_id text unique,
+  requested_by       uuid references public.staff_users (id) on delete restrict,
+  processed_at       timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+create index if not exists refunds_payment_idx on public.refunds (payment_id);
+create index if not exists refunds_order_idx on public.refunds (order_id);
+drop trigger if exists refunds_updated_at on public.refunds;
+create trigger refunds_updated_at before update on public.refunds for each row execute function public.set_updated_at();
+
+-- ---------- invoices ----------
+-- A draft has no number. Issuing assigns one from next_document_number(), so issued numbers are gap-free.
+create table if not exists public.invoices (
+  id                 uuid primary key default gen_random_uuid(),
+  invoice_number     text unique,
+  status             public.invoice_status not null default 'draft',
+  order_id           uuid references public.orders (id) on delete restrict,
+  customer_id        uuid references public.customers (id) on delete restrict,
+  financial_year     text check (financial_year ~ '^[0-9]{4}-[0-9]{2}$'),   -- Indian FY, e.g. '2026-27'
+  issued_at          timestamptz,
+  currency           text not null default 'INR',
+  subtotal_paise     integer not null default 0 check (subtotal_paise >= 0),
+  tax_paise          integer not null default 0 check (tax_paise >= 0),
+  total_paise        integer not null default 0 check (total_paise >= 0),
+  prices_include_tax boolean not null default true,
+  billing_address    jsonb not null default '{}'::jsonb,
+  seller_details     jsonb not null default '{}'::jsonb,                    -- snapshot of seller name/address/GSTIN at issue time
+  notes              text,
+  voided_at          timestamptz,
+  void_reason        text,
+  created_by         uuid references public.staff_users (id) on delete restrict,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now(),
+  constraint invoices_issued_has_number check (status = 'draft' or (invoice_number is not null and issued_at is not null and financial_year is not null))
+);
+create index if not exists invoices_order_idx on public.invoices (order_id);
+create index if not exists invoices_customer_idx on public.invoices (customer_id);
+drop trigger if exists invoices_updated_at on public.invoices;
+create trigger invoices_updated_at before update on public.invoices for each row execute function public.set_updated_at();
+
+create table if not exists public.invoice_items (
+  id               uuid primary key default gen_random_uuid(),
+  invoice_id       uuid not null references public.invoices (id) on delete cascade,
+  order_item_id    uuid references public.order_items (id) on delete restrict,
+  position         int not null default 0,
+  description      text not null,
+  sku              text,
+  hsn_code         text,
+  qty              int not null check (qty > 0),
+  unit_price_paise integer not null check (unit_price_paise >= 0),
+  tax_rate_id      uuid references public.tax_rates (id) on delete restrict,
+  tax_rate_bp      integer not null default 0 check (tax_rate_bp between 0 and 10000),   -- snapshot of the rate used
+  tax_paise        integer not null default 0 check (tax_paise >= 0),
+  line_total_paise integer not null check (line_total_paise >= 0)
+);
+create index if not exists invoice_items_invoice_idx on public.invoice_items (invoice_id);
+
+-- ---------- document numbering (per document type and Indian financial year, April → March) ----------
+create table if not exists public.document_sequences (
+  doc_type       text not null check (doc_type ~ '^[a-z][a-z_]*$'),       -- e.g. 'invoice', 'credit_note'
+  financial_year text not null check (financial_year ~ '^[0-9]{4}-[0-9]{2}$'),
+  prefix         text not null check (prefix ~ '^[A-Z0-9-]{1,6}$'),
+  next_value     bigint not null default 1 check (next_value >= 1),
+  updated_at     timestamptz not null default now(),
+  primary key (doc_type, financial_year)
+);
+
+create or replace function public.financial_year_of(p_date date) returns text
+language sql immutable set search_path = '' as $$
+  select case when extract(month from p_date) >= 4
+    then extract(year from p_date)::int::text || '-' || lpad(((extract(year from p_date)::int + 1) % 100)::text, 2, '0')
+    else (extract(year from p_date)::int - 1)::text || '-' || lpad((extract(year from p_date)::int % 100)::text, 2, '0')
+  end
+$$;
+
+-- Returns e.g. 'KTS/26-27/00001' (15 characters: within the 16-character limit for GST invoice numbers).
+-- The row lock taken by UPDATE is held until the caller's transaction ends, and a rolled-back transaction does not
+-- consume its number, so issued numbers have no gaps. The prefix is supplied by the caller (from settings).
+create or replace function public.next_document_number(p_doc_type text, p_prefix text, p_date date default null)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  v_fy     text := public.financial_year_of(coalesce(p_date, (now() at time zone 'Asia/Kolkata')::date));
+  v_n      bigint;
+  v_prefix text;
+begin
+  insert into public.document_sequences (doc_type, financial_year, prefix) values (p_doc_type, v_fy, p_prefix)
+  on conflict (doc_type, financial_year) do nothing;
+  update public.document_sequences set next_value = next_value + 1, updated_at = now()
+  where doc_type = p_doc_type and financial_year = v_fy
+  returning next_value - 1, prefix into v_n, v_prefix;
+  return v_prefix || '/' || substr(v_fy, 3) || '/' || lpad(v_n::text, 5, '0');
+end $$;
+
+-- ---------- lock down ----------
+alter table public.tax_rates          enable row level security;
+alter table public.payments           enable row level security;
+alter table public.refunds            enable row level security;
+alter table public.invoices           enable row level security;
+alter table public.invoice_items      enable row level security;
+alter table public.document_sequences enable row level security;
+revoke all on public.tax_rates, public.payments, public.refunds, public.invoices, public.invoice_items, public.document_sequences
+  from anon, authenticated;
+revoke all on function public.financial_year_of(date) from public, anon, authenticated;
+revoke all on function public.next_document_number(text, text, date) from public, anon, authenticated;
+
+
+-- ===== 20260925000900_platform.sql =====
+-- KITSYUU platform M2: settings, editable site content and the append-only audit log (additive only).
+-- Only settings the architecture needs are seeded. site_content starts empty (the landing content arrives in M5).
+-- audit_logs starts empty: no events are invented.
+-- Safe to re-run: every statement is guarded.
+
+-- ---------- settings (typed JSON values, editable later from the admin app) ----------
+create table if not exists public.settings (
+  key         text primary key check (key ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'),
+  value       jsonb not null,
+  description text not null default '',
+  is_public   boolean not null default false,          -- true = the storefront may read it; false = internal
+  updated_by  uuid references public.staff_users (id) on delete set null,
+  updated_at  timestamptz not null default now()
+);
+drop trigger if exists settings_updated_at on public.settings;
+create trigger settings_updated_at before update on public.settings for each row execute function public.set_updated_at();
+
+insert into public.settings (key, value, description, is_public) values
+  ('store.currency',                     '"INR"',          'Store currency (ISO 4217)', true),
+  ('store.timezone',                     '"Asia/Kolkata"', 'Business time zone for dates, reports and financial years', true),
+  ('billing.prices_include_tax',         'true',           'Listed prices already include tax (no separate GST line)', true),
+  ('billing.default_tax_rate_code',      '"PROTOTYPE_INCLUSIVE"', 'tax_rates.code applied when a product has no specific rate', false),
+  ('billing.invoice_prefix',             '"KTS"',          'Invoice number prefix: numbers look like KTS/26-27/00001', false),
+  ('inventory.low_stock_threshold',      '3',              'A variant is low on stock at or below this quantity, unless it has its own reorder level', false),
+  ('auth.staff_session_idle_minutes',    '30',             'Staff session ends after this much inactivity', false),
+  ('auth.staff_session_absolute_hours',  '12',             'Staff session ends this long after login, even if active', false),
+  ('auth.customer_session_days',         '30',             'Customer session lifetime, renewed while in use', false),
+  ('auth.login_max_failures',            '5',              'Failed logins allowed per email (and per IP) within the window before throttling', false),
+  ('auth.login_window_minutes',          '15',             'Window for counting failed logins', false),
+  ('auth.token_ttl_minutes',             '{"email_verification": 1440, "password_reset": 60, "staff_invitation": 4320}', 'Lifetime of one-time links, by purpose', false)
+on conflict (key) do nothing;
+
+-- ---------- site content (landing and page copy; one row per key, locale and draft/published state) ----------
+create table if not exists public.site_content (
+  id           uuid primary key default gen_random_uuid(),
+  key          text not null check (key ~ '^[a-z][a-z0-9_.-]*$'),    -- e.g. 'landing.hero'
+  locale       text not null default 'en-IN',
+  status       text not null default 'draft' check (status in ('draft', 'published')),
+  content      jsonb not null default '{}'::jsonb,
+  updated_by   uuid references public.staff_users (id) on delete set null,
+  published_at timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint site_content_key_locale_status_key unique (key, locale, status)
+);
+drop trigger if exists site_content_updated_at on public.site_content;
+create trigger site_content_updated_at before update on public.site_content for each row execute function public.set_updated_at();
+
+-- ---------- audit log (append-only) ----------
+do $$ begin
+  create type public.audit_actor_type as enum ('staff', 'customer', 'system');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.audit_logs (
+  id          bigint generated always as identity primary key,
+  occurred_at timestamptz not null default now(),
+  actor_type  public.audit_actor_type not null,
+  staff_id    uuid references public.staff_users (id) on delete restrict,   -- staff are disabled, never deleted, so the actor stays known
+  customer_id uuid references public.customers (id) on delete restrict,
+  action      text not null check (action ~ '^[a-z][a-z_]*(\.[a-z][a-z_]*)+$'),   -- e.g. 'product.update', 'inventory.adjust'
+  entity_type text not null,                                                 -- e.g. 'products'
+  entity_id   text,                                                          -- text, so text ids (ky-proto-001) and uuids both fit
+  before_data jsonb,
+  after_data  jsonb,
+  request_id  text,
+  ip          inet,
+  user_agent  text,
+  metadata    jsonb not null default '{}'::jsonb,
+  constraint audit_logs_actor check (
+    (actor_type = 'staff' and staff_id is not null) or (actor_type = 'customer' and customer_id is not null) or actor_type = 'system')
+);
+create index if not exists audit_logs_occurred_idx on public.audit_logs (occurred_at desc);
+create index if not exists audit_logs_entity_idx on public.audit_logs (entity_type, entity_id, occurred_at desc);
+create index if not exists audit_logs_staff_idx on public.audit_logs (staff_id, occurred_at desc) where staff_id is not null;
+create index if not exists audit_logs_action_idx on public.audit_logs (action, occurred_at desc);
+
+-- Two layers keep it append-only: no role is granted UPDATE/DELETE/TRUNCATE (see the app-roles migration), and these
+-- triggers reject those operations for everyone, including the table owner and service_role.
+create or replace function public.audit_logs_block_change() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  raise exception 'audit_logs is append-only: % is not allowed', tg_op using errcode = '42501';
+end $$;
+drop trigger if exists audit_logs_no_update_delete on public.audit_logs;
+create trigger audit_logs_no_update_delete before update or delete on public.audit_logs
+  for each row execute function public.audit_logs_block_change();
+drop trigger if exists audit_logs_no_truncate on public.audit_logs;
+create trigger audit_logs_no_truncate before truncate on public.audit_logs
+  for each statement execute function public.audit_logs_block_change();
+
+-- ---------- lock down ----------
+alter table public.settings     enable row level security;
+alter table public.site_content enable row level security;
+alter table public.audit_logs   enable row level security;
+revoke all on public.settings, public.site_content, public.audit_logs from anon, authenticated;
+revoke update, delete, truncate on public.audit_logs from service_role;
+revoke all on sequence public.audit_logs_id_seq from anon, authenticated;
+revoke all on function public.audit_logs_block_change() from public, anon, authenticated;
+
+
+-- ===== 20260925001000_reporting_views.sql =====
+-- KITSYUU platform M2: reporting views (additive only). Every figure is computed from live rows; nothing is stored.
+-- security_invoker = true: a view runs with the caller's privileges and RLS, so it can never expose more than the
+-- underlying tables allow (Postgres views otherwise run as their owner).
+-- Paid = orders whose status is paid, processing, shipped or delivered. Dates use the Asia/Kolkata business day.
+-- Safe to re-run (create or replace).
+
+create or replace view public.v_sales_daily with (security_invoker = true) as
+select
+  (coalesce(o.paid_at, o.created_at) at time zone 'Asia/Kolkata')::date as sales_date,
+  count(*)::int                                                         as orders_count,
+  coalesce(sum(items.units), 0)::int                                    as units_sold,
+  coalesce(sum(o.subtotal_paise), 0)::bigint                            as subtotal_paise,
+  coalesce(sum(o.total_paise), 0)::bigint                               as revenue_paise
+from public.orders o
+left join lateral (select sum(i.qty) as units from public.order_items i where i.order_id = o.id) items on true
+where o.status in ('paid', 'processing', 'shipped', 'delivered')
+group by 1;
+
+create or replace view public.v_inventory_status with (security_invoker = true) as
+with threshold as (
+  select coalesce((select (s.value #>> '{}')::int from public.settings s where s.key = 'inventory.low_stock_threshold'), 0) as qty
+)
+select
+  v.id                                  as variant_id,
+  v.sku                                 as variant_sku,
+  v.size,
+  v.product_id,
+  p.sku                                 as product_sku,
+  p.name                                as product_name,
+  p.status                              as product_status,
+  p.category_id,
+  v.is_active,
+  v.stock_qty,
+  coalesce(v.reorder_level, t.qty)      as reorder_level,
+  case when v.stock_qty = 0 then 'out_of_stock'
+       when v.stock_qty <= coalesce(v.reorder_level, t.qty) then 'low_stock'
+       else 'in_stock' end              as stock_status,
+  (select max(m.created_at) from public.inventory_movements m where m.variant_id = v.id) as last_movement_at
+from public.product_variants v
+join public.products p on p.id = v.product_id
+cross join threshold t;
+
+-- Sellable variants (active variant of an active product) that are out of stock or at/below their reorder level.
+create or replace view public.v_low_stock with (security_invoker = true) as
+select * from public.v_inventory_status
+where is_active and product_status = 'active' and stock_status <> 'in_stock';
+
+-- Orders count towards a customer through customer_id, or (until M6 links them) through the legacy Supabase Auth
+-- user id, which is the same UUID.
+create or replace view public.v_customer_summary with (security_invoker = true) as
+select
+  c.id                                                                                     as customer_id,
+  c.email,
+  c.full_name,
+  c.status,
+  c.created_at,
+  c.last_login_at,
+  count(o.id)::int                                                                         as orders_count,
+  (count(o.id) filter (where o.status in ('paid', 'processing', 'shipped', 'delivered')))::int as paid_orders_count,
+  coalesce(sum(o.total_paise) filter (where o.status in ('paid', 'processing', 'shipped', 'delivered')), 0)::bigint as lifetime_value_paise,
+  max(o.created_at)                                                                        as last_order_at
+from public.customers c
+left join public.orders o on o.customer_id = c.id or (o.customer_id is null and o.user_id = c.legacy_auth_user_id)
+group by c.id;
+
+revoke all on public.v_sales_daily, public.v_inventory_status, public.v_low_stock, public.v_customer_summary from anon, authenticated;
+
+
+-- ===== 20260925001100_app_db_roles.sql =====
+-- KITSYUU platform M2: application database roles (additive only).
+--   kitsyuu_website: the customer website. Catalogue reads plus customer / cart / wishlist / order / auth data.
+--                    No access to staff, roles, permissions or the audit log.
+--   kitsyuu_admin:   the Admin/ERP app. Broad access, but it cannot change stock_qty directly (adjust_stock() only)
+--                    and cannot UPDATE / DELETE / TRUNCATE audit history.
+-- Both roles are created NOLOGIN: nothing can connect as them yet. M3 enables login for kitsyuu_admin with a password
+-- supplied from the environment (never stored in a migration). Until then this migration has no runtime effect.
+-- Existing policies for anon / authenticated (Supabase Auth) are not touched: the policies added below apply only to
+-- these two roles. Row-level ownership checks for customer data are enforced in the website's server code, which
+-- is the only holder of the kitsyuu_website credentials.
+-- Safe to re-run: roles are created if missing; grants are idempotent; policies are dropped and recreated.
+
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'kitsyuu_website') then create role kitsyuu_website nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'kitsyuu_admin') then create role kitsyuu_admin nologin; end if;
+end $$;
+comment on role kitsyuu_website is 'KITSYUU customer website (server-side only)';
+comment on role kitsyuu_admin is 'KITSYUU Admin/ERP app (server-side only)';
+
+grant usage on schema public to kitsyuu_website, kitsyuu_admin;
+
+-- ======================= kitsyuu_website =======================
+grant select on public.categories, public.products, public.product_variants, public.product_images, public.collections,
+  public.collection_products, public.product_relations, public.settings, public.site_content, public.tax_rates
+  to kitsyuu_website;
+grant select, insert, update on public.customers to kitsyuu_website;
+grant select, insert, update, delete on public.customer_sessions, public.carts, public.cart_items, public.wishlists,
+  public.wishlist_items, public.addresses to kitsyuu_website;
+grant select, insert, update on public.auth_tokens to kitsyuu_website;
+grant select, insert on public.auth_attempts to kitsyuu_website;
+grant select, insert, update on public.orders, public.payments to kitsyuu_website;
+grant select, insert on public.order_items, public.order_status_history to kitsyuu_website;
+grant select on public.invoices, public.invoice_items to kitsyuu_website;
+
+-- ======================= kitsyuu_admin =======================
+grant select on all tables in schema public to kitsyuu_admin;              -- includes the reporting views
+grant insert, update, delete on public.categories, public.products, public.product_images, public.collections,
+  public.collection_products, public.product_relations to kitsyuu_admin;
+-- Variants: every column except stock_qty (stock changes only through adjust_stock()).
+grant insert, delete on public.product_variants to kitsyuu_admin;
+grant update (product_id, size, sku, sort_order, price_paise, stock_source, is_active, reorder_level) on public.product_variants to kitsyuu_admin;
+grant insert, update on public.staff_users, public.roles to kitsyuu_admin;
+grant delete on public.roles to kitsyuu_admin;                               -- in-use roles are protected by FK restrict
+grant insert, update, delete on public.role_permissions, public.staff_user_roles, public.staff_sessions to kitsyuu_admin;
+grant insert, update on public.auth_tokens to kitsyuu_admin;
+grant insert on public.auth_attempts to kitsyuu_admin;
+grant update (full_name, phone, status, email_verified_at) on public.customers to kitsyuu_admin;
+grant insert, update on public.settings, public.tax_rates, public.inventory_reasons to kitsyuu_admin;
+grant insert, update, delete on public.site_content to kitsyuu_admin;
+grant update on public.orders to kitsyuu_admin;
+grant insert on public.order_status_history to kitsyuu_admin;
+grant insert, update on public.payments, public.refunds, public.invoices to kitsyuu_admin;
+grant insert, update, delete on public.invoice_items to kitsyuu_admin;
+grant insert on public.audit_logs to kitsyuu_admin;                          -- append only: no update/delete/truncate
+revoke update, delete, truncate on public.audit_logs from kitsyuu_admin, kitsyuu_website;
+revoke truncate on all tables in schema public from kitsyuu_admin, kitsyuu_website;
+
+grant execute on function public.adjust_stock(uuid, integer, text, uuid, text, uuid) to kitsyuu_admin;
+grant execute on function public.next_document_number(text, text, date) to kitsyuu_admin;
+grant execute on function public.financial_year_of(date) to kitsyuu_admin, kitsyuu_website;
+grant usage on sequence public.auth_attempts_id_seq to kitsyuu_website, kitsyuu_admin;
+grant usage on sequence public.audit_logs_id_seq to kitsyuu_admin;
+
+-- ======================= RLS policies for the app roles =======================
+-- Tables have RLS enabled, so each app role needs a policy per table it uses. Which operations it may perform is set by
+-- the grants above; these policies only decide which rows are visible to it.
+do $$
+declare t text;
+begin
+  -- kitsyuu_admin: all rows of every table it has privileges on.
+  foreach t in array array[
+    'categories', 'products', 'product_variants', 'product_images', 'collections', 'collection_products', 'product_relations',
+    'profiles', 'addresses', 'cart_items', 'wishlist_items', 'orders', 'order_items', 'order_status_history',
+    'inventory_movements', 'payment_events',
+    'staff_users', 'roles', 'permissions', 'role_permissions', 'staff_user_roles', 'staff_sessions',
+    'customers', 'customer_sessions', 'auth_tokens', 'auth_attempts', 'inventory_reasons',
+    'carts', 'wishlists', 'tax_rates', 'payments', 'refunds', 'invoices', 'invoice_items', 'document_sequences',
+    'settings', 'site_content'
+  ] loop
+    execute format('drop policy if exists "app admin: all rows" on public.%I', t);
+    execute format('create policy "app admin: all rows" on public.%I for all to kitsyuu_admin using (true) with check (true)', t);
+  end loop;
+
+  -- kitsyuu_website: customer-side tables (row ownership is checked by the website server code).
+  foreach t in array array[
+    'customers', 'customer_sessions', 'auth_tokens', 'auth_attempts', 'carts', 'cart_items', 'wishlists', 'wishlist_items',
+    'addresses', 'orders', 'order_items', 'order_status_history', 'payments', 'invoices', 'invoice_items', 'tax_rates',
+    'categories', 'collections', 'collection_products', 'product_relations'
+  ] loop
+    execute format('drop policy if exists "app website: rows" on public.%I', t);
+    execute format('create policy "app website: rows" on public.%I for all to kitsyuu_website using (true) with check (true)', t);
+  end loop;
+end $$;
+
+-- Audit log: the admin app may read and append, nothing else (the triggers also block update/delete/truncate).
+drop policy if exists "app admin: all rows" on public.audit_logs;
+drop policy if exists "app admin: read" on public.audit_logs;
+drop policy if exists "app admin: append" on public.audit_logs;
+create policy "app admin: read" on public.audit_logs for select to kitsyuu_admin using (true);
+create policy "app admin: append" on public.audit_logs for insert to kitsyuu_admin with check (true);
+
+-- Website catalogue visibility mirrors the existing public policies: only active products and their variants/images.
+drop policy if exists "app website: rows" on public.products;
+create policy "app website: rows" on public.products for select to kitsyuu_website using (status = 'active');
+drop policy if exists "app website: rows" on public.product_variants;
+create policy "app website: rows" on public.product_variants for select to kitsyuu_website
+  using (exists (select 1 from public.products p where p.id = product_id and p.status = 'active'));
+drop policy if exists "app website: rows" on public.product_images;
+create policy "app website: rows" on public.product_images for select to kitsyuu_website
+  using (exists (select 1 from public.products p where p.id = product_id and p.status = 'active'));
+-- Website sees only public settings and published content.
+drop policy if exists "app website: rows" on public.settings;
+create policy "app website: rows" on public.settings for select to kitsyuu_website using (is_public);
+drop policy if exists "app website: rows" on public.site_content;
+create policy "app website: rows" on public.site_content for select to kitsyuu_website using (status = 'published');
+
+
 -- ===== seed/catalogue.sql =====
 -- GENERATED by scripts/generate-seed.mjs from data/products.json on 2026-09-25. Do not edit by hand.
 -- 22 products, 110 variants (10 prototype units each), 10 categories.
