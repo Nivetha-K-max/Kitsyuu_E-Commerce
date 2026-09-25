@@ -45,7 +45,7 @@ export default function Header() {
 
   useEffect(() => { setOpen(false); }, [path]);
   useEffect(() => {
-    const behind = [document.querySelector('main'), document.querySelector('.st-footer'), document.querySelector('.st-notice')].filter(Boolean) as HTMLElement[];
+    const behind = [document.querySelector('main'), document.querySelector('.st-footer')].filter(Boolean) as HTMLElement[];
     behind.forEach(el => { el.inert = open; });
     document.documentElement.classList.toggle('st-menu-open', open);
     if (open) {

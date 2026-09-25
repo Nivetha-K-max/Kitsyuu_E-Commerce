@@ -31,7 +31,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AuthProvider>
         <StoreProvider catalogue={catalogue}>
           <a className="skip" href="#main">Skip to content</a>
-          <p className="st-notice"><b>Prototype store.</b> Products, sizes and prices are estimates. Nothing can be purchased yet.</p>
           <Suspense fallback={<header className="st-header" />}><Header /></Suspense>
           <main id="main" tabIndex={-1}>{children}</main>
           <Footer catalogue={catalogue} />

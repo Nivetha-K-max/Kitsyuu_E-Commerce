@@ -12,6 +12,7 @@ const allErrors = []; const go = async u => { allErrors.push(...b.errors); await
 const counts = `({cart:document.querySelector('[data-badge=cart]').textContent,wish:document.querySelector('[data-badge=wish]').textContent})`;
 const store = `({cart:JSON.parse(localStorage.getItem('kitsyuu-cart-v1')||'[]'),wish:JSON.parse(localStorage.getItem('kitsyuu-wishlist-v1')||'[]')})`;
 const ov = 'document.documentElement.scrollWidth-innerWidth';
+const settle = async (cond, ms = 5000) => { for (let t = 0; t < ms; t += 100) { if (await ev(cond).catch(() => false)) return; await w(100); } };
 const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('missing '+${JSON.stringify(sel)});e.click();return true})()`);
 const status = () => ev(`document.querySelector('#st-buy-status').textContent`);
 
@@ -85,7 +86,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   await click(`[data-wish="${P['KTS-OUT-002'].id}"]`); await w(50);
   c = await ev(counts);
   ok(`[${tag}] card heart toggles on + count`, c.wish === '2' && (await ev(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]').getAttribute('aria-pressed')`)) === 'true', c.wish);
-  await ev('location.reload()'); await w(900);
+  await ev('location.reload()'); await w(300); await settle(`document.readyState==='complete' && document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]')?.getAttribute('aria-pressed')==='true'`);
   ok(`[${tag}] wishlist persists after refresh (heart still pressed)`, (await ev(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]').getAttribute('aria-pressed')`)) === 'true' && (await ev(counts)).wish === '2');
   await go('wishlist');
   let wl = await ev(`[...document.querySelectorAll('.st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`);
@@ -151,7 +152,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
 
   // Header + mobile nav
   await go('');
-  ok(`[${tag}] header links: search/wishlist/cart`, (await ev(`[...document.querySelectorAll('.st-tools a')].map(a=>a.getAttribute('href')).join()`)) === '/search,/wishlist,/cart');
+  ok(`[${tag}] header links: search/wishlist/cart + account (guest → /login)`, (await ev(`[...document.querySelectorAll('.st-tools a')].map(a=>a.getAttribute('href')).join()`)) === '/search,/wishlist,/cart,/login');
   if (mob) {
     await click('.st-menu-toggle'); await w(100);
     const m = await ev(`({open:getComputedStyle(document.querySelector('#st-nav')).display,wish:document.querySelector('.st-nav-extra a').textContent})`);

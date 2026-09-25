@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth/dal';
-import { SignupForm, safeNext } from '@/components/AuthForms';
+import { SignupForm } from '@/components/AuthForms';
+import { safeNext } from '@/lib/auth/next';
 import { Crumbs } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Create account', robots: { index: false } };

@@ -6,8 +6,7 @@ import { browserSupabase } from '@/lib/supabase/browser';
 import { authMessage } from '@/lib/auth/messages';
 import { useAuth } from './AuthProvider';
 
-/* Only same-site paths are allowed as a post-login destination (no open redirects). */
-export const safeNext = (n?: string | null) => (n && n.startsWith('/') && !n.startsWith('//') ? n : '/account');
+import { safeNext } from '@/lib/auth/next';
 
 function Field({ id, label, type = 'text', auto, error, min }: { id: string; label: string; type?: string; auto: string; error?: string; min?: number }) {
   return (

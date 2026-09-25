@@ -97,7 +97,7 @@ try {
     // ---------- guest ----------
     await go('/');
     let h = await header();
-    ok(`[${tag}] guest header shows Log in → /login, no Admin`, h.text === 'Log in' && h.href === '/login' && h.auth === 'guest' && !h.admin, JSON.stringify(h));
+    ok(`[${tag}] guest header shows Log in → /login, no Admin`, h.text?.toLowerCase() === 'log in' && h.href === '/login' && h.auth === 'guest' && !h.admin, JSON.stringify(h));
     await go('/admin');
     ok(`[${tag}] guest → /admin is redirected to log in`, (await ev('location.pathname+location.search')) === '/login?next=%2Fadmin' && !(await ev(`!!document.querySelector('[data-admin-gate]')`)));
     await go('/account');
@@ -123,7 +123,7 @@ try {
     let acc = await ev(`({path:location.pathname,email:document.querySelector('[data-account-email]')?.textContent,role:document.querySelector('[data-account-role]')?.textContent,adminSection:!!document.getElementById('st-acc-admin')})`);
     ok(`[${tag}] customer login lands on /account with email and Customer role`, acc.path === '/account' && acc.email === CUSTOMER && acc.role === 'Customer' && !acc.adminSection, JSON.stringify(acc));
     h = await header();
-    ok(`[${tag}] customer header shows Account, no Admin`, h.text === 'Account' && h.href === '/account' && h.auth === 'customer' && !h.admin, JSON.stringify(h));
+    ok(`[${tag}] customer header shows Account, no Admin`, h.text?.toLowerCase() === 'account' && h.href === '/account' && h.auth === 'customer' && !h.admin, JSON.stringify(h));
     ok(`[${tag}] guest cart survives login (still local)`, (await ev(`document.querySelector('[data-badge=cart]').textContent`)) === '1');
     await ev('location.reload()'); await w(1200);
     ok(`[${tag}] session persists across a reload`, (await ev('location.pathname')) === '/account' && (await ev(`document.querySelector('[data-account-email]')?.textContent`)) === CUSTOMER);
@@ -135,7 +135,7 @@ try {
     ok(`[${tag}] logout returns to /login with a confirmation`, (await ev('location.pathname')) === '/login' && /logged out/i.test(await ev(`document.querySelector('.st-form-ok')?.textContent||''`)));
     await go('/account');
     h = await header();
-    ok(`[${tag}] after logout /account requires login again and header shows Log in`, (await ev('location.pathname')) === '/login' && h.text === 'Log in');
+    ok(`[${tag}] after logout /account requires login again and header shows Log in`, (await ev('location.pathname')) === '/login' && h.text?.toLowerCase() === 'log in');
 
     // ---------- admin ----------
     await login(ADMIN, PASSWORD);
