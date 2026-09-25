@@ -26,7 +26,7 @@ export function publicSupabase(): SupabaseClient {
   /* SUPABASE_URL / SUPABASE_ANON_KEY (server-only, read at runtime) override the NEXT_PUBLIC_ values baked in at build. */
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Catalogue unavailable: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set (web/.env.local).');
+  if (!url || !key) throw new Error('Catalogue unavailable: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set (apps/website/.env.local).');
   /* db.retry=false: postgrest-js would otherwise add its own 1 s/2 s/4 s back-off on top of fetchWithRetry (≈7 s per query in an outage). */
   client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, db: { retry: false }, global: { fetch: fetchWithRetry } });
   return client;

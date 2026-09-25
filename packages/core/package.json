@@ -1,0 +1,6 @@
+{
+  "name": "@kitsyuu/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Server-only business logic shared by the website and admin apps: catalogue, inventory, orders, customers, billing, reports, settings, audit."
+}

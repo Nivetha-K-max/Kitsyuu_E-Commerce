@@ -1,0 +1,6 @@
+{
+  "name": "@kitsyuu/auth",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Server-only authentication and authorization: password hashing, customer and staff sessions, permission checks (can), login throttling, email tokens, pluggable mailer."
+}

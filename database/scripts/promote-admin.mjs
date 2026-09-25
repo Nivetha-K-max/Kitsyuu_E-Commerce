@@ -1,8 +1,9 @@
-/* Promotes the account whose email is ADMIN_EMAIL (from .env.local) to the admin role. Server-side only: this is the
+/* Promotes the account whose email is ADMIN_EMAIL (from apps/website/.env.local) to the admin role. Server-side only: this is the
    ONLY way an account becomes admin. The browser can never set profiles.role (column grants + RLS).
    Safety: the account must already exist AND its email must be confirmed, so nobody can pre-register the admin address
    without owning the inbox. Uses SUPABASE_SERVICE_ROLE_KEY (never sent to the browser). The email is never hard-coded.
-   Usage: npm run db:promote-admin */
+   Usage (repo root): npm run db:promote-admin
+   Belongs to the current Supabase Auth setup; it is retired when staff auth replaces it (M6). */
 import {createClient} from '@supabase/supabase-js';
 
 const {NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, ADMIN_EMAIL: raw} = process.env;

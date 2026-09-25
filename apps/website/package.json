@@ -1,19 +1,14 @@
 {
-  "name": "kitsyuu-web",
+  "name": "@kitsyuu/website",
   "version": "0.4.1",
   "private": true,
-  "description": "KITSYUU store on Next.js (Phase 4). The original static site in ../dist stays untouched.",
+  "description": "KITSYUU customer website on Next.js (Phase 4). Database tooling lives in ../../database; the original static site in ../../dist stays untouched.",
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-all.mjs",
-    "db:seed-gen": "node scripts/generate-seed.mjs",
-    "db:apply": "node --env-file=.env.local scripts/db-apply.mjs",
-    "db:upload-images": "node --env-file=.env.local scripts/upload-images.mjs",
-    "db:verify": "node --env-file=.env.local scripts/verify-supabase.mjs",
-    "db:promote-admin": "node --env-file=.env.local scripts/promote-admin.mjs",
     "test:auth": "node --env-file=.env.local tests/auth.mjs"
   },
   "engines": {
@@ -31,7 +26,6 @@
     "@types/node": "24.13.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "pg": "^8.23.0",
     "typescript": "5.9.3"
   }
 }

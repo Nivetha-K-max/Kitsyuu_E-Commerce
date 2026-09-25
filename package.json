@@ -1,0 +1,30 @@
+{
+  "name": "kitsyuu-platform",
+  "version": "0.5.0",
+  "private": true,
+  "description": "KITSYUU platform workspace: customer website and Admin/ERP apps with shared server packages. The original static site in dist/ stays untouched.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:website": "npm run dev -w @kitsyuu/website",
+    "build:website": "npm run build -w @kitsyuu/website",
+    "start:website": "npm run start -w @kitsyuu/website",
+    "typecheck:website": "npm run typecheck -w @kitsyuu/website",
+    "test:website": "npm run test -w @kitsyuu/website",
+    "test:auth": "npm run test:auth -w @kitsyuu/website",
+    "db:seed-gen": "node database/scripts/generate-seed.mjs",
+    "db:apply": "node --env-file=apps/website/.env.local database/scripts/db-apply.mjs",
+    "db:upload-images": "node --env-file=apps/website/.env.local database/scripts/upload-images.mjs",
+    "db:verify": "node --env-file=apps/website/.env.local database/scripts/verify-supabase.mjs",
+    "db:promote-admin": "node --env-file=apps/website/.env.local database/scripts/promote-admin.mjs"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.117.1",
+    "pg": "^8.23.0"
+  }
+}

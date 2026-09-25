@@ -1,19 +1,19 @@
 /* Uploads the 22 catalogue images to the product-images bucket as products/<id>.webp.
-   Source files are READ ONLY: ../dist/store/images/products/<id>.webp (the originals are never modified).
-   Server-side script: uses SUPABASE_SERVICE_ROLE_KEY from .env.local, which never goes to the browser.
-   Usage: npm run db:upload-images */
+   Source files are READ ONLY: dist/store/images/products/<id>.webp (the originals are never modified).
+   Server-side script: uses SUPABASE_SERVICE_ROLE_KEY from apps/website/.env.local, which never goes to the browser.
+   Usage (repo root): npm run db:upload-images */
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {createClient} from '@supabase/supabase-js';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const {NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key} = process.env;
 if (!url || !key || /REPLACE_WITH/.test(key)) { console.error('Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local'); process.exit(1); }
 
-const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/products.json'), 'utf8'));
-const SRC = path.join(ROOT, '..', 'dist/store/images/products');
+const data = JSON.parse(fs.readFileSync(path.join(REPO, 'apps/website/data/products.json'), 'utf8'));
+const SRC = path.join(REPO, 'dist/store/images/products');
 const supabase = createClient(url, key, {auth: {persistSession: false, autoRefreshToken: false}});
 const md5 = b => crypto.createHash('md5').update(b).digest('hex');
 

@@ -1,0 +1,6 @@
+{
+  "name": "@kitsyuu/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Server-only database access: Postgres client through the Supabase pooler, generated table types, transaction helper."
+}

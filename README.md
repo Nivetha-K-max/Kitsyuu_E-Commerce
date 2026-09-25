@@ -149,6 +149,12 @@ KITSYUU-Website2/
 │       ├── store.js · store.css
 │       ├── products.json
 │       └── images/  (products/*.webp, placeholder.svg)
+├── apps/                       # platform workspace (npm workspaces, see package.json)
+│   ├── website/                # customer website: Next.js + Supabase (npm run build:website)
+│   └── admin/                  # Admin/ERP app (placeholder until M3)
+├── packages/                   # shared server packages: db, core, auth, contracts (placeholders until M2/M3)
+├── database/                   # migrations/, seed/, scripts/ and setup-all.sql (npm run db:*)
+├── package.json · tsconfig.base.json
 ├── docs/screenshots/           # README images
 ├── source-assets/              # original logo, stills, videos, prompts
 ├── PRODUCT-DATA.md             # catalogue data guide

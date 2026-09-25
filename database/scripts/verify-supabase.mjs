@@ -1,13 +1,13 @@
 /* Verifies the migrated catalogue in Supabase against data/products.json, using ONLY the publishable (anon) key,
    i.e. exactly what a browser can see through Row Level Security. Also checks that anonymous users cannot write
    or read private tables, and that every product image resolves from Storage.
-   Usage: npm run db:verify */
+   Usage (repo root): npm run db:verify */
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createClient} from '@supabase/supabase-js';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../apps/website'); // data/products.json lives with the website
 const {NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: anon} = process.env;
 if (!url || !anon) { console.error('Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local'); process.exit(1); }
 const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/products.json'), 'utf8'));

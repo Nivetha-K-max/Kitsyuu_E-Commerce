@@ -1,5 +1,5 @@
 /* Phase 4.4 checks: signup/login/logout, account, admin protection, role safety, secret exposure.
-   Run with: npm run test:auth   (needs `npm start` on :3001 and web/.env.local)
+   Run with: npm run test:auth   (needs `npm start` on :3001 and apps/website/.env.local)
    Setup uses the service-role key IN THIS TEST PROCESS ONLY to create pre-confirmed throwaway users (no emails are sent)
    and deletes them afterwards. The browser only ever talks to the app, which uses the public key.
    Signup-form checks answer the browser's /auth/v1/signup call with a stand-in response, so no confirmation email goes to a
@@ -27,7 +27,7 @@ async function makeUser(email, confirmed = true) {
   if (error) throw new Error(`createUser ${email}: ${error.message}`);
   created.push(data.user.id); return data.user;
 }
-const promote = email => spawnSync(process.execPath, ['--env-file=.env.local', 'scripts/promote-admin.mjs'], {cwd: WEB, encoding: 'utf8', env: {...process.env, ADMIN_EMAIL: email}});
+const promote = email => spawnSync(process.execPath, ['--env-file=.env.local', '../../database/scripts/promote-admin.mjs'], {cwd: WEB, encoding: 'utf8', env: {...process.env, ADMIN_EMAIL: email}});
 
 const b = await launch(9360);
 // Stand-in for the browser's signup call, installed before any page script so supabase-js picks it up.
