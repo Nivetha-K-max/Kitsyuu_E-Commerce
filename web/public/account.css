@@ -1,0 +1,23 @@
+/* KITSYUU account pages (Phase 4.4): log in, sign up, account, admin gate.
+   Loaded after store.css and built only from its existing tokens and patterns (st-field, st-form-alert, st-form-group). */
+.st-auth-form{max-width:480px;padding-bottom:40px}
+.st-auth-form .st-field{margin-bottom:18px}
+.st-auth-form .st-place{margin-top:6px}
+.st-auth-form[aria-busy=true] .st-place,.store button:disabled.button{opacity:.6;cursor:default}
+.st-auth-alt{margin:22px 0 0;color:var(--muted);font-size:14px;line-height:1.7}
+.st-auth-alt a{color:var(--paper);text-decoration:underline;text-underline-offset:3px}
+.st-auth-alt a:hover{color:var(--red)}
+.st-form-ok{margin-bottom:18px;padding:14px 16px;border-left:3px solid #8fbf98;background:#152019;font-size:14px;line-height:1.6}
+.st-account .st-form-group{max-width:760px}
+.st-account .st-form-group p{clear:both;margin:0 0 12px;color:#c9c7c1;line-height:1.8}
+.st-account-dl{clear:both;display:grid;grid-template-columns:170px 1fr;gap:12px 20px;margin:0;font-size:15px}
+.st-account-dl dt{color:var(--muted);font:10px/2.2 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-account-dl dd{margin:0;overflow-wrap:anywhere}
+.st-account-actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px 30px;max-width:760px;padding:28px 0 110px;border-top:1px solid var(--line)}
+.st-tool-label-admin{font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;border:1px solid var(--red);padding:4px 7px}
+@media(max-width:900px){.st-tool-admin{display:none}}
+@media(max-width:700px){
+ .st-account-dl{grid-template-columns:1fr;gap:2px}
+ .st-account-dl dd{margin-bottom:12px}
+ .st-account-actions{padding-bottom:80px}
+}

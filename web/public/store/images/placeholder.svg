@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800" role="img" aria-label="Product image unavailable">
+  <rect width="600" height="800" fill="#171719"/>
+  <rect x="24.5" y="24.5" width="551" height="751" fill="none" stroke="#ffffff26"/>
+  <path d="M276 380h48M300 356v48" stroke="#aaa6a2" stroke-width="2" opacity=".5"/>
+  <text x="300" y="450" fill="#aaa6a2" font-family="'Courier New',monospace" font-size="16" letter-spacing="2" text-anchor="middle">IMAGE UNAVAILABLE</text>
+</svg>
