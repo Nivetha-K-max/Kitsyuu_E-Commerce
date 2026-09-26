@@ -34,7 +34,34 @@ function fullPageExit(e: MouseEvent) {
   e.stopPropagation();
 }
 
+/* Scrolling on the homepage: page navigation is instant (store.css: `html:has(.kitsyuu-landing) { scroll-behavior: auto }`),
+   so the Store link (#store), Back/Forward and opening /#store are handled natively by the browser. Only the landing's
+   own in-page links keep their smooth story scroll, animated here explicitly. Like a native anchor they add a history
+   entry and move the focus starting point to the section; with reduced motion they are instant (as in styles.css). */
+function smoothLandingLink(e: MouseEvent) {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const link = (e.target as Element | null)?.closest?.('a[href^="#"]');
+  const hash = link?.getAttribute('href') ?? '';
+  if (hash.length < 2 || hash === '#store') return;           // the Store link stays a plain (instant) anchor
+  const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+  if (!target) return;
+  e.preventDefault();
+  if (location.hash !== hash) history.pushState(history.state, '', hash);
+  target.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  // Focus starting point, as a native anchor sets it (no visible ring: see store.css [data-anchor-focus]).
+  const addedTabindex = !target.hasAttribute('tabindex');
+  if (addedTabindex) target.setAttribute('tabindex', '-1');
+  target.setAttribute('data-anchor-focus', '');
+  target.addEventListener('blur', () => { if (addedTabindex) target.removeAttribute('tabindex'); target.removeAttribute('data-anchor-focus'); }, { once: true });
+  target.focus({ preventScroll: true });
+}
+
 export default function LandingScript() {
+  useEffect(() => {
+    const root = document.querySelector('[data-landing]');
+    root?.addEventListener('click', smoothLandingLink as EventListener);
+    return () => root?.removeEventListener('click', smoothLandingLink as EventListener);
+  }, []);
   useEffect(() => {
     const root = document.querySelector('[data-landing]');
     if (!root) return;

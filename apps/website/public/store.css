@@ -445,3 +445,8 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .kitsyuu-landing :is(#top,#story,#edit,#about){scroll-margin-top:calc(28px - var(--st-head) - 16px)}
 @media(max-width:700px){.kitsyuu-landing :is(#top,#story,#edit,#about){scroll-margin-top:calc(20px - var(--st-head) - 16px)}}
 #store{scroll-margin-top:calc(-1 * (var(--st-head) + 16px))}
+/* Page navigation on the homepage is instant (the Store link #store, Back/Forward, opening /#store); styles.css makes all
+   scrolling smooth, which would animate those jumps through the whole landing story. The landing's own in-page links keep
+   their smooth scroll explicitly (components/LandingScript.tsx), and mark the section they focus to avoid a focus ring. */
+html:has(.kitsyuu-landing){scroll-behavior:auto}
+.kitsyuu-landing [data-anchor-focus]:focus{outline:none}

@@ -29,6 +29,14 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
       mains:document.querySelectorAll('main').length}})()`);
   ok(`[${tag}] / = landing first (unchanged + Store link to #store), then the store homepage with its header`, home0.word === land.word && home0.poster > 0 && JSON.stringify(home0.nav) === JSON.stringify([...land.nav, 'Store'])
     && home0.store === 1 && home0.order && home0.storeHero && home0.storeHeader && home0.landingHeaderFirst && home0.mains === 1 && b.errors.length === 0, JSON.stringify(home0) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
+  // The landing's Store link jumps straight to #store (no animated scroll through the story): the homepage's page navigation is instant.
+  const jump = await b.eval(`(async()=>{scrollTo({top:0,behavior:'instant'});await new Promise(r=>setTimeout(r,300));const ys=[];
+    document.querySelector('.kitsyuu-landing .nav a[href="#store"]').click();
+    for(let i=0;i<20;i++){await new Promise(r=>requestAnimationFrame(r));ys.push(Math.round(scrollY));}
+    return {positions:[...new Set(ys)].length,top:Math.round(document.querySelector('#store').getBoundingClientRect().top),hash:location.hash,path:location.pathname,
+      header:Math.round(document.querySelector('#store .st-header').getBoundingClientRect().top),behavior:getComputedStyle(document.documentElement).scrollBehavior}})()`);
+  ok(`[${tag}] landing Store link jumps straight to #store (one position from the first frame, store header at the top)`, jump.positions === 1 && Math.abs(jump.top) <= 1 && Math.abs(jump.header) <= 1
+    && jump.hash === '#store' && jump.path === '/' && jump.behavior === 'auto' && b.errors.length === 0, JSON.stringify(jump));
 
   // Store home
   await b.goto(B + '/', READY);
