@@ -1,6 +1,16 @@
 {
   "name": "@kitsyuu/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Server-only business logic shared by the website and admin apps: catalogue, inventory, orders, customers, billing, reports, settings, audit."
+  "type": "module",
+  "description": "Server-only business logic shared by the website and admin apps: staff, roles, audit, dashboard (later catalogue, inventory, orders, customers, billing, reports).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@kitsyuu/auth": "0.1.0",
+    "@kitsyuu/contracts": "0.1.0",
+    "@kitsyuu/db": "0.1.0",
+    "sharp": "^0.35.4"
+  }
 }

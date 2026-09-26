@@ -1,6 +1,17 @@
 {
   "name": "@kitsyuu/db",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Server-only database access: Postgres client through the Supabase pooler, generated table types, transaction helper."
+  "type": "module",
+  "description": "Server-only database access: Postgres client through the Supabase pooler, typed tables, transaction helper, audit writer.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "kysely": "^0.29.6",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
 }

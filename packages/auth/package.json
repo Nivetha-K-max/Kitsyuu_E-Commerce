@@ -1,6 +1,15 @@
 {
   "name": "@kitsyuu/auth",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Server-only authentication and authorization: password hashing, customer and staff sessions, permission checks (can), login throttling, email tokens, pluggable mailer."
+  "type": "module",
+  "description": "Server-only authentication and authorization: argon2id password hashing, hashed one-time tokens, staff sessions, permission checks (can), login throttling, pluggable mailer.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@kitsyuu/contracts": "0.1.0",
+    "@kitsyuu/db": "0.1.0",
+    "@node-rs/argon2": "^2.2.1"
+  }
 }

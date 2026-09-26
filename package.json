@@ -14,13 +14,21 @@
     "typecheck:website": "npm run typecheck -w @kitsyuu/website",
     "test:website": "npm run test -w @kitsyuu/website",
     "test:auth": "npm run test:auth -w @kitsyuu/website",
+    "dev:admin": "npm run dev -w @kitsyuu/admin",
+    "build:admin": "npm run build -w @kitsyuu/admin",
+    "start:admin": "npm run start -w @kitsyuu/admin",
+    "typecheck:admin": "npm run typecheck -w @kitsyuu/admin",
+    "typecheck:packages": "tsc -p packages/tsconfig.json",
+    "test:admin": "npm run test -w @kitsyuu/admin",
     "db:seed-gen": "node database/scripts/generate-seed.mjs",
     "db:apply": "node --env-file=apps/website/.env.local database/scripts/db-apply.mjs",
     "db:upload-images": "node --env-file=apps/website/.env.local database/scripts/upload-images.mjs",
     "db:verify": "node --env-file=apps/website/.env.local database/scripts/verify-supabase.mjs",
     "db:promote-admin": "node --env-file=apps/website/.env.local database/scripts/promote-admin.mjs",
     "db:snapshot": "node --env-file=apps/website/.env.local database/scripts/db-snapshot.mjs",
-    "db:verify-platform": "node --env-file=apps/website/.env.local database/scripts/verify-platform.mjs"
+    "db:verify-platform": "node --env-file=apps/website/.env.local database/scripts/verify-platform.mjs",
+    "db:app-role": "node --env-file=apps/website/.env.local database/scripts/app-role.mjs",
+    "db:create-staff": "node --env-file=apps/website/.env.local database/scripts/create-staff.mjs"
   },
   "engines": {
     "node": ">=20.9"

@@ -8,3 +8,6 @@ Thumbs.db
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Local-only files written by database scripts (one-time invitation links)
+database/.local/

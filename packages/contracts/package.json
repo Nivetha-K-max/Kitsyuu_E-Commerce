@@ -1,6 +1,13 @@
 {
   "name": "@kitsyuu/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Validation schemas and shared types for inputs and API contracts. The only shared package that browser code may import."
+  "type": "module",
+  "description": "Validation schemas, shared types and error classes for inputs and API contracts. The only shared package that browser code may import.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
 }

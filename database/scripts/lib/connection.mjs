@@ -2,10 +2,17 @@
    Reads SUPABASE_DB_URL (direct connection string). The direct host is IPv6-only, so on IPv4 networks set
    SUPABASE_DB_POOLER_HOST (e.g. aws-0-<region>.pooler.supabase.com, shown under Supabase → Connect → Session pooler):
    the same credentials are then sent to the session pooler (port 5432, user postgres.<project-ref>).
+   KITSYUU_DB_URL, when set, is used as-is instead (local test databases only: it must point at localhost).
    No host, user or password is hard-coded here. */
 import pg from 'pg';
 
 export function connectionConfig() {
+  if (process.env.KITSYUU_DB_URL) {
+    const u = new URL(process.env.KITSYUU_DB_URL);
+    if (!['localhost', '127.0.0.1'].includes(u.hostname)) throw new Error('KITSYUU_DB_URL may only point at a local test database');
+    return {host: u.hostname, port: Number(u.port) || 5432, user: decodeURIComponent(u.username), password: decodeURIComponent(u.password),
+      database: decodeURIComponent(u.pathname.slice(1)), connectionTimeoutMillis: 15000, via: 'local test database'};
+  }
   const raw = process.env.SUPABASE_DB_URL;
   if (!raw || /REPLACE_WITH|\[YOUR-PASSWORD\]/.test(raw)) throw new Error('SUPABASE_DB_URL is not set in apps/website/.env.local');
   const url = new URL(raw);
