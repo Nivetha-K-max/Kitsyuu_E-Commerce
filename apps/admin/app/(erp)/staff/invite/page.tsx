@@ -17,7 +17,7 @@ export default async function InviteStaffPage() {
   return (
     <>
       <PageHead section="System" title="Invite staff" crumbs={crumbs} />
-      <p className="note" style={{ maxWidth: 560 }}>The person receives a one-time link to set their own password. No password is ever chosen or seen by the inviter.</p>
+      <p className="note lead-note">The person receives a one-time link to set their own password. No password is ever chosen or seen by the inviter.</p>
       {roles.length === 0 ? <p className="msg error">Assigning roles needs the roles.read permission.</p> : (
         <ActionForm action={inviteStaffAction} submitLabel="Send invitation" pendingLabel="Inviting…">
           <Field name="email" label="Email" type="email" autoComplete="off" required />

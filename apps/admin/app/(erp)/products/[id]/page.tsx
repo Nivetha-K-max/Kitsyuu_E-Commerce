@@ -6,7 +6,7 @@ import { NotFoundError, paiseToRupees, productId as productIdSchema } from '@kit
 import { getProduct, listAdjustmentReasons, listCategories } from '@kitsyuu/core';
 import { ActionForm, Checkbox, DropzoneField, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { PriceForm, StockAdjustForm } from '@/components/CatalogueForms';
-import { Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
+import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 import { adjustStockAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
@@ -44,13 +44,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   const sellable = variants?.filter(v => v.is_active) ?? [];
   const units = sellable.reduce((n, v) => n + v.stock_qty, 0);
   const attention = sellable.filter(v => v.stock_status !== 'in_stock').length;
-  // Section numbers follow the order the sections appear in the main column (only rendered sections are counted).
-  let n = 0;
-  const idx = () => String(++n).padStart(2, '0');
 
   return (
     <>
-      <PageHead title={p.name} section="Catalogue" crumbs={crumbs} eyebrow={`${p.sku} · ${p.id}`}><StatusBadge status={p.status} /></PageHead>
+      <PageHead title={p.name} section="Catalogue" crumbs={crumbs} eyebrow={`SKU ${p.sku} · ID ${p.id}`}><StatusBadge status={p.status} /></PageHead>
       {created && <p className="msg ok" role="status" data-notice="created">Draft product created. Add sizes, stock and an image, then activate it.</p>}
 
       <section className="spec-strip" aria-label="Product record" data-section="overview">
@@ -70,15 +67,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
       <div className="product-layout">
         <aside className="product-aside" aria-label="Price, status and merchandising">
           <section className="card" aria-labelledby="price-h" data-section="price">
-            <p className="panel-kicker">Commerce</p>
-            <SectionTitle id="price-h">Price</SectionTitle>
+            <SectionTitle id="price-h">Pricing</SectionTitle>
             <p className="price-now" data-current-price>₹{paiseToRupees(p.price_paise)}</p>
             {write ? <PriceForm action={updatePriceAction} productId={p.id} currentPaise={p.price_paise} />
               : <p className="note" data-readonly="price">Changing the price needs the products.write permission.</p>}
           </section>
 
           <section className="card" aria-labelledby="status-h" data-section="status">
-            <p className="panel-kicker">Classification</p>
             <SectionTitle id="status-h">Status</SectionTitle>
             <p className="note">{STATUS_HELP[p.status]}</p>
             {write ? (
@@ -93,7 +88,6 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
 
           {newArrival && (
             <section className="card" aria-labelledby="na-h" data-section="new-arrivals">
-              <p className="panel-kicker">Merchandising</p>
               <SectionTitle id="na-h">New Arrivals</SectionTitle>
               <p data-new-arrival={newArrival.member ? 'yes' : 'no'}>{newArrival.member ? <>In New Arrivals, position {newArrival.rank} of {newArrival.count}.</> : 'Not in New Arrivals.'}</p>
               {catWrite ? (
@@ -114,22 +108,22 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
         <div className="product-main">
           {write && (
             <section className="card" aria-labelledby="det-h" data-section="details">
-              <h2 id="det-h" className="sr-only">Details</h2>
+              <h2 id="det-h" className="sr-only">Product information</h2>
               <ActionForm action={updateProductAction} submitLabel="Save details" id="details-form" label="Product details" className="form record-form">
                 <Hidden name="productId" value={p.id} />
                 <fieldset className="block">
-                  <legend><span className="idx" aria-hidden="true">{idx()}</span>Identity</legend>
+                  <legend>Basic information</legend>
                   <div className="cols">
-                    <div className="span-2"><Field name="name" label="Name" defaultValue={p.name} /></div>
+                    <div className="span-2"><Field name="name" label="Name" defaultValue={p.name} required /></div>
                     <Fixed label="SKU" value={p.sku} />
                     <Fixed label="Slug" value={`/product/${p.slug}`} />
                   </div>
                   <TextArea name="description" label="Description" defaultValue={p.description} rows={5} />
                 </fieldset>
                 <fieldset className="block">
-                  <legend><span className="idx" aria-hidden="true">{idx()}</span>Classification</legend>
+                  <legend>Classification</legend>
                   <div className="cols">
-                    <Select name="categoryId" label="Category" defaultValue={p.category_id}
+                    <Select name="categoryId" label="Category" defaultValue={p.category_id} required
                       options={categories.filter(c => !c.parent_id).map(c => ({ value: c.id, label: c.label }))} />
                     <Select name="subcategoryId" label="Subcategory" defaultValue={p.subcategory_id ?? ''} hint="Must belong to the chosen category."
                       options={[{ value: '', label: 'None' }, ...categories.filter(c => c.parent_id).map(c => ({ value: c.id, label: `${categories.find(x => x.id === c.parent_id)?.label} / ${c.label}` }))]} />
@@ -137,7 +131,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   <Checkbox name="isFeatured" label="Featured in the store" defaultChecked={p.is_featured} />
                 </fieldset>
                 <fieldset className="block">
-                  <legend><span className="idx" aria-hidden="true">{idx()}</span>Material / Details</legend>
+                  <legend>Product details</legend>
                   <div className="cols">
                     <Field name="colourLabel" label="Colour" defaultValue={p.colour_label ?? ''} />
                     <Field name="material" label="Material" defaultValue={p.material ?? ''} />
@@ -147,16 +141,16 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   <TextArea name="features" label="Features (one per line)" defaultValue={p.features.join('\n')} rows={4} />
                 </fieldset>
               </ActionForm>
-              <p className="note">Product ID, SKU and store URL are fixed identifiers and cannot be edited.</p>
+              <p className="note form-foot">Fields marked * are required. Product ID, SKU and store URL are fixed identifiers and cannot be edited. Status and price are saved separately in the side panel.</p>
             </section>
           )}
 
           <section className="card" aria-labelledby="img-h" data-section="images">
             <div className="section-head">
-              <SectionTitle id="img-h" index={idx()}>Media</SectionTitle>
+              <SectionTitle id="img-h">Media</SectionTitle>
               <span className="section-meta">{images.length} image{images.length === 1 ? '' : 's'}</span>
             </div>
-            {images.length === 0 ? <p className="empty" data-empty="images">No images for this product.</p> : (
+            {images.length === 0 ? <Empty title="No images yet" kind="images" compact>Upload at least one image before activating the product.</Empty> : (
               <div className="media-grid">
                 {images.map((i, n) => {
                   const src = productImageUrl(i.storage_path);
@@ -207,7 +201,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
           </section>
 
           <section className="card" aria-labelledby="stock-h" data-section="stock">
-            <SectionTitle id="stock-h" index={idx()}>Inventory</SectionTitle>
+            <SectionTitle id="stock-h">Inventory</SectionTitle>
             {!variants ? <p className="note">Viewing stock needs the inventory.read permission.</p> : variants.length === 0 ? <p className="empty">This product has no sizes.</p> : (
               <>
                 <div className="table-wrap"><table data-variants-table>
@@ -225,6 +219,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                 {adjust ? (
                   <>
                     <h3 className="sub">Adjust stock</h3>
+                    <p className="note">Each change is recorded in the stock ledger with a reason.</p>
                     <div className="stock-forms" data-stock-forms>
                       {variants.map(v => (
                         <StockAdjustForm key={v.variant_id} action={adjustStockAction} productId={p.id} reasons={reasons}
@@ -239,7 +234,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
 
           {write && variants && (
             <section className="card" aria-labelledby="sizes-h" data-section="sizes">
-              <SectionTitle id="sizes-h" index={idx()}>Available sizes</SectionTitle>
+              <SectionTitle id="sizes-h">Sizes</SectionTitle>
               <p className="note">A size&apos;s SKU never changes (orders keep it) and sizes are not deleted: turn &quot;Offered&quot; off instead. New sizes start at 0 units; add stock with a restock adjustment above.</p>
               <div className="stock-forms" data-size-forms>
                 {variants.map((v, n) => (
@@ -269,7 +264,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
 
           {movements && (
             <section className="card" aria-labelledby="mv-h" data-section="movements">
-              <SectionTitle id="mv-h" index={idx()}>Recent stock movements</SectionTitle>
+              <SectionTitle id="mv-h">Stock movements</SectionTitle>
               {movements.length === 0 ? <p className="empty">No stock movements yet.</p> : (
                 <div className="table-wrap"><table data-movements-table>
                   <thead><tr><th>When</th><th>SKU</th><th className="num">Change</th><th className="num">Balance after</th><th>Reason</th><th>By</th><th>Note</th></tr></thead>

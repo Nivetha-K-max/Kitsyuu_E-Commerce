@@ -5,8 +5,8 @@ export default function ErpError({ error, reset }: { error: Error & { digest?: s
     <section className="gate" role="alert" data-gate="error">
       <p className="eyebrow">Something went wrong</p>
       <h2>This page could not be loaded.</h2>
-      <p className="note">Nothing was changed. Try again; if it keeps happening, quote reference <span className="mono">{error.digest ?? 'n/a'}</span>.</p>
-      <button type="button" className="btn ghost" onClick={reset}>Try again</button>
+      <p className="note">Nothing was changed. Try again in a moment; if it keeps happening, send an administrator the reference <span className="mono">{error.digest ?? 'n/a'}</span>.</p>
+      <div className="actions"><button type="button" className="btn" onClick={reset}>Try again</button></div>
     </section>
   );
 }

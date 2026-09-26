@@ -19,7 +19,7 @@ export default async function NewRolePage() {
         <Field name="code" label="Code" hint="Permanent identifier, e.g. warehouse_lead (lower-case letters, digits, underscores)." required />
         <Field name="description" label="Description" />
       </ActionForm>
-      <p className="note" style={{ marginTop: 12 }}>Permissions are chosen on the next screen.</p>
+      <p className="note section-foot">Permissions are chosen on the next screen.</p>
     </>
   );
 }

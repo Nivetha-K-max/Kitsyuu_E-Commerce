@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { paiseToRupees, productListQuery, type ProductListQuery } from '@kitsyuu/contracts';
 import { listCategories, listProducts } from '@kitsyuu/core';
-import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { Icon } from '@/components/icons';
+import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 
@@ -20,10 +21,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
   const [products, categories] = await Promise.all([listProducts(db(), actor, query), listCategories(db(), actor)]);
   const parents = categories.filter(c => !c.parent_id);
   const filtered = !!(query.q || query.category || query.status !== 'all');
+  const write = can(actor, 'products.write');
   return (
     <>
-      <PageHead title="Products" section="Catalogue / Management" eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ''}`}>
-        {can(actor, 'products.write') && <Link className="btn" href="/products/new" data-new-product>New product</Link>}
+      <PageHead title="Products" section="Catalogue" eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ' in the catalogue'}`}>
+        {write && <Link className="btn" href="/products/new" data-new-product><Icon name="plus" size={16} />New product</Link>}
       </PageHead>
       <form className="actions filters" method="get" role="search" aria-label="Filter products" data-product-filters>
         <label className="sr-only" htmlFor="p-q">Search</label>
@@ -43,9 +45,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/products">Clear</Link>}
       </form>
-      {products.length === 0 ? <p className="empty" data-empty="products">No products match these filters.</p> : (
+      {products.length === 0 ? (
+        <Empty title={filtered ? 'No matching products' : 'No products yet'} kind="products"
+          action={filtered ? <Link className="btn ghost" href="/products">Clear filters</Link> : write ? <Link className="btn" href="/products/new">New product</Link> : undefined}>
+          {filtered ? 'No products match these filters.' : 'Products you create appear here.'}
+        </Empty>
+      ) : (
         <div className="table-wrap"><table data-products-table>
-          <thead><tr><th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th></tr></thead>
+          <thead><tr><th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th><th className="num">Actions</th></tr></thead>
           <tbody>{products.map(p => {
             const img = productImageUrl(p.primaryImage);
             return (
@@ -60,6 +67,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
                 <td className="num"><span className="qty">{formatNumber(p.stockUnits)}</span><div className="note">{p.sellableVariants}/{p.variants} sizes</div>
                   {p.attentionVariants > 0 && <span className="badge low_stock" data-attention>{p.attentionVariants} low</span>}</td>
                 <td><StatusBadge status={p.status} /></td>
+                <td className="num"><Link className="btn ghost sm" href={`/products/${p.id}`} aria-label={`${write ? 'Edit' : 'View'} ${p.name}`}>{write ? 'Edit' : 'View'}</Link></td>
               </tr>
             );
           })}</tbody>

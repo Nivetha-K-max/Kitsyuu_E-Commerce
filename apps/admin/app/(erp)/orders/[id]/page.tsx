@@ -28,14 +28,14 @@ export default async function OrderPage({ params }: { params: Params }) {
 
   return (
     <>
-      <PageHead section="Commerce" title={o.orderNumber} eyebrow={`Placed ${formatDateTime(o.createdAt)} · ${o.currency}`} crumbs={crumbs}>
-        <span data-order-status={o.status}><StatusBadge status={o.status} /></span>
-        {o.paymentStatus && <span data-payment-status={o.paymentStatus}><StatusBadge status={o.paymentStatus} /></span>}
+      <PageHead section="Commerce" title={`Order ${o.orderNumber}`} eyebrow={`Placed ${formatDateTime(o.createdAt)} · ${o.currency}`} crumbs={crumbs}>
+        <span className="head-status" data-order-status={o.status}><span className="head-status-label">Order</span><StatusBadge status={o.status} /></span>
+        {o.paymentStatus && <span className="head-status" data-payment-status={o.paymentStatus}><span className="head-status-label">Payment</span><StatusBadge status={o.paymentStatus} /></span>}
       </PageHead>
 
       <div className="grid two">
         <section className="card" aria-labelledby="items-h" data-section="items">
-          <h2 id="items-h">Items</h2>
+          <h2 id="items-h">Order items</h2>
           <div className="table-wrap"><table data-items-table>
             <thead><tr><th><span className="sr-only">Image</span></th><th>Item</th><th>Size</th><th className="num">Unit price</th><th className="num">Qty</th><th className="num">Line total</th></tr></thead>
             <tbody>{d.items.map(i => {
@@ -64,18 +64,18 @@ export default async function OrderPage({ params }: { params: Params }) {
         </section>
 
         <section className="card" aria-labelledby="st-h" data-section="status">
-          <h2 id="st-h">Status</h2>
+          <h2 id="st-h">Status &amp; actions</h2>
           <dl className="facts">
             <dt>Order</dt><dd>{label(o.status)}</dd>
             <dt>Payment</dt><dd>{label(o.paymentStatus)}</dd>
             <dt>Paid at</dt><dd>{formatDateTime(o.paidAt)}</dd>
             <dt>Last change</dt><dd>{formatDateTime(o.updatedAt)}</dd>
           </dl>
-          <div style={{ marginTop: 14 }}>
+          <div className="status-actions">
             {!can(actor, 'orders.update_status') ? <p className="note" data-readonly="status">Changing the status needs the orders.update_status permission.</p>
               : <OrderStatusForm action={updateOrderStatusAction} orderId={o.id} orderNumber={o.orderNumber} current={o.status} currentLabel={label(o.status)} allowed={d.allowedTransitions} />}
           </div>
-          <h3 className="sub">History</h3>
+          <h3 className="sub">Status history</h3>
           {d.history.length === 0 ? <p className="empty">No status changes recorded.</p> : (
             <ol className="timeline" data-history>
               {d.history.map(h => (
@@ -90,9 +90,9 @@ export default async function OrderPage({ params }: { params: Params }) {
         </section>
       </div>
 
-      <div className="grid two" style={{ marginTop: 14 }}>
+      <div className="grid two">
         <section className="card" aria-labelledby="cust-h" data-section="customer">
-          <h2 id="cust-h">Customer</h2>
+          <h2 id="cust-h">Customer &amp; shipping</h2>
           <dl className="facts">
             <dt>Name</dt><dd>{d.contact.name ?? '—'}</dd>
             <dt>Email</dt><dd>{d.contact.email ?? '—'}</dd>
@@ -103,7 +103,7 @@ export default async function OrderPage({ params }: { params: Params }) {
           </dl>
         </section>
         <section className="card" aria-labelledby="bill-h" data-section="billing">
-          <h2 id="bill-h">Billing</h2>
+          <h2 id="bill-h">Payment &amp; invoices</h2>
           {!d.billing ? <p className="note" data-readonly="billing">Payments and invoices need the billing.read permission.</p> : (
             <>
               <h3 className="sub">Payments</h3>
@@ -131,7 +131,7 @@ export default async function OrderPage({ params }: { params: Params }) {
       </div>
 
       {d.stock && (
-        <section className="card" style={{ marginTop: 14 }} aria-labelledby="stk-h" data-section="stock">
+        <section className="card" aria-labelledby="stk-h" data-section="stock">
           <h2 id="stk-h">Stock effect</h2>
           {d.stock.length === 0 ? <p className="empty">This order has not moved any stock.</p> : (
             <div className="table-wrap"><table data-order-stock>

@@ -17,18 +17,25 @@ export default async function CategoriesPage() {
   const write = can(actor, 'categories.write');
 
   const row = (c: Node | Leaf, i: number, siblings: number, child: boolean) => (
-    <tr key={c.id} className={child ? 'cat-child' : undefined} data-category-row={c.id} data-active={c.is_active ? 'yes' : 'no'}>
-      <td>{child ? '└ ' : ''}<b>{c.label}</b><div className="note mono">{c.id}</div>{c.description && <div className="note">{c.description}</div>}</td>
+    <tr key={c.id} className={child ? 'cat-child' : 'cat-parent'} data-category-row={c.id} data-active={c.is_active ? 'yes' : 'no'}>
+      <td className="cat-name">
+        <span className="cat-label">{c.label}</span>
+        {!child && 'children' in c && <span className="cat-count">{c.children.length} subcategor{c.children.length === 1 ? 'y' : 'ies'}</span>}
+        <div className="note mono">{c.id}</div>{c.description && <div className="note">{c.description}</div>}
+      </td>
       <td className="num">{c.active_products}<div className="note">{c.products} total</div></td>
       <td><span className={`badge ${c.is_active ? 'active' : 'disabled'}`}>{c.is_active ? 'Active' : 'Inactive'}</span></td>
       {write && (
         <td>
-          <ActionForm action={updateCategoryAction} submitLabel="Save" className="form compact" id={`cat-edit-${c.id}`} label={`Edit ${c.label}`}>
-            <Hidden name="categoryId" value={c.id} /><Hidden name="expectedLabel" value={c.label} />
-            <Field name="label" label="Name" defaultValue={c.label} />
-            <Field name="description" label="Description" defaultValue={c.description} />
-          </ActionForm>
-          <div className="actions" style={{ marginTop: 6 }}>
+          <div className="actions row-actions">
+            <details className="row-edit">
+              <summary className="btn ghost sm" aria-label={`Edit ${c.label}`}>Edit</summary>
+              <ActionForm action={updateCategoryAction} submitLabel="Save changes" className="form compact row-edit-form" id={`cat-edit-${c.id}`} label={`Edit ${c.label}`}>
+                <Hidden name="categoryId" value={c.id} /><Hidden name="expectedLabel" value={c.label} />
+                <Field name="label" label="Name" defaultValue={c.label} required />
+                <Field name="description" label="Description" defaultValue={c.description} />
+              </ActionForm>
+            </details>
             <ActionForm action={setCategoryActiveAction} submitLabel={c.is_active ? 'Deactivate' : 'Activate'} variant={c.is_active ? 'danger' : 'ghost'} className="inline-form"
               id={`cat-active-${c.id}`} label={`${c.is_active ? 'Deactivate' : 'Activate'} ${c.label}`}
               confirmText={c.is_active ? `Deactivate ${c.label}? It will be hidden from the store.` : undefined}>
@@ -47,23 +54,23 @@ export default async function CategoriesPage() {
   return (
     <>
       <PageHead section="Catalogue" title="Categories" eyebrow={`${tree.length} top-level · ${tree.reduce((n, p) => n + p.children.length, 0)} subcategories`} />
-      <p className="note" style={{ maxWidth: 680 }}>Category ids are fixed once created (the store uses them in links). Inactive categories are hidden from the store;
+      <p className="note lead-note">Category ids are fixed once created (the store uses them in links). Inactive categories are hidden from the store;
         a category cannot be deactivated while active products use it.</p>
       <div className="table-wrap"><table className="cat-tree" data-categories-table>
-        <thead><tr><th>Category</th><th className="num">Active products</th><th>Status</th>{write && <th>Change</th>}</tr></thead>
+        <thead><tr><th>Category</th><th className="num">Active products</th><th>Status</th>{write && <th>Actions</th>}</tr></thead>
         <tbody>{tree.flatMap((p, i) => [row(p, i, tree.length, false), ...p.children.map((c, j) => row(c, j, p.children.length, true))])}</tbody>
       </table></div>
       {write ? (
-        <section className="card" style={{ marginTop: 14, maxWidth: 620 }} data-section="new-category">
-          <h2>New category</h2>
+        <section className="card form-panel" data-section="new-category" aria-labelledby="nc-h">
+          <h2 id="nc-h">New category</h2>
           <ActionForm action={createCategoryAction} submitLabel="Create category" id="create-category-form" label="Create category" resetOnSuccess>
             <Select name="parentId" label="Parent" options={[{ value: '', label: 'None (top-level)' }, ...tree.map(p => ({ value: p.id, label: p.label }))]} />
-            <Field name="slug" label="Id part" autoComplete="off" hint="e.g. jackets → the id becomes outerwear.jackets under Outerwear. Cannot be changed later." />
-            <Field name="label" label="Name" autoComplete="off" />
+            <Field name="slug" label="Id part" autoComplete="off" required hint="e.g. jackets → the id becomes outerwear.jackets under Outerwear. Cannot be changed later." />
+            <Field name="label" label="Name" autoComplete="off" required />
             <Field name="description" label="Description (optional)" autoComplete="off" />
           </ActionForm>
         </section>
-      ) : <p className="note" data-readonly="categories" style={{ marginTop: 12 }}>Changing categories needs the categories.write permission.</p>}
+      ) : <p className="note section-foot" data-readonly="categories">Changing categories needs the categories.write permission.</p>}
     </>
   );
 }

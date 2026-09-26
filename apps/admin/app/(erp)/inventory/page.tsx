@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { stockListQuery, type StockListQuery } from '@kitsyuu/contracts';
 import { listStock } from '@kitsyuu/core';
-import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 
@@ -34,13 +34,19 @@ export default async function InventoryPage({ searchParams }: { searchParams: SP
         {filtered && <Link className="btn link" href="/inventory">Clear</Link>}
       </form>
       <p className="note lead-note">Stock is changed from each product page; every change goes through the stock ledger with a reason.</p>
-      {rows.length === 0 ? <p className="empty" data-empty="stock">{query.status === 'attention' ? 'No sellable size is low or out of stock.' : 'No sizes match these filters.'}</p> : (
+      {rows.length === 0 ? (
+        <Empty title={query.status === 'attention' ? 'Nothing needs attention' : 'No matching sizes'} kind="stock"
+          action={filtered ? <Link className="btn ghost" href="/inventory">Show all sizes</Link> : undefined}>
+          {query.status === 'attention' ? 'No sellable size is low or out of stock.' : 'No sizes match these filters.'}
+        </Empty>
+      ) : (
         <div className="table-wrap"><table data-stock-table>
-          <thead><tr><th>Product</th><th>Size</th><th className="num">Current stock</th><th>Offered</th><th className="num">Reorder at</th><th>Status</th><th>Last movement</th><th><span className="sr-only">Action</span></th></tr></thead>
+          <thead><tr><th>Product</th><th>SKU</th><th>Size</th><th className="num">Current stock</th><th>Offered</th><th className="num">Reorder level</th><th>Status</th><th>Last movement</th><th className="num">Action</th></tr></thead>
           <tbody>{rows.map(r => (
             <tr key={r.variant_id} data-stock-row={r.variant_sku} data-level={r.is_active ? r.stock_status : 'off'}>
               <td className="product-cell"><Link className="row-link" href={`/products/${r.product_id}#stock-h`}>{r.product_name}</Link>
-                <div className="meta-line"><span className="mono">{r.variant_sku}</span>{r.product_status !== 'active' && <StatusBadge status={r.product_status} />}</div></td>
+                {r.product_status !== 'active' && <div className="meta-line"><StatusBadge status={r.product_status} /></div>}</td>
+              <td className="mono">{r.variant_sku}</td>
               <td className="size-cell">{r.size}</td>
               <td className="num qty" data-qty>{r.stock_qty}</td>
               <td>{r.is_active ? 'Yes' : <span className="note">No</span>}</td>

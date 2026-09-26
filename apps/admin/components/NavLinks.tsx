@@ -1,6 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Icon } from './icons';
+
+const ICON: Record<string, string> = {
+  '/dashboard': 'dashboard', '/products': 'products', '/categories': 'categories', '/inventory': 'inventory',
+  '/orders': 'orders', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
+};
 
 /** Receives only the items the server already filtered by permission. */
 export default function NavLinks({ items }: { items: { href: string; label: string; group: string }[] }) {
@@ -14,10 +20,10 @@ export default function NavLinks({ items }: { items: { href: string; label: stri
     <nav className="nav" aria-label="Admin">
       {groups.map(g => (
         <div className="nav-section" key={g.name}>
-          <div className="nav-group" aria-hidden="true">{g.name}</div>
+          {g.name !== 'Overview' && <div className="nav-group" aria-hidden="true">{g.name}</div>}
           {g.items.map(item => {
             const current = path === item.href || path.startsWith(item.href + '/');
-            return <Link key={item.href} href={item.href} aria-current={current ? 'page' : undefined}>{item.label}</Link>;
+            return <Link key={item.href} href={item.href} aria-current={current ? 'page' : undefined}><Icon name={ICON[item.href] ?? 'dashboard'} />{item.label}</Link>;
           })}
         </div>
       ))}

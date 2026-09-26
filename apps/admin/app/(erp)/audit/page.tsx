@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { auditQuery, type AuditQuery } from '@kitsyuu/contracts';
 import { listAudit } from '@kitsyuu/core';
-import { Forbidden, PageHead } from '@/components/ui';
+import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 
@@ -22,28 +22,28 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
   const show = (v: unknown) => (v === null || v === undefined ? '' : JSON.stringify(v, null, 1));
   return (
     <>
-      <PageHead section="System" title="Audit log" eyebrow="Append-only · every important admin action" />
+      <PageHead section="System" title="Audit log" eyebrow="Every important admin action, append-only. Times are IST." />
       <form className="actions filters" method="get" data-audit-filters>
         <label className="sr-only" htmlFor="f-action">Action</label>
-        <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''} style={{ width: 'auto' }}>
+        <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''}>
           <option value="">All actions</option>{actions.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
         <label className="sr-only" htmlFor="f-entity">Entity</label>
-        <select id="f-entity" name="entityType" className="input" defaultValue={query.entityType ?? ''} style={{ width: 'auto' }}>
+        <select id="f-entity" name="entityType" className="input" defaultValue={query.entityType ?? ''}>
           <option value="">All entities</option>{entityTypes.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
         {query.staffId && <input type="hidden" name="staffId" value={query.staffId} />}
         <button className="btn ghost" type="submit">Filter</button>
         {(query.action || query.entityType || query.staffId) && <Link className="btn link" href="/audit">Clear</Link>}
       </form>
-      {rows.length === 0 ? <p className="empty" data-empty="audit">No matching audit records.</p> : (
+      {rows.length === 0 ? <Empty title="No matching records" kind="audit">No matching audit records.</Empty> : (
         <div className="table-wrap"><table data-audit-table>
-          <thead><tr><th>When (IST)</th><th>Who</th><th>Action</th><th>Entity</th><th>Change</th></tr></thead>
+          <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>
           <tbody>{rows.map(r => (
             <tr key={r.id} data-audit-action={r.action}>
-              <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.occurredAt)}</td>
+              <td className="nowrap">{formatDateTime(r.occurredAt)}</td>
               <td>{r.staffEmail ?? <span className="badge">{r.actorType}</span>}{r.ip && <div className="note mono">{r.ip}</div>}</td>
-              <td className="mono">{r.action}</td>
+              <td><span className="code-tag">{r.action}</span></td>
               <td><span className="mono">{r.entityType}</span>{r.entityId && <div className="note mono">{r.entityId}</div>}</td>
               <td>{(r.before != null || r.after != null || (r.metadata && Object.keys(r.metadata as object).length > 0)) ? (
                 <details><summary>Details</summary>
@@ -55,11 +55,11 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
           </tbody>
         </table></div>
       )}
-      <div className="actions" style={{ marginTop: 14 }}>
-        {query.page > 1 && <Link className="btn ghost" href={link(query.page - 1)}>Newer</Link>}
-        {hasNext && <Link className="btn ghost" href={link(query.page + 1)}>Older</Link>}
-        <span className="note">Page {query.page}</span>
-      </div>
+      <nav className="pager" aria-label="Audit pages">
+        {query.page > 1 ? <Link className="btn ghost sm" href={link(query.page - 1)}>← Newer</Link> : <span />}
+        <span className="pager-page">Page {query.page}</span>
+        {hasNext ? <Link className="btn ghost sm" href={link(query.page + 1)}>Older →</Link> : <span />}
+      </nav>
     </>
   );
 }

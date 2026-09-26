@@ -53,9 +53,9 @@ export default async function RolePage({ params, searchParams }: { params: Param
           <div className="form"><Field name="name" label="Name" defaultValue={role.name} /><Field name="description" label="Description" defaultValue={role.description} /></div>
           {matrix}
         </ActionForm>
-      ) : (<>{matrix}<p className="note" style={{ marginTop: 12 }}>Changing roles needs the roles.manage permission.</p></>)}
+      ) : (<>{matrix}<p className="note section-foot">Changing roles needs the roles.manage permission.</p></>)}
       {manage && !role.isSystem && (
-        <section className="card" style={{ marginTop: 18, maxWidth: 560 }}>
+        <section className="card danger-card">
           <h2>Delete role</h2>
           {role.members > 0 ? <p className="note">Remove this role from its {role.members} staff member(s) first.</p> : (
             <ActionForm action={deleteRoleAction} submitLabel="Delete role" variant="danger" confirmText={`Delete the role ${role.name}?`}>

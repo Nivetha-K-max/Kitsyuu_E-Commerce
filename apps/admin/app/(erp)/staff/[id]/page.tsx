@@ -32,18 +32,18 @@ export default async function StaffDetailPage({ params, searchParams }: { params
         <StatusBadge status={staff.status} />
       </PageHead>
       {invited && <p className="msg ok" role="status" data-notice="invited">Invitation sent to {staff.email}. The link expires {formatDateTime(staff.inviteExpiresAt)}.</p>}
-      <div className="grid two" style={{ marginTop: 14 }}>
+      <div className="grid two">
         <section className="card">
           <h2>Account</h2>
-          <dl className="grid" style={{ gridTemplateColumns: 'auto 1fr', gap: '6px 16px', margin: 0 }} data-staff-facts>
-            <dt className="note">Roles</dt><dd style={{ margin: 0 }}>{staff.roles.length ? staff.roles.map(r => <span className="badge" key={r.id}>{r.name}</span>) : '—'}</dd>
-            <dt className="note">Last sign-in</dt><dd style={{ margin: 0 }}>{formatDateTime(staff.lastLoginAt)}</dd>
-            <dt className="note">Password set</dt><dd style={{ margin: 0 }}>{formatDateTime(staff.passwordChangedAt)}</dd>
-            <dt className="note">Active sessions</dt><dd style={{ margin: 0 }} data-active-sessions>{staff.activeSessions}</dd>
-            <dt className="note">Invited</dt><dd style={{ margin: 0 }}>{formatDateTime(staff.createdAt)}</dd>
-            {staff.status === 'invited' && <><dt className="note">Invitation expires</dt><dd style={{ margin: 0 }}>{staff.inviteExpiresAt ? formatDateTime(staff.inviteExpiresAt) : 'expired'}</dd></>}
+          <dl className="facts" data-staff-facts>
+            <dt>Roles</dt><dd>{staff.roles.length ? staff.roles.map(r => <span className="badge" key={r.id}>{r.name}</span>) : '—'}</dd>
+            <dt>Last sign-in</dt><dd>{formatDateTime(staff.lastLoginAt)}</dd>
+            <dt>Password set</dt><dd>{formatDateTime(staff.passwordChangedAt)}</dd>
+            <dt>Active sessions</dt><dd data-active-sessions>{staff.activeSessions}</dd>
+            <dt>Invited</dt><dd>{formatDateTime(staff.createdAt)}</dd>
+            {staff.status === 'invited' && <><dt>Invitation expires</dt><dd>{staff.inviteExpiresAt ? formatDateTime(staff.inviteExpiresAt) : 'expired'}</dd></>}
           </dl>
-          {can(actor, 'audit.read') && <p style={{ marginTop: 14 }}><Link className="btn ghost" href={`/audit?staffId=${staff.id}`}>Actions by this person</Link></p>}
+          {can(actor, 'audit.read') && <p className="section-foot"><Link className="btn ghost" href={`/audit?staffId=${staff.id}`}>Actions by this person</Link></p>}
         </section>
         {manage ? (
           <section className="card" data-section="details">
@@ -57,7 +57,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
         ) : <section className="card"><p className="note">Changing staff accounts needs the staff.manage permission.</p></section>}
       </div>
       {manage && (
-        <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="grid two">
           <section className="card" data-section="roles">
             <h2>Roles</h2>
             {roles.length ? (
@@ -78,7 +78,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
               <Hidden name="staffId" value={staff.id} />
             </ActionForm>
             {!self && (
-              <div style={{ marginTop: 14 }}>
+              <div className="danger-zone">
                 <ActionForm action={setStaffStatusAction} id="status"
                   submitLabel={staff.status === 'disabled' ? 'Re-enable account' : 'Disable account'} variant={staff.status === 'disabled' ? 'ghost' : 'danger'}
                   confirmText={staff.status === 'disabled' ? undefined : `Disable ${staff.email}? They will be signed out everywhere.`}>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { ORDER_STATUSES, orderListQuery, paiseToRupees, PAYMENT_STATUSES, type OrderListQuery } from '@kitsyuu/contracts';
 import { listOrders } from '@kitsyuu/core';
-import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, STATUS_LABEL } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 
@@ -23,7 +23,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     .filter(([, v]) => v && v !== 'all') as [string, string][]), page: String(page) })}`;
   return (
     <>
-      <PageHead section="Commerce / Orders" title="Orders" eyebrow={`${filtered ? 'Filtered' : 'Newest first'}${query.page > 1 ? ` · page ${query.page}` : ''}`} />
+      <PageHead section="Commerce" title="Orders" eyebrow={`${filtered ? 'Filtered' : 'Newest first'}${query.page > 1 ? ` · page ${query.page}` : ''}`} />
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
       <form className="actions filters" method="get" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>
@@ -46,10 +46,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
         {filtered && <Link className="btn link" href="/orders">Clear</Link>}
       </form>
       {rows.length === 0 ? (
-        <p className="empty" data-empty="orders">{filtered ? 'No orders match these filters.' : 'No orders yet. Orders appear here once checkout is live.'}</p>
+        <Empty title={filtered ? 'No matching orders' : 'No orders yet'} kind="orders" action={filtered ? <Link className="btn ghost" href="/orders">Clear filters</Link> : undefined}>
+          {filtered ? 'No orders match these filters.' : 'There are currently no orders to display. Orders appear here once checkout is live.'}
+        </Empty>
       ) : (
         <div className="table-wrap"><table data-orders-table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Placed (IST)</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Placed (IST)</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th><th className="num">Action</th></tr></thead>
           <tbody>{rows.map(o => (
             <tr key={o.id} data-order-row={o.order_number}>
               <td className="mono nowrap"><Link className="row-link" href={`/orders/${o.id}`}>{o.order_number}</Link></td>
@@ -59,6 +61,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
               <td className="num money" data-total>₹{paiseToRupees(o.total_paise)}</td>
               <td>{o.payment_status ? <StatusBadge status={o.payment_status} /> : <span className="note">—</span>}</td>
               <td><StatusBadge status={o.status} /></td>
+              <td className="num"><Link className="btn ghost sm" href={`/orders/${o.id}`} aria-label={`View order ${o.order_number}`}>View</Link></td>
             </tr>))}
           </tbody>
         </table></div>

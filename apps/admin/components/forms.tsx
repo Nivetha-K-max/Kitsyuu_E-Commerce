@@ -5,6 +5,7 @@
    action, its validation and its permission checks are the same either way. */
 import { createContext, startTransition, useActionState, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { ActionState } from '@kitsyuu/contracts';
+import { Icon } from './icons';
 
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
 const StateCtx = createContext<ActionState>({});
@@ -52,7 +53,7 @@ export function Field({ name, label, type = 'text', defaultValue, autoComplete, 
   const error = useContext(StateCtx).fieldErrors?.[name];
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{label}{required && <span className="req" aria-hidden="true">*</span>}</label>
       <input id={id} name={name} type={type} className="input" defaultValue={defaultValue} autoComplete={autoComplete}
         required={required} readOnly={readOnly} aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d` : undefined} />
       {(error || hint) && <span id={`${id}-d`} className={error ? 'field-error' : 'note'}>{error ?? hint}</span>}
@@ -67,7 +68,7 @@ export function Select({ name, label, options, defaultValue, hint, required }: {
   const error = useContext(StateCtx).fieldErrors?.[name];
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{label}{required && <span className="req" aria-hidden="true">*</span>}</label>
       <select id={id} name={name} className="input" defaultValue={defaultValue} required={required}
         aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d` : undefined}>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -77,13 +78,13 @@ export function Select({ name, label, options, defaultValue, hint, required }: {
   );
 }
 
-export function TextArea({ name, label, defaultValue, hint, rows = 4 }: { name: string; label: string; defaultValue?: string; hint?: string; rows?: number }) {
+export function TextArea({ name, label, defaultValue, hint, rows = 4, required }: { name: string; label: string; defaultValue?: string; hint?: string; rows?: number; required?: boolean }) {
   const id = useId();
   const error = useContext(StateCtx).fieldErrors?.[name];
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <textarea id={id} name={name} className="input" rows={rows} defaultValue={defaultValue}
+      <label htmlFor={id}>{label}{required && <span className="req" aria-hidden="true">*</span>}</label>
+      <textarea id={id} name={name} className="input" rows={rows} defaultValue={defaultValue} required={required}
         aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d` : undefined} />
       {(error || hint) && <span id={`${id}-d`} className={error ? 'field-error' : 'note'}>{error ?? hint}</span>}
     </div>
@@ -133,8 +134,9 @@ export function DropzoneField({ name, title, accept, formats, hint }: { name: st
         <input ref={inputRef} id={id} name={name} type="file" accept={accept} className="dropzone-input"
           onChange={e => pick(e.currentTarget)} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} onDrop={() => setOver(false)}
           aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d ${id}-e` : `${id}-d`} />
+        <span className="dropzone-icon" aria-hidden="true"><Icon name="upload" size={20} /></span>
         <label htmlFor={id} className="dropzone-title">{title}</label>
-        <p className="dropzone-line" aria-hidden="true">Drag &amp; drop <span>or</span> <u>Choose image</u></p>
+        <p className="dropzone-line" aria-hidden="true">Drag and drop an image here, or <u>choose a file</u></p>
         <p className="dropzone-formats" id={`${id}-d`}>
           {file ? <>Selected: {file.name} · {(file.size / 1048576).toFixed(file.size < 1048576 ? 2 : 1)} MB</> : formats}
         </p>
