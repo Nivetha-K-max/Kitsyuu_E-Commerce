@@ -5,7 +5,7 @@ import { ProductCard, ProductGrid } from '@/components/ui';
 import Newsletter from '@/components/Newsletter';
 import HeroTurntable from '@/components/HeroTurntable';
 
-export default async function Home() {
+export default async function StoreHome() {
   const idx = indexCatalogue(await getCatalogue());
   const na = idx.collection('new-arrivals'), featured = idx.featured();
   const outer = idx.inCategory('outerwear').filter(p => !imageOf(p).held).slice(0, 2);

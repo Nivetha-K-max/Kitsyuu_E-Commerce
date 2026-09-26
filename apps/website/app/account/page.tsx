@@ -14,7 +14,7 @@ export default async function AccountPage({ searchParams }: { searchParams: SP }
   const role = profile.role === 'admin' ? 'Admin' : 'Customer';
   return (
     <div className="st-wrap st-auth st-account">
-      <Crumbs list={[{ label: 'Store', href: '/store' }, { label: 'Account' }]} />
+      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Account' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title">Account</h1>
         <div className="st-plp-aside"><p className="st-result-count" data-role={profile.role}>{role}</p><p>Signed in as {profile.email}.</p></div>

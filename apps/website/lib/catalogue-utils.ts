@@ -74,7 +74,7 @@ export function searchProducts(idx: Index, q: string): Product[] {
 }
 
 export const url = {
-  home: '/store',
+  home: '/',
   shop: (q?: Record<string, string>) => '/shop' + (q && Object.keys(q).length ? '?' + new URLSearchParams(q) : ''),
   product: (p: Product) => '/product/' + encodeURIComponent(p.slug),
   cart: '/cart', wishlist: '/wishlist', checkout: '/checkout', confirmation: '/confirmation',

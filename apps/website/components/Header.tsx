@@ -32,7 +32,9 @@ function useActive(idx: Index): Active {
   return tool ? { tool } : {};
 }
 
-export default function Header() {
+/* On the homepage the layout's header is not shown at the top: the page renders it (inline) where the store section
+   begins, below the brand landing page, so the two headers never overlap. */
+export default function Header({ inline = false }: { inline?: boolean } = {}) {
   const store = useStore(), hydrated = useHydrated(), idx = store.idx;
   const cartCount = hydrated ? store.cartCount : 0, wishCount = hydrated ? store.wishIds.length : 0;
   /* Auth state is a UI hint only (the server decides access). Until it is known, the link says "Account". */
@@ -61,12 +63,14 @@ export default function Header() {
     mq.addEventListener('change', close); return () => mq.removeEventListener('change', close);
   }, []);
 
+  if (!inline && path === '/') return null;
   return (
     <header className="st-header" ref={header}>
-      <Link className="st-brand" href={url.home} aria-label="KITSYUU store home">
+      {/* The homepage starts with the landing page's own script, so links to it are full page loads (<a>, not <Link>). */}
+      <a className="st-brand" href={url.home} aria-label="KITSYUU home">
         <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} /></span>
         <span className="st-wordmark" aria-hidden="true">KITSYUU</span>
-      </Link>
+      </a>
       <nav className={`st-nav${open ? ' is-open' : ''}`} id="st-nav" aria-label="Store" ref={nav} onClick={e => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}>
         <ul className="st-nav-main">
           {navItems(idx).map(i => {
@@ -87,8 +91,7 @@ export default function Header() {
           <li><Link href={url.wishlist} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
           <li><Link href={accountHref} {...cur('account')}>{accountLabel}</Link></li>
           {isAdmin && <li><Link href="/admin" {...cur('admin')}>Admin</Link></li>}
-          {/* The brand landing page is a static page at `/`, so a plain link (full page load), not <Link>. */}
-          <li><a href="/">The KITSYUU story</a></li>
+          <li><a href="/#story">The KITSYUU story</a></li>
         </ul>
       </nav>
       <div className="st-tools">

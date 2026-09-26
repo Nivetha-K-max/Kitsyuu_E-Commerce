@@ -9,6 +9,7 @@
     "prebuild": "node scripts/copy-landing.mjs",
     "build": "next build",
     "start": "next start -p 3001",
+    "pretypecheck": "node scripts/copy-landing.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-all.mjs",
     "test:auth": "node --env-file=.env.local tests/auth.mjs"

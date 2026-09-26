@@ -4,7 +4,7 @@
 html.st{scroll-padding-top:calc(var(--st-head) + 16px)}
 body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--ink)}
 .store main{flex:1;outline:0}
-.store h1,.store h2,.store h3{margin:0}
+.store :is(h1,h2,h3):not(:where(.kitsyuu-landing *)){margin:0}
 .store ul{list-style:none;margin:0;padding:0}
 .st-wrap{width:100%;max-width:var(--st-max);margin:0 auto;padding:0 var(--st-gutter)}
 .store input:focus-visible,.store summary:focus-visible,.store select:focus-visible{outline:2px solid var(--red);outline-offset:4px}
@@ -438,3 +438,10 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
  .st-confirm-ref dd{font-size:20px}
 }
 @media(min-width:701px) and (max-width:1000px){.st-cart{grid-template-columns:1fr}.st-summary{position:static}}
+
+/* M5 homepage: the brand landing page (.kitsyuu-landing) sits above the store section (#store) on `/`.
+   The store's page scroll padding (html.st) would move the landing's own anchor targets, so they keep the landing's
+   original offsets (28px, 20px on phones); #store lands flush with the top because the store header starts there. */
+.kitsyuu-landing :is(#top,#story,#edit,#about){scroll-margin-top:calc(28px - var(--st-head) - 16px)}
+@media(max-width:700px){.kitsyuu-landing :is(#top,#story,#edit,#about){scroll-margin-top:calc(20px - var(--st-head) - 16px)}}
+#store{scroll-margin-top:calc(-1 * (var(--st-head) + 16px))}

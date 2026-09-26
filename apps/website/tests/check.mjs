@@ -19,14 +19,19 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   ok(`[${tag}] landing loads unchanged`, land.title.startsWith('Kitsyuu') && land.word === 'KITSYUU' && land.poster > 0 && !land.store && b.errors.length === 0, JSON.stringify(land) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
   await b.shot(`${tag}-landing.png`);
 
-  // M5: the same landing restored at `/` by the Next.js app — identical to the original apart from one added Store link.
-  await b.goto(B + '/', 'document.readyState==="complete"');
-  const rest = await b.eval(`({title:document.title,nav:[...document.querySelectorAll('.nav nav a')].map(a=>a.textContent),word:document.querySelector('.hero-wordmark')?.textContent,poster:document.querySelector('.stage-poster').naturalWidth,store:!!document.querySelector('.st-header'),storeLink:[...document.querySelectorAll('.nav nav a')].filter(a=>a.getAttribute('href')==='/store'&&a.offsetParent!==null).length,path:location.pathname})`);
-  ok(`[${tag}] landing restored at / (same page + visible Store link)`, rest.path === '/' && rest.title === land.title && rest.word === land.word && rest.poster > 0 && !rest.store
-    && JSON.stringify(rest.nav) === JSON.stringify([...land.nav, 'Store']) && rest.storeLink === 1 && b.errors.length === 0, JSON.stringify(rest) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
+  // M5: the homepage `/` is ONE page — the same landing first (plus one Store link to #store), then the store homepage.
+  await b.goto(B + '/', READY);
+  const home0 = await b.eval(`(()=>{const L=document.querySelector('[data-landing]'),S=document.querySelector('#store');const heads=[...document.querySelectorAll('.st-header')];
+    return {title:document.title,nav:[...document.querySelectorAll('.kitsyuu-landing .nav nav a')].map(a=>a.textContent),store:[...document.querySelectorAll('.kitsyuu-landing .nav nav a')].filter(a=>a.getAttribute('href')==='#store'&&a.offsetParent!==null).length,
+      word:document.querySelector('.kitsyuu-landing .hero-wordmark')?.textContent,poster:document.querySelector('.kitsyuu-landing .stage-poster')?.naturalWidth,
+      order:!!(L&&S&&(L.compareDocumentPosition(S)&Node.DOCUMENT_POSITION_FOLLOWING)),storeHero:!!S?.querySelector('#st-hero-title'),storeHeader:heads.length===1&&!!S?.contains(heads[0]),
+      landingHeaderFirst:!!(document.querySelector('.kitsyuu-landing header.nav')&&heads[0]&&(document.querySelector('.kitsyuu-landing header.nav').compareDocumentPosition(heads[0])&Node.DOCUMENT_POSITION_FOLLOWING)),
+      mains:document.querySelectorAll('main').length}})()`);
+  ok(`[${tag}] / = landing first (unchanged + Store link to #store), then the store homepage with its header`, home0.word === land.word && home0.poster > 0 && JSON.stringify(home0.nav) === JSON.stringify([...land.nav, 'Store'])
+    && home0.store === 1 && home0.order && home0.storeHero && home0.storeHeader && home0.landingHeaderFirst && home0.mains === 1 && b.errors.length === 0, JSON.stringify(home0) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
 
   // Store home
-  await b.goto(B + '/store', READY);
+  await b.goto(B + '/', READY);
   const home = await b.eval(`({na:${skus('[aria-labelledby=st-na-title]')},ft:${skus('[aria-labelledby=st-ft-title]')},cats:[...document.querySelectorAll('.st-cat-name')].map(e=>e.textContent),nav:[...document.querySelectorAll('.st-nav-main>li>a')].map(a=>a.textContent),imgs:${imgs},ov:${overflow}})`);
   const naExpect = data.collections[0].productIds.map(id => data.products.find(p => p.id === id).sku);
   const ftExpect = data.products.filter(p => p.featured).map(p => p.sku);
@@ -87,7 +92,7 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   }
 }
 // Keyboard: first Tab lands on skip link, then brand
-await b.viewport(1440, 900); await b.goto(B + '/store', READY);
+await b.viewport(1440, 900); await b.goto(B + '/', READY);
 await b.key('Tab', 'Tab', 9); const f1 = await b.eval('document.activeElement.textContent');
 ok('[desktop] first Tab reaches skip link', f1 === 'Skip to content', f1);
 b.close();

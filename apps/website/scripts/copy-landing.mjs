@@ -1,11 +1,17 @@
-/* M5: puts the original KITSYUU landing page (dist/, the source of truth — never modified here) into public/ at build
-   time, so `/` can serve it as a static file while the Next.js store lives at /store. Runs before `next build` and
-   `next dev` (npm pre-scripts). The copied files are generated and git-ignored (see ../.gitignore), so the 99 MB frame
-   sequence is not committed twice.
+/* M5: brings the original KITSYUU landing page (dist/, the source of truth — never modified here) into the Next.js
+   homepage at build time. `/` shows the landing first and the existing store homepage after it (see app/page.tsx).
+   Runs before `next build`, `next dev` and `tsc` (npm pre-scripts). Everything it writes is generated and git-ignored
+   (see ../.gitignore), so the 99 MB frame sequence is not committed a second time.
 
-   - Files the store already ships in public/ (styles.css, fonts, logo, editorial image) are shared, not copied: they
-     must be byte-identical to dist/, otherwise the build stops so the landing can never change by accident.
-   - The only difference from dist/landing.html is one added nav link to the store (<a href="/store">Store</a>). */
+   Output:
+   - lib/landing.generated.ts — the landing's <body> markup, rendered by components/Landing.tsx. Only technically
+     required edits are made, each asserted so a changed dist/landing.html stops the build instead of drifting:
+       · <main id="top"> becomes <div id="top"> (the page already has the store's <main>; one main landmark per page);
+       · one nav link to the store section on the same page: <a href="#store">Store</a>;
+       · asset URLs become root-absolute (/assets/…), so they resolve on any URL.
+   - public/: app.js, content.json, the sequence manifest, images and the 241 frames, unchanged.
+   Files the store already ships in public/ (styles.css, fonts, logo, editorial image) are shared, not copied: they must
+   be byte-identical to dist/, otherwise the build stops so the landing can never change by accident. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,12 +19,11 @@ import { fileURLToPath } from 'node:url';
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(WEB, '../../dist');
 const PUBLIC = path.join(WEB, 'public');
+const MODULE = path.join(WEB, 'lib/landing.generated.ts');
 const FRAMES = 'assets/upscaled-1440';
 const COPY = ['app.js', 'content.json', 'assets/sequence.json', 'assets/upscaled-poster.webp', 'assets/volume.webp', 'assets/layers.webp'];
 const SHARED = ['styles.css', 'fonts.css', 'assets/kitsyuu-icon.svg', 'assets/editorial.webp',
   ...fs.readdirSync(path.join(DIST, 'assets/fonts')).filter(f => f.endsWith('.woff2')).map(f => `assets/fonts/${f}`)];
-const NAV_END = '<a href="#about">Our world</a></nav>';
-const STORE_LINK = '<a href="#about">Our world</a><a href="/store">Store</a></nav>';
 
 const fail = msg => { console.error(`copy-landing: ${msg}`); process.exit(1); };
 if (!fs.existsSync(path.join(DIST, 'landing.html'))) fail(`dist/landing.html not found at ${DIST}`);
@@ -27,27 +32,40 @@ if (!fs.existsSync(path.join(DIST, 'landing.html'))) fail(`dist/landing.html not
 const differs = SHARED.filter(f => !fs.existsSync(path.join(PUBLIC, f)) || !fs.readFileSync(path.join(PUBLIC, f)).equals(fs.readFileSync(path.join(DIST, f))));
 if (differs.length) fail(`these public/ files differ from dist/ and would change the landing page: ${differs.join(', ')}`);
 
-// The frame sequence the landing plays (assets/sequence.json → pattern + count).
+// Static files: scripts, content, images and the frame sequence named by assets/sequence.json.
 const seq = JSON.parse(fs.readFileSync(path.join(DIST, 'assets/sequence.json'), 'utf8'));
 if (!seq.pattern.startsWith(`${FRAMES}/`)) fail(`unexpected frame pattern ${seq.pattern}`);
 const frames = Array.from({ length: seq.count }, (_, i) => seq.pattern.replace('{index}', String(i).padStart(seq.padding, '0')));
-
 let copied = 0, bytes = 0;
-const copy = rel => {
+for (const rel of [...COPY, ...frames]) {
   const from = path.join(DIST, rel), to = path.join(PUBLIC, rel);
   if (!fs.existsSync(from)) fail(`missing source file dist/${rel}`);
   const size = fs.statSync(from).size;
   bytes += size;
-  if (fs.existsSync(to) && fs.statSync(to).size === size && fs.readFileSync(to).equals(fs.readFileSync(from))) return;
+  if (fs.existsSync(to) && fs.statSync(to).size === size && fs.readFileSync(to).equals(fs.readFileSync(from))) continue;
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.copyFileSync(from, to);
   copied++;
-};
-[...COPY, ...frames].forEach(copy);
+}
+fs.rmSync(path.join(PUBLIC, 'landing.html'), { force: true });   // left over from the earlier stand-alone version
 
-// landing.html: the original page plus the store link (the only change).
+// The landing markup (<body> contents) with the three required edits.
 const html = fs.readFileSync(path.join(DIST, 'landing.html'), 'utf8');
-if (html.split(NAV_END).length !== 2) fail('could not find the landing navigation to add the store link (dist/landing.html changed?)');
-fs.writeFileSync(path.join(PUBLIC, 'landing.html'), html.replace(NAV_END, STORE_LINK));
+const body = html.match(/<body[^>]*>([\s\S]*)<\/body>/)?.[1];
+if (!body) fail('no <body> in dist/landing.html');
+const edits = [
+  ['<main id="top">', '<div id="top">'],
+  ['</main>', '</div>'],
+  ['<a href="#about">Our world</a></nav>', '<a href="#about">Our world</a><a href="#store">Store</a></nav>'],
+];
+let markup = body;
+for (const [from, to] of edits) {
+  if (markup.split(from).length !== 2) fail(`expected exactly one "${from}" in dist/landing.html`);
+  markup = markup.replace(from, to);
+}
+// Line endings as the browser parses them (CRLF becomes LF), so the server-rendered markup matches on every checkout.
+markup = markup.replace(/(src|href)="assets\//g, '$1="/assets/').replace(/\r\n?/g, '\n').trim();
+if (/<main[\s>]|<script/i.test(markup)) fail('landing markup still contains <main> or <script>');
+fs.writeFileSync(MODULE, `/* GENERATED by scripts/copy-landing.mjs from dist/landing.html — do not edit. */\nexport const LANDING_HTML = ${JSON.stringify(markup)};\n`);
 
-console.log(`copy-landing: landing ready (${frames.length} frames, ${(bytes / 1048576).toFixed(1)} MB; ${copied} file(s) copied, ${SHARED.length} shared files verified)`);
+console.log(`copy-landing: landing ready (${frames.length} frames, ${(bytes / 1048576).toFixed(1)} MB; ${copied} file(s) copied, ${SHARED.length} shared files verified; markup ${markup.length} chars)`);

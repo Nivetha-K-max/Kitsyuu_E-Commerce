@@ -60,7 +60,7 @@ export function Crumbs({ list }: { list: { label: string; href?: string }[] }) {
   return (
     <nav className="st-crumbs" aria-label="Breadcrumb">
       <ol>
-        {list.map((c, i) => <li key={i}>{i === list.length - 1 || !c.href ? <span aria-current="page">{c.label}</span> : <Link href={c.href}>{c.label}</Link>}</li>)}
+        {list.map((c, i) => <li key={i}>{i === list.length - 1 || !c.href ? <span aria-current="page">{c.label}</span> : c.href === '/' ? <a href="/">{c.label}</a> : <Link href={c.href}>{c.label}</Link>}</li>)}
       </ol>
     </nav>
   );

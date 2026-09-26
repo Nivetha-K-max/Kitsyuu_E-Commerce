@@ -23,7 +23,7 @@ export default async function AdminPage() {
   }
   return (
     <div className="st-wrap st-auth">
-      <Crumbs list={[{ label: 'Store', href: '/store' }, { label: 'Admin' }]} />
+      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Admin' }]} />
       <header className="st-plp-head" data-admin-gate="admin">
         <h1 id="st-page-title">Admin</h1>
         <div className="st-plp-aside"><p className="st-result-count">Admin</p><p>Signed in as {gate.profile.email}.</p></div>
