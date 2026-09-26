@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: SP }) 
   if (await getCurrentUser()) redirect(safeNext(next));
   return (
     <div className="st-wrap st-auth">
-      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Log in' }]} />
+      <Crumbs list={[{ label: 'Store', href: '/store' }, { label: 'Log in' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title">Log in</h1>
         <div className="st-plp-aside"><p className="st-result-count">Account</p><p>Log in to check out and see your account. You can browse and fill your cart without an account.</p></div>

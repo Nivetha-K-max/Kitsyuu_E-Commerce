@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Catalogue } from '@/lib/types';
 import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
 
-/* The brand landing page is parked while the store is built; its links return with the landing page. */
+/* The KITSYUU column links to the brand landing page at `/` (a static page, so plain links rather than <Link>). */
 export default function Footer({ catalogue }: { catalogue: Catalogue }) {
   const idx = indexCatalogue(catalogue);
   const items = idx.c.navigation.map(n => n.all ? { label: 'All products', href: url.shop() }
@@ -21,6 +21,7 @@ export default function Footer({ catalogue }: { catalogue: Catalogue }) {
             <p>JAPANESE STREETWEAR.<br />INDIAN STREETS.</p>
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
+          <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/">The story</a></li><li><a href="/#edit">Style studies</a></li><li><a href="/#about">Our world</a></li></ul></nav>
           <div><h2>Prototype store</h2><p className="st-footer-note">Product names, sizes, prices and descriptions come from a prototype catalogue and are estimates, not confirmed company data. Product images are prototype-quality catalogue cutouts, not final product photography. Photography and commercial details may be updated. No orders, payments or sign-ups are processed.</p></div>
         </div>
         <div className="st-footer-bottom"><span>KITSYUU STORE / PROTOTYPE BUILD</span><a href="#main">Back to top ↑</a></div>

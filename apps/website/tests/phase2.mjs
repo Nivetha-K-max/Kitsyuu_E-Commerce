@@ -18,7 +18,7 @@ const status = () => ev(`document.querySelector('#st-buy-status').textContent`);
 
 for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true, 'mobile']]) {
   await b.viewport(vw, vh, mob);
-  await go(''); await ev('localStorage.clear();sessionStorage.clear()'); await go('');
+  await go('store'); await ev('localStorage.clear();sessionStorage.clear()'); await go('store');
   // Empty states
   let c = await ev(counts); ok(`[${tag}] header counts start at 0`, c.cart === '0' && c.wish === '0', JSON.stringify(c));
   await go('cart'); ok(`[${tag}] empty cart state`, (await ev(`document.querySelector('.st-empty-inline h2')?.textContent`)) === 'Your cart is empty.');
@@ -151,7 +151,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   await b.shot(`p2-${tag}-confirmation.png`, true);
 
   // Header + mobile nav
-  await go('');
+  await go('store');
   ok(`[${tag}] header links: search/wishlist/cart + account (guest → /login)`, (await ev(`[...document.querySelectorAll('.st-tools a')].map(a=>a.getAttribute('href')).join()`)) === '/search,/wishlist,/cart,/login');
   if (mob) {
     await click('.st-menu-toggle'); await w(100);

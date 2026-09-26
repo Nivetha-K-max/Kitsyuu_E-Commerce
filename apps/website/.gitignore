@@ -6,3 +6,13 @@ next-env.d.ts
 .env*
 !.env.example
 .output/
+
+# M5: the landing page copied from ../../dist at build time by scripts/copy-landing.mjs (generated, never commit)
+/public/landing.html
+/public/app.js
+/public/content.json
+/public/assets/sequence.json
+/public/assets/upscaled-poster.webp
+/public/assets/volume.webp
+/public/assets/layers.webp
+/public/assets/upscaled-1440/

@@ -87,6 +87,8 @@ export default function Header() {
           <li><Link href={url.wishlist} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
           <li><Link href={accountHref} {...cur('account')}>{accountLabel}</Link></li>
           {isAdmin && <li><Link href="/admin" {...cur('admin')}>Admin</Link></li>}
+          {/* The brand landing page is a static page at `/`, so a plain link (full page load), not <Link>. */}
+          <li><a href="/">The KITSYUU story</a></li>
         </ul>
       </nav>
       <div className="st-tools">

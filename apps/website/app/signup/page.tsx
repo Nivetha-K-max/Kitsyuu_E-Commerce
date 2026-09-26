@@ -14,7 +14,7 @@ export default async function SignupPage({ searchParams }: { searchParams: SP })
   if (await getCurrentUser()) redirect(safeNext(next));
   return (
     <div className="st-wrap st-auth">
-      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Create account' }]} />
+      <Crumbs list={[{ label: 'Store', href: '/store' }, { label: 'Create account' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title">Create account</h1>
         <div className="st-plp-aside"><p className="st-result-count">Account</p><p>We will email you a link to confirm your address before your first log-in.</p></div>

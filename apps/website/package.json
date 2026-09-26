@@ -4,7 +4,9 @@
   "private": true,
   "description": "KITSYUU customer website on Next.js (Phase 4). Database tooling lives in ../../database; the original static site in ../../dist stays untouched.",
   "scripts": {
+    "predev": "node scripts/copy-landing.mjs",
     "dev": "next dev -p 3001",
+    "prebuild": "node scripts/copy-landing.mjs",
     "build": "next build",
     "start": "next start -p 3001",
     "typecheck": "tsc --noEmit",

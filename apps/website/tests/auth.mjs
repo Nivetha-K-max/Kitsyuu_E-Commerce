@@ -92,10 +92,10 @@ try {
 
   for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true, 'mobile']]) {
     await b.viewport(vw, vh, mob);
-    await go('/'); await ev('localStorage.clear();sessionStorage.clear()'); await b.send('Network.clearBrowserCookies');
+    await go('/store'); await ev('localStorage.clear();sessionStorage.clear()'); await b.send('Network.clearBrowserCookies');
 
     // ---------- guest ----------
-    await go('/');
+    await go('/store');
     let h = await header();
     ok(`[${tag}] guest header shows Log in → /login, no Admin`, h.text?.toLowerCase() === 'log in' && h.href === '/login' && h.auth === 'guest' && !h.admin, JSON.stringify(h));
     await go('/admin');
@@ -184,7 +184,7 @@ try {
   ;
   const walk = d => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
   const bundle = walk(path.join(WEB, '.next/static')).map(f => fs.readFileSync(f, 'utf8')).join('\n');
-  const pages = (await Promise.all(['/', '/shop', '/login', '/signup', '/product/hook-closure-cropped-jacket', '/cart'].map(async p => (await fetch(B + p)).text()))).join('\n');
+  const pages = (await Promise.all(['/', '/store', '/shop', '/login', '/signup', '/product/hook-closure-cropped-jacket', '/cart'].map(async p => (await fetch(B + p)).text()))).join('\n');
   for (const [name, val] of Object.entries(secrets)) {
     if (!val || /REPLACE_WITH/.test(val)) { ok(`${name} not in browser output`, true, 'not set yet (placeholder), nothing to leak'); continue; }
     ok(`${name} not in browser JS bundles or page HTML`, !bundle.includes(val) && !pages.includes(val));
