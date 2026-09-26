@@ -18,7 +18,7 @@ const label = (s: string | null) => (s ? STATUS_LABEL[s] ?? s : '—');
 export default async function OrderPage({ params }: { params: Params }) {
   const actor = await requireActor();
   const crumbs = [{ href: '/orders', label: 'Orders' }];
-  if (!can(actor, 'orders.read')) return <><PageHead title="Order" crumbs={crumbs} /><Forbidden permission="orders.read" /></>;
+  if (!can(actor, 'orders.read')) return <><PageHead section="Commerce" title="Order" crumbs={crumbs} /><Forbidden permission="orders.read" /></>;
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const d = await getOrder(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
@@ -28,7 +28,7 @@ export default async function OrderPage({ params }: { params: Params }) {
 
   return (
     <>
-      <PageHead title={o.orderNumber} eyebrow={`Placed ${formatDateTime(o.createdAt)} · ${o.currency}`} crumbs={crumbs}>
+      <PageHead section="Commerce" title={o.orderNumber} eyebrow={`Placed ${formatDateTime(o.createdAt)} · ${o.currency}`} crumbs={crumbs}>
         <span data-order-status={o.status}><StatusBadge status={o.status} /></span>
         {o.paymentStatus && <span data-payment-status={o.paymentStatus}><StatusBadge status={o.paymentStatus} /></span>}
       </PageHead>

@@ -13,7 +13,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function AuditPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
-  if (!can(actor, 'audit.read')) return <><PageHead title="Audit log" /><Forbidden permission="audit.read" /></>;
+  if (!can(actor, 'audit.read')) return <><PageHead section="System" title="Audit log" /><Forbidden permission="audit.read" /></>;
   const sp = await searchParams;
   const parsed = auditQuery.safeParse({ page: one(sp.page), action: one(sp.action), entityType: one(sp.entityType), staffId: one(sp.staffId) });
   const query: AuditQuery = parsed.success ? parsed.data : { page: 1, action: undefined, entityType: undefined, staffId: undefined };
@@ -22,8 +22,8 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
   const show = (v: unknown) => (v === null || v === undefined ? '' : JSON.stringify(v, null, 1));
   return (
     <>
-      <PageHead title="Audit log" eyebrow="Append-only · every important admin action" />
-      <form className="actions" method="get" style={{ marginBottom: 14 }} data-audit-filters>
+      <PageHead section="System" title="Audit log" eyebrow="Append-only · every important admin action" />
+      <form className="actions filters" method="get" data-audit-filters>
         <label className="sr-only" htmlFor="f-action">Action</label>
         <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''} style={{ width: 'auto' }}>
           <option value="">All actions</option>{actions.map(a => <option key={a} value={a}>{a}</option>)}

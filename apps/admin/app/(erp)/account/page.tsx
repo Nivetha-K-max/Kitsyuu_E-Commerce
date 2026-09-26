@@ -11,7 +11,7 @@ export default async function AccountPage() {
   const perms = [...actor.permissions].sort();
   return (
     <>
-      <PageHead title="My account" eyebrow={actor.email} />
+      <PageHead section="Account" title="My account" eyebrow={actor.email} />
       <div className="grid two">
         <section className="card">
           <h2>Change password</h2>

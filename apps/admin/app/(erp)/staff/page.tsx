@@ -10,11 +10,11 @@ export const metadata: Metadata = { title: 'Staff' };
 
 export default async function StaffPage() {
   const actor = await requireActor();
-  if (!can(actor, 'staff.read')) return <><PageHead title="Staff" /><Forbidden permission="staff.read" /></>;
+  if (!can(actor, 'staff.read')) return <><PageHead section="System" title="Staff" /><Forbidden permission="staff.read" /></>;
   const staff = await listStaff(db(), actor);
   return (
     <>
-      <PageHead title="Staff" eyebrow={`${staff.length} account${staff.length === 1 ? '' : 's'}`}>
+      <PageHead section="System" title="Staff" eyebrow={`${staff.length} account${staff.length === 1 ? '' : 's'}`}>
         {can(actor, 'staff.manage') && <Link className="btn" href="/staff/invite" data-invite-link>Invite staff</Link>}
       </PageHead>
       {staff.length === 0 ? <p className="empty">No staff accounts yet.</p> : (

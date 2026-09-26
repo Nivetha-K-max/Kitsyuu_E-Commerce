@@ -3,7 +3,7 @@
    Submission goes through onSubmit + startTransition instead of <form action>, because React 19 resets every field
    after a form action completes, which would wipe what the person typed whenever validation fails. The server
    action, its validation and its permission checks are the same either way. */
-import { createContext, startTransition, useActionState, useContext, useEffect, useId, useRef, type FormEvent, type ReactNode } from 'react';
+import { createContext, startTransition, useActionState, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { ActionState } from '@kitsyuu/contracts';
 
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
@@ -108,6 +108,38 @@ export function FileField({ name, label, accept, hint }: { name: string; label: 
       <input id={id} name={name} type="file" accept={accept} className="input"
         aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d` : undefined} />
       {(error || hint) && <span id={`${id}-d`} className={error ? 'field-error' : 'note'}>{error ?? hint}</span>}
+    </div>
+  );
+}
+
+/** A file input presented as a drop zone. The real <input type=file> covers the zone (transparent), so clicking,
+    keyboard use and dropping a file all go through the browser's own file input; nothing about the upload changes. */
+export function DropzoneField({ name, title, accept, formats, hint }: { name: string; title: string; accept: string; formats: string; hint?: string }) {
+  const id = useId();
+  const error = useContext(StateCtx).fieldErrors?.[name];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<{ name: string; size: number } | null>(null);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    const clear = () => setFile(null);
+    form?.addEventListener('reset', clear);
+    return () => form?.removeEventListener('reset', clear);
+  }, []);
+  const pick = (el: HTMLInputElement) => { const f = el.files?.[0]; setFile(f ? { name: f.name, size: f.size } : null); setOver(false); };
+  return (
+    <div className="field">
+      <div className="dropzone" data-over={over || undefined} data-filled={file ? true : undefined} data-invalid={error ? true : undefined}>
+        <input ref={inputRef} id={id} name={name} type="file" accept={accept} className="dropzone-input"
+          onChange={e => pick(e.currentTarget)} onDragEnter={() => setOver(true)} onDragLeave={() => setOver(false)} onDrop={() => setOver(false)}
+          aria-invalid={error ? true : undefined} aria-describedby={error || hint ? `${id}-d ${id}-e` : `${id}-d`} />
+        <label htmlFor={id} className="dropzone-title">{title}</label>
+        <p className="dropzone-line" aria-hidden="true">Drag &amp; drop <span>or</span> <u>Choose image</u></p>
+        <p className="dropzone-formats" id={`${id}-d`}>
+          {file ? <>Selected: {file.name} · {(file.size / 1048576).toFixed(file.size < 1048576 ? 2 : 1)} MB</> : formats}
+        </p>
+      </div>
+      {(error || hint) && <span id={`${id}-e`} className={error ? 'field-error' : 'note'} role={error ? 'alert' : undefined}>{error ?? hint}</span>}
     </div>
   );
 }

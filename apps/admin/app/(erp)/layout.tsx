@@ -15,13 +15,15 @@ export default async function ErpLayout({ children }: { children: React.ReactNod
         <Link className="brand" href="/dashboard">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/assets/kitsyuu-icon.svg" alt="" width={22} height={30} />
-          <div><b>KITSYUU</b><small>ADMIN / ERP</small></div>
+          <div><b>KITSYUU</b><small>Studio / ERP</small></div>
         </Link>
         <NavLinks items={items} />
-        <div className="side-foot">
-          <Link href="/account" data-account>{actor.fullName || actor.email}</Link>
+        <section className="side-foot" aria-label="Account">
+          <div className="nav-group" aria-hidden="true">Account</div>
+          <p className="who" title={actor.email}>{actor.fullName || actor.email}</p>
+          <Link href="/account" data-account>My account</Link>
           <form action={logoutAction}><button type="submit" className="btn link" data-logout>Sign out</button></form>
-        </div>
+        </section>
       </aside>
       <main id="main" className="main" tabIndex={-1}>{children}</main>
     </div>

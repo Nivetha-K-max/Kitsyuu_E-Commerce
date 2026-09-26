@@ -54,7 +54,7 @@ try {
   // ================= super admin =================
   ok('super admin signs in', await signInWithInvite('root', 'Products Root'));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('menu has Products and Stock under Catalogue', nav.includes('Products|Stock'), nav);
+  ok('menu has Products, Categories and Inventory under Catalogue', nav.includes('Products|Categories|Inventory'), nav);
 
   // ---------- product list ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');
@@ -204,7 +204,7 @@ try {
   // ================= accountant: no catalogue access =================
   ok('accountant signs in', await signInWithInvite('accountant', 'Accounts E2E'));
   const accNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('accountant menu has no Products / Stock', !/Products|Stock/.test(accNav), accNav);
+  ok('accountant menu has no Products / Inventory', !/Products|Inventory/.test(accNav), accNav);
   for (const p of ['/products', `/products/${PID}`, '/inventory']) {
     await visit(p);
     ok(`accountant gets "not permitted" on ${p} (server-side, no data rendered)`, (await exists('[data-gate=forbidden]')) && !(await exists('[data-products-table],[data-product-facts],[data-stock-table]')));

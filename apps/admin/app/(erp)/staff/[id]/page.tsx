@@ -18,7 +18,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 export default async function StaffDetailPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const actor = await requireActor();
   const crumbs = [{ href: '/staff', label: 'Staff' }];
-  if (!can(actor, 'staff.read')) return <><PageHead title="Staff member" crumbs={crumbs} /><Forbidden permission="staff.read" /></>;
+  if (!can(actor, 'staff.read')) return <><PageHead section="System" title="Staff member" crumbs={crumbs} /><Forbidden permission="staff.read" /></>;
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const staff = await getStaff(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
@@ -28,7 +28,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
   const invited = (await searchParams).notice === 'invited';
   return (
     <>
-      <PageHead title={staff.fullName || staff.email} eyebrow={staff.email} crumbs={crumbs}>
+      <PageHead section="System" title={staff.fullName || staff.email} eyebrow={staff.email} crumbs={crumbs}>
         <StatusBadge status={staff.status} />
       </PageHead>
       {invited && <p className="msg ok" role="status" data-notice="invited">Invitation sent to {staff.email}. The link expires {formatDateTime(staff.inviteExpiresAt)}.</p>}

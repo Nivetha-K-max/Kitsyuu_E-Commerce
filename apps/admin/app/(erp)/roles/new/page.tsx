@@ -10,10 +10,10 @@ export const metadata: Metadata = { title: 'New role' };
 export default async function NewRolePage() {
   const actor = await requireActor();
   const crumbs = [{ href: '/roles', label: 'Roles & permissions' }];
-  if (!can(actor, 'roles.manage')) return <><PageHead title="New role" crumbs={crumbs} /><Forbidden permission="roles.manage" /></>;
+  if (!can(actor, 'roles.manage')) return <><PageHead section="System" title="New role" crumbs={crumbs} /><Forbidden permission="roles.manage" /></>;
   return (
     <>
-      <PageHead title="New role" crumbs={crumbs} />
+      <PageHead section="System" title="New role" crumbs={crumbs} />
       <ActionForm action={createRoleAction} submitLabel="Create role">
         <Field name="name" label="Name" required />
         <Field name="code" label="Code" hint="Permanent identifier, e.g. warehouse_lead (lower-case letters, digits, underscores)." required />

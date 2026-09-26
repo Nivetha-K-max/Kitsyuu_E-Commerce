@@ -15,7 +15,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 export default async function RolePage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const actor = await requireActor();
   const crumbs = [{ href: '/roles', label: 'Roles & permissions' }];
-  if (!can(actor, 'roles.read')) return <><PageHead title="Role" crumbs={crumbs} /><Forbidden permission="roles.read" /></>;
+  if (!can(actor, 'roles.read')) return <><PageHead section="System" title="Role" crumbs={crumbs} /><Forbidden permission="roles.read" /></>;
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const role = await getRole(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
@@ -45,7 +45,7 @@ export default async function RolePage({ params, searchParams }: { params: Param
 
   return (
     <>
-      <PageHead title={role.name} eyebrow={`${role.code}${role.isSystem ? ' · built-in' : ''} · ${role.members} staff`} crumbs={crumbs} />
+      <PageHead section="System" title={role.name} eyebrow={`${role.code}${role.isSystem ? ' · built-in' : ''} · ${role.members} staff`} crumbs={crumbs} />
       {created && <p className="msg ok" role="status">Role created. Choose its permissions below.</p>}
       {manage ? (
         <ActionForm action={updateRoleAction} submitLabel="Save role" className="grid">

@@ -12,7 +12,7 @@ type Leaf = Node['children'][number];
 
 export default async function CategoriesPage() {
   const actor = await requireActor();
-  if (!can(actor, 'categories.read')) return <><PageHead title="Categories" /><Forbidden permission="categories.read" /></>;
+  if (!can(actor, 'categories.read')) return <><PageHead section="Catalogue" title="Categories" /><Forbidden permission="categories.read" /></>;
   const tree = await listCategoryTree(db(), actor);
   const write = can(actor, 'categories.write');
 
@@ -46,7 +46,7 @@ export default async function CategoriesPage() {
 
   return (
     <>
-      <PageHead title="Categories" eyebrow={`${tree.length} top-level · ${tree.reduce((n, p) => n + p.children.length, 0)} subcategories`} />
+      <PageHead section="Catalogue" title="Categories" eyebrow={`${tree.length} top-level · ${tree.reduce((n, p) => n + p.children.length, 0)} subcategories`} />
       <p className="note" style={{ maxWidth: 680 }}>Category ids are fixed once created (the store uses them in links). Inactive categories are hidden from the store;
         a category cannot be deactivated while active products use it.</p>
       <div className="table-wrap"><table className="cat-tree" data-categories-table>

@@ -11,15 +11,16 @@ export const metadata: Metadata = { title: 'New product' };
 export default async function NewProductPage() {
   const actor = await requireActor();
   const crumbs = [{ href: '/products', label: 'Products' }];
-  if (!can(actor, 'products.write')) return <><PageHead title="New product" crumbs={crumbs} /><Forbidden permission="products.write" /></>;
+  if (!can(actor, 'products.write')) return <><PageHead section="Catalogue" title="New product" crumbs={crumbs} /><Forbidden permission="products.write" /></>;
   const categories = await listCategories(db(), actor);
   const label = (c: { label: string; is_active: boolean }) => c.label + (c.is_active ? '' : ' (inactive)');
   return (
     <>
-      <PageHead title="New product" crumbs={crumbs} />
-      <p className="note" style={{ maxWidth: 620 }}>The product is created as a <b>draft</b>, hidden from the store. Add sizes, stock and an image on the next screen, then activate it.
+      <PageHead section="Catalogue" title="New product" crumbs={crumbs} eyebrow="Created as a hidden draft" />
+      <section className="card form-panel" aria-label="New product">
+      <p className="note">The product is created as a <b>draft</b>, hidden from the store. Add sizes, stock and an image on the next screen, then activate it.
         The product ID is generated automatically and never changes.</p>
-      <ActionForm action={createProductAction} submitLabel="Create draft product" pendingLabel="Creating…" id="create-product-form" label="Create product">
+      <ActionForm action={createProductAction} submitLabel="Create draft product" pendingLabel="Creating…" id="create-product-form" label="Create product" className="form cols-form">
         <Field name="name" label="Name" autoComplete="off" />
         <Field name="sku" label="SKU" autoComplete="off" hint="e.g. KTS-TOP-023. Must be unique; sizes get SKU-SIZE." />
         <Field name="slug" label="Store URL slug (optional)" autoComplete="off" hint="Left blank, it is made from the name: /product/<slug>." />
@@ -30,6 +31,7 @@ export default async function NewProductPage() {
         <Field name="colourLabel" label="Colour (optional)" autoComplete="off" />
         <TextArea name="description" label="Description" rows={4} />
       </ActionForm>
+      </section>
     </>
   );
 }

@@ -13,7 +13,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function ProductsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
-  if (!can(actor, 'products.read')) return <><PageHead title="Products" /><Forbidden permission="products.read" /></>;
+  if (!can(actor, 'products.read')) return <><PageHead title="Products" section="Catalogue" /><Forbidden permission="products.read" /></>;
   const sp = await searchParams;
   const parsed = productListQuery.safeParse({ q: one(sp.q), category: one(sp.category), status: one(sp.status) });
   const query: ProductListQuery = parsed.success ? parsed.data : { status: 'all', q: undefined, category: undefined };
@@ -22,7 +22,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
   const filtered = !!(query.q || query.category || query.status !== 'all');
   return (
     <>
-      <PageHead title="Products" eyebrow={`${products.length} ${filtered ? 'matching' : 'in the catalogue'}`}>
+      <PageHead title="Products" section="Catalogue / Management" eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ''}`}>
         {can(actor, 'products.write') && <Link className="btn" href="/products/new" data-new-product>New product</Link>}
       </PageHead>
       <form className="actions filters" method="get" role="search" aria-label="Filter products" data-product-filters>
@@ -45,18 +45,19 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
       </form>
       {products.length === 0 ? <p className="empty" data-empty="products">No products match these filters.</p> : (
         <div className="table-wrap"><table data-products-table>
-          <thead><tr><th><span className="sr-only">Image</span></th><th>Product</th><th>ID / SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th></tr></thead>
+          <thead><tr><th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th></tr></thead>
           <tbody>{products.map(p => {
             const img = productImageUrl(p.primaryImage);
             return (
               <tr key={p.id} data-product-row={p.id}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <td className="thumb">{img ? <img src={img} alt="" width={44} height={56} loading="lazy" /> : <span className="note">—</span>}</td>
-                <td><Link href={`/products/${p.id}`}>{p.name}</Link>{p.isFeatured && <> <span className="badge">featured</span></>}</td>
-                <td className="mono">{p.id}<div className="note">{p.sku}</div></td>
+                <td className="product-cell"><Link className="row-link" href={`/products/${p.id}`}>{p.name}</Link>
+                  <div className="meta-line"><span className="mono">{p.id}</span>{p.isFeatured && <span className="badge featured">featured</span>}</div></td>
+                <td className="mono nowrap">{p.sku}</td>
                 <td>{p.categoryLabel}{p.subcategoryLabel && <div className="note">{p.subcategoryLabel}</div>}</td>
                 <td className="num" data-price>₹{paiseToRupees(p.pricePaise)}</td>
-                <td className="num">{formatNumber(p.stockUnits)}<div className="note">{p.sellableVariants}/{p.variants} sizes</div>
+                <td className="num"><span className="qty">{formatNumber(p.stockUnits)}</span><div className="note">{p.sellableVariants}/{p.variants} sizes</div>
                   {p.attentionVariants > 0 && <span className="badge low_stock" data-attention>{p.attentionVariants} low</span>}</td>
                 <td><StatusBadge status={p.status} /></td>
               </tr>

@@ -10,12 +10,12 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function RolesPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
-  if (!can(actor, 'roles.read')) return <><PageHead title="Roles & permissions" /><Forbidden permission="roles.read" /></>;
+  if (!can(actor, 'roles.read')) return <><PageHead section="System" title="Roles & permissions" /><Forbidden permission="roles.read" /></>;
   const roles = await listRoles(db(), actor);
   const deleted = (await searchParams).notice === 'deleted';
   return (
     <>
-      <PageHead title="Roles & permissions" eyebrow={`${roles.length} roles`}>
+      <PageHead section="System" title="Roles & permissions" eyebrow={`${roles.length} roles`}>
         {can(actor, 'roles.manage') && <Link className="btn" href="/roles/new">New role</Link>}
       </PageHead>
       {deleted && <p className="msg ok" role="status">Role deleted.</p>}

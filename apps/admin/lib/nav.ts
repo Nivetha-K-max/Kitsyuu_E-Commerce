@@ -4,11 +4,11 @@ export interface NavItem { href: string; label: string; permission: string; grou
 
 export const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', permission: 'dashboard.read', group: 'Overview' },
-  { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Sales' },
   { href: '/products', label: 'Products', permission: 'products.read', group: 'Catalogue' },
-  { href: '/inventory', label: 'Stock', permission: 'inventory.read', group: 'Catalogue' },
   { href: '/categories', label: 'Categories', permission: 'categories.read', group: 'Catalogue' },
-  { href: '/staff', label: 'Staff', permission: 'staff.read', group: 'Access' },
-  { href: '/roles', label: 'Roles & permissions', permission: 'roles.read', group: 'Access' },
-  { href: '/audit', label: 'Audit log', permission: 'audit.read', group: 'Access' },
+  { href: '/inventory', label: 'Inventory', permission: 'inventory.read', group: 'Catalogue' },
+  { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Commerce' },
+  { href: '/staff', label: 'Staff', permission: 'staff.read', group: 'System' },
+  { href: '/roles', label: 'Roles', permission: 'roles.read', group: 'System' },
+  { href: '/audit', label: 'Audit', permission: 'audit.read', group: 'System' },
 ];

@@ -84,7 +84,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Orders|Products|Stock|Categories|Staff|Roles & permissions|Audit log', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Inventory|Orders|Staff|Roles|Audit', nav);
 
   // ---------- invite a support user through the UI ----------
   await visit('/staff/invite', '!!document.querySelector("input[name=email]")');
@@ -106,7 +106,7 @@ try {
   ok('support user signs in', await until(`location.pathname==='/dashboard'`));
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit.
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Orders|Products|Stock', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Orders', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

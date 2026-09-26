@@ -13,7 +13,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function OrdersPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
-  if (!can(actor, 'orders.read')) return <><PageHead title="Orders" /><Forbidden permission="orders.read" /></>;
+  if (!can(actor, 'orders.read')) return <><PageHead section="Commerce" title="Orders" /><Forbidden permission="orders.read" /></>;
   const sp = await searchParams;
   const parsed = orderListQuery.safeParse({ q: one(sp.q), status: one(sp.status), payment: one(sp.payment), from: one(sp.from), to: one(sp.to), page: one(sp.page) });
   const query: OrderListQuery = parsed.success ? parsed.data : { status: 'all', payment: 'all', page: 1, q: undefined, from: undefined, to: undefined };
@@ -23,7 +23,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     .filter(([, v]) => v && v !== 'all') as [string, string][]), page: String(page) })}`;
   return (
     <>
-      <PageHead title="Orders" eyebrow={filtered ? 'Filtered' : 'Newest first'} />
+      <PageHead section="Commerce / Orders" title="Orders" eyebrow={`${filtered ? 'Filtered' : 'Newest first'}${query.page > 1 ? ` · page ${query.page}` : ''}`} />
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
       <form className="actions filters" method="get" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>
@@ -49,25 +49,27 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
         <p className="empty" data-empty="orders">{filtered ? 'No orders match these filters.' : 'No orders yet. Orders appear here once checkout is live.'}</p>
       ) : (
         <div className="table-wrap"><table data-orders-table>
-          <thead><tr><th>Order</th><th>Placed (IST)</th><th>Customer</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Placed (IST)</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr></thead>
           <tbody>{rows.map(o => (
             <tr key={o.id} data-order-row={o.order_number}>
-              <td className="mono"><Link href={`/orders/${o.id}`}>{o.order_number}</Link></td>
-              <td>{formatDateTime(o.created_at)}</td>
+              <td className="mono nowrap"><Link className="row-link" href={`/orders/${o.id}`}>{o.order_number}</Link></td>
               <td>{o.contact_name ?? '—'}{o.contact_email && <div className="note">{o.contact_email}</div>}</td>
+              <td className="nowrap">{formatDateTime(o.created_at)}</td>
               <td className="num">{o.units}<div className="note">{o.lines} line{o.lines === 1 ? '' : 's'}</div></td>
-              <td className="num" data-total>₹{paiseToRupees(o.total_paise)}</td>
+              <td className="num money" data-total>₹{paiseToRupees(o.total_paise)}</td>
               <td>{o.payment_status ? <StatusBadge status={o.payment_status} /> : <span className="note">—</span>}</td>
               <td><StatusBadge status={o.status} /></td>
             </tr>))}
           </tbody>
         </table></div>
       )}
-      <div className="actions" style={{ marginTop: 14 }}>
-        {query.page > 1 && <Link className="btn ghost" href={link(query.page - 1)}>Newer</Link>}
-        {hasNext && <Link className="btn ghost" href={link(query.page + 1)}>Older</Link>}
-        {(query.page > 1 || hasNext) && <span className="note">Page {query.page}</span>}
-      </div>
+      {(query.page > 1 || hasNext) && (
+        <nav className="pager" aria-label="Order pages">
+          {query.page > 1 ? <Link className="btn ghost sm" href={link(query.page - 1)}>← Newer</Link> : <span />}
+          <span className="pager-page">Page {query.page}</span>
+          {hasNext ? <Link className="btn ghost sm" href={link(query.page + 1)}>Older →</Link> : <span />}
+        </nav>
+      )}
     </>
   );
 }
