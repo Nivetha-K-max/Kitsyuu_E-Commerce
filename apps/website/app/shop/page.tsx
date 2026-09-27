@@ -16,13 +16,13 @@ function resolve(idx: Index, catId: string, colId: string): View {
   const trail: { label: string; href?: string }[] = [{ label: 'Store', href: url.home }, { label: 'Shop', href: url.shop() }];
   if (colId) {
     const col = idx.collection(colId);
-    if (!col) return { notFound: true, title: 'Collection not found', text: 'This collection is not part of the prototype catalogue.' };
+    if (!col) return { notFound: true, title: 'Collection not found', text: 'This collection is not part of the KITSYUU catalogue.' };
     return { title: col.label, list: col.products, trail: [...trail, { label: col.label }], sub: null, isNew: colId === 'new-arrivals', tabs: null, base: 'Collection order',
-      aside: col.dataStatus === 'prototype' ? 'A prototype selection for store development. These are not confirmed new arrivals.' : '' };
+      aside: '' };
   }
   if (catId) {
     const cat = idx.cats.get(catId);
-    if (!cat) return { notFound: true, title: 'Category not found', text: 'This category is not part of the prototype catalogue.' };
+    if (!cat) return { notFound: true, title: 'Category not found', text: 'This category is not part of the KITSYUU catalogue.' };
     const top = cat.parent ? idx.cats.get(cat.parent)! : cat;
     const t = cat.parent ? [...trail, { label: top.label, href: url.shop({ category: top.id }) }, { label: cat.label }] : [...trail, { label: top.label }];
     return { title: cat.label, list: idx.inCategory(cat.id), trail: t, sub: cat.parent ? top.label : null, aside: '', isNew: false, base: 'Catalogue order',
@@ -34,7 +34,7 @@ function resolve(idx: Index, catId: string, colId: string): View {
 
 export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
   const q = await searchParams, v = resolve(indexCatalogue(await getCatalogue()), one(q.category), one(q.collection));
-  return { title: v.title, description: 'Browse the prototype KITSYUU catalogue: tops, bottoms and outerwear.' };
+  return { title: v.title, description: 'Browse the KITSYUU catalogue: tops, bottoms and outerwear.' };
 }
 
 export default async function Shop({ searchParams }: { searchParams: SP }) {
@@ -49,7 +49,7 @@ export default async function Shop({ searchParams }: { searchParams: SP }) {
         <div className="st-plp-aside"><p className="st-result-count">{plural(v.list.length, 'product')}</p>{v.aside && <p>{v.aside}</p>}</div>
       </header>
       <ShopResults productIds={v.list.map(p => p.id)} tabs={v.tabs} isNew={v.isNew} base={v.base} initialSort={one(q.sort)} />
-      <p className="st-footnote">Prototype catalogue: names, sizes, prices and descriptions are estimates and not confirmed company data. Prices in INR; tax inclusion not yet confirmed. Images are prototype catalogue cutouts without zoom.</p>
+      <p className="st-footnote">Prices in INR.</p>
     </div>
   );
 }

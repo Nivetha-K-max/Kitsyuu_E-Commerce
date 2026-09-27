@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { RETURNS_POLICY } from '@/lib/store-policy';
 import type { Catalogue } from '@/lib/types';
 import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
 
@@ -23,9 +24,9 @@ export default function Footer({ catalogue }: { catalogue: Catalogue }) {
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
           <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/#story">The story</a></li><li><a href="/#edit">Style studies</a></li><li><a href="/#about">Our world</a></li></ul></nav>
-          <div><h2>Prototype store</h2><p className="st-footer-note">Product names, sizes, prices and descriptions come from a prototype catalogue and are estimates, not confirmed company data. Product images are prototype-quality catalogue cutouts, not final product photography. Photography and commercial details may be updated.</p></div>
+          <div><h2>Orders</h2><p className="st-footer-note" data-returns-policy>{RETURNS_POLICY}</p></div>
         </div>
-        <div className="st-footer-bottom"><span>KITSYUU STORE / PROTOTYPE BUILD</span><a href="#main">Back to top ↑</a></div>
+        <div className="st-footer-bottom"><span>KITSYUU STORE</span><a href="#main">Back to top ↑</a></div>
       </div>
     </footer>
   );

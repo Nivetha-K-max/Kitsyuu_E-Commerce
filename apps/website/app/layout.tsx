@@ -7,8 +7,8 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
 export const metadata: Metadata = {
-  title: { default: 'KITSYUU Store: Japanese streetwear (prototype)', template: '%s | KITSYUU Store' },
-  description: 'Prototype KITSYUU store: Japanese streetwear brought to India. Tops, bottoms and outerwear from the prototype catalogue.',
+  title: { default: 'KITSYUU Store: Japanese streetwear', template: '%s | KITSYUU Store' },
+  description: 'KITSYUU store: Japanese streetwear brought to India. Tops, bottoms and outerwear.',
   icons: { icon: { url: '/assets/kitsyuu-icon.svg', type: 'image/svg+xml' } }
 };
 export const viewport: Viewport = { themeColor: '#101011' };

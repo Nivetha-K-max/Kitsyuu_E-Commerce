@@ -20,14 +20,14 @@ This document describes the platform as of **M7 (core commerce)**. For the list 
 - [Providers and configuration](#providers-and-configuration)
 - [Deployment](#deployment)
 - [Changing the database safely](#changing-the-database-safely)
-- [Decisions that are still open](#decisions-that-are-still-open)
+- [Business decisions](#business-decisions)
 
 ## Principles
 
 - **Business logic lives in `packages/core`.** Pages and server actions validate the input, check the session and call a service. They never query the database for a business operation themselves.
 - **Never trust the browser.** Prices, stock, totals and payment results are always worked out or verified on the server.
 - **External services are adapters.** Payments, shipping, email, storage, tax and discounts sit behind interfaces. A provider plugs in without changing checkout or orders.
-- **No invented business rules.** When a business value has not been decided (for example shipping charges, tax rules, the return window or how long unpaid orders hold stock), the platform leaves it unset and configurable. It does not guess a number.
+- **No invented business rules.** When a business value has not been decided (for example shipping charges or tax rules), the platform leaves it unset and configurable. It does not guess a number. Decided values live in configuration (see [Business decisions](#business-decisions)).
 - **Workflows are configuration.** The order status transitions are declared in one place, per actor. The UI asks the business layer what is allowed.
 - **Every important change is audited** in the same transaction as the change (`audit_logs`, append-only).
 
@@ -151,7 +151,7 @@ sequenceDiagram
 - **Stock.**
   - An order takes its stock when it is created, so two customers cannot buy the last unit (tested with concurrent checkouts).
   - An unpaid order returns its stock through the ledger when it is cancelled, or replaced by a newer checkout of the same cart.
-  - It also returns its stock when its payment hold time runs out, but only if a hold time is configured (see [Decisions](#decisions-that-are-still-open)).
+  - It also returns its stock when its payment hold time runs out: **10 days** (`checkout.payment_window_minutes`, migration 1700). A daily Vercel Cron job (`/api/jobs/expire-orders`, `CRON_SECRET`) does this, and the same sweep runs before each of a customer's checkouts.
 - **Webhooks** accept at most 256 KB. An oversized request is refused on its `Content-Length`, or, without one, as soon as the streamed body passes the limit, so it is never read into memory.
 - **Failure states**, each shown with a clear message: declined payment (retry allowed), payment window closed, provider unavailable (order kept), database unavailable (checkout error page, no internal details), network cut during payment (nothing marked paid), and an ended session (back to login, then to checkout).
 
@@ -180,7 +180,7 @@ stateDiagram-v2
 | staff | Move fulfilment forward. Cancel unpaid orders (their stock is returned, attributed to the staff member). |
 | customer | Cancel their own unpaid order. |
 
-Refunds and returns are not in this workflow yet (M8).
+There are no returns or refunds (all sales are final), so the workflow has no return or refund path.
 
 ## Providers and configuration
 
@@ -190,7 +190,7 @@ Refunds and returns are not in this workflow yet (M8).
 | Shipping | `ShippingProvider` (`pricing.ts`) | `none`: no charge; pages say "Not set up yet" | Flat rate, rate table or carrier |
 | Discounts | `DiscountRule[]` (`pricing.ts`) | No rules | Coupons, sales, customer groups |
 | Tax | `tax_rates` table | One 0 % tax-inclusive prototype rate | Real GST rates (per product / HSN) |
-| Email | `Mailer` (`packages/auth`) | `console`: messages go to the server log | An email provider |
+| Email | `Mailer` (`packages/auth`) | `console` until configured; `resend` adapter built (Resend API). Account emails and an order confirmation when an order is paid | — |
 | Storage | `ObjectStorage` (`packages/core/src/storage.ts`) | Supabase Storage (admin); a local folder in tests | — |
 
 The website chooses providers from its environment (see `apps/website/.env.example`):
@@ -221,15 +221,24 @@ Every live migration follows the same steps (see [database/README.md](../databas
 3. **Snapshot**, then apply with `db:apply -- --no-seed`, then snapshot again and compare, then verify the new objects and permissions.
 4. Migrations are additive and never edited after being applied. Nothing is dropped, reset or truncated.
 
-## Decisions that are still open
+## Business decisions
 
-These are business decisions. The platform supports them but does not invent values:
+Decided (2026-09-27):
 
+| Decision | Where it lives |
+|---|---|
+| Unpaid orders hold their stock for **10 days**, then are cancelled and the stock returned | `settings` → `checkout.payment_window_minutes` = 14400 (migration 1700); daily job |
+| Customers may cancel their own unpaid orders | `ORDER_TRANSITIONS_BY_ACTOR.customer` |
+| A new checkout replaces the customer's older unpaid order | `placeOrder()` in `packages/core/src/checkout.ts` |
+| **No returns or refunds**: all sales are final | `apps/website/lib/store-policy.ts` (footer and checkout, before payment) |
+| **No discounts at launch** | `DiscountRule[]` stays empty; rules can be added later without changing checkout |
+| Email through **Resend** | `MAILER=resend`, `RESEND_API_KEY`, `MAIL_FROM` |
+| Store wording: no "prototype" labels | Store pages and metadata |
+
+Still open (the platform supports them but does not invent values):
+
+- Payment provider going live: Razorpay, to be tested last. Until then `PAYMENT_PROVIDER` stays empty and checkout cannot take orders.
 - Shipping method and charges.
-- Real tax rules. The current rate is a 0 % prototype placeholder.
-- Discount rules.
-- How long an unpaid order holds its stock (`checkout.payment_window_minutes`). Unset means unpaid orders hold stock until they are cancelled. **This must be decided before online checkout is enabled in production:** otherwise unpaid orders could keep stock off sale indefinitely. While no payment provider is configured, orders cannot be placed at all.
-- Whether customers may cancel their own unpaid orders, and whether a new checkout should replace an older unpaid one (both are how M7 behaves today, via the workflow and checkout service).
-- The return and refund policy (M8).
-- Which payment provider goes live, and when (Razorpay credentials).
-- An email provider (no order emails are sent yet).
+- Real tax rules. The current rate is a 0 % placeholder; this also decides whether shipping is taxed.
+
+Note: even with no refunds, money that arrives for an order that was already cancelled (for example a payment completed after the 10-day hold) is not a sale; such payments are flagged for staff (`payment.captured_after_cancel`).

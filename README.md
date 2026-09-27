@@ -7,7 +7,7 @@ KITSYUU is an **e-commerce store and an ERP / business-management back office** 
 - shared server packages holding the business logic;
 - one PostgreSQL database.
 
-> **Prototype data.** Product names, sizes, prices and descriptions come from a prototype catalogue and are estimates, not confirmed company data. Product images are prototype-quality cutouts. Business rules that haven't been decided yet (shipping charges, tax rules, discounts, return window, how long unpaid orders hold stock) are deliberately left **unset and configurable**, never guessed.
+> **Business rules.** Decided rules are configuration: unpaid orders hold their stock for 10 days, customers may cancel their own unpaid orders, a new checkout replaces an older unpaid one, and all sales are final (no returns or refunds). Rules not decided yet (payment provider, shipping charges, tax rules) are left **unset and configurable**, never guessed. There are no discounts at launch.
 
 ![Store home, desktop](docs/screenshots/desktop-home.jpg)
 
@@ -35,7 +35,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M5 | Landing and store combined on one `/` homepage | Branch `m5-restore-landing` |
 | M6 | Customer accounts on the platform: signup, email verification, login, sessions, password reset, addresses, order history | Branch `m6-customer-auth`; database migrations live |
 | M7 | Core commerce: database cart and wishlist, server-side pricing, checkout, order creation with stock reservation, order workflow, provider-neutral payments | Branch `m7-commerce`; migration 1600 not yet applied |
-| M8 | ERP: customers, payments, fulfilment, returns/refunds foundations, reports, settings | Next |
+| M8 | ERP: customers, payments, fulfilment, reports, settings (no returns/refunds: all sales are final) | Next |
 | M9 | Production hardening: observability, performance, security review | Planned |
 
 ## Features
@@ -163,8 +163,9 @@ Providers and secrets come from each app's environment. Business settings come f
 | Shipping | `ShippingProvider` in `apps/website/lib/commerce.ts` | Not set up: no charge, shown as "Not set up yet" |
 | Discounts | `DiscountRule[]` in `apps/website/lib/commerce.ts` | None |
 | Tax | `tax_rates` table | One 0 % tax-inclusive prototype rate |
-| Unpaid-order hold time | `settings` → `checkout.payment_window_minutes` | Unset (no automatic expiry) |
-| Email | `MAILER` | `console` (messages go to the server log) |
+| Unpaid-order hold time | `settings` → `checkout.payment_window_minutes` (migration 1700) | 10 days (14400 minutes). A daily job (`vercel.json`, `CRON_SECRET`) cancels expired unpaid orders and returns their stock |
+| Returns and refunds | `apps/website/lib/store-policy.ts` | None: all sales are final (shown in the footer and at checkout) |
+| Email | `MAILER` + `RESEND_API_KEY`, `MAIL_FROM` | `resend` (Resend) once the account and sending domain exist; `console` (server log) until then. Account emails and order confirmations |
 | Customer session lifetime, login limits | `settings` → `auth.*` | Configured |
 
 ## Testing
@@ -173,8 +174,8 @@ Every suite runs against a **throwaway local database**, never against Supabase.
 
 | Command | Covers | Checks |
 |---|---|---|
-| `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, orders) and the admin browser tests | 6 core suites (88 tests) and 234 browser checks, with database safety checks before and after each file |
-| `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 97 checks |
+| `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, orders) and the admin browser tests | 6 core suites (90 tests) and 234 browser checks, with database safety checks before and after each file |
+| `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 108 checks |
 | `npm run test:website` | Storefront: catalogue, product pages, cart, wishlist, search, sorting, guest checkout (needs `node server.cjs` on :3000 and the website on :3001) | 133 checks |
 
 The browser tests drive headless Chrome over the DevTools Protocol, with no test dependencies. They run one at a time because they share a Chrome profile.
@@ -203,9 +204,9 @@ KITSYUU-Website2/
 ```
 
 ## Future improvements
-- **M8 ERP**: customer management, payments view and reconciliation, fulfilment, returns and refunds (once the return policy is decided), reports, and settings screens for the configurable business values.
-- **Business decisions to plug in**: shipping method and charges, real GST rates per product, discount rules, the unpaid-order hold time, and the payment provider going live (Razorpay credentials).
-- **Email provider** for account and order emails (the mailer interface is ready).
+- **M8 ERP**: customer management, payments view and reconciliation, fulfilment, reports, and settings screens for the configurable business values.
+- **Business decisions to plug in later**: shipping method and charges, real GST rates per product, discount rules (none at launch), and the payment provider going live (Razorpay, tested last).
+- **Email going live**: create the Resend account, verify the sending domain, set `MAILER=resend`, `RESEND_API_KEY` and `MAIL_FROM`.
 - **M9 hardening**: structured logging and request correlation, monitoring, performance budgets, rate limiting on checkout, and a scheduled job for unpaid-order expiry once a hold time is set.
 - **Official photography and confirmed product data** (see `PRODUCT-DATA.md`).
 - **Continuous integration** running the test suites on every branch.

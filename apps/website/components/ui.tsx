@@ -15,13 +15,13 @@ export function ComingSoon({ p, label = false }: { p: Product; label?: boolean }
     <div className="st-soon" {...a11y}>
       <img className="st-soon-mark" src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} />
       <span className="st-soon-title">Photo<br />coming soon</span>
-      <span className="st-soon-label">KITSYUU / PROTOTYPE</span>
+      <span className="st-soon-label">KITSYUU</span>
     </div>
   );
 }
 
 export function Price({ value }: { value: number }) {
-  return <p className="st-price">{formatMoney(value)}<small aria-hidden="true">EST.</small><span className="sr-only">, estimated prototype price</span></p>;
+  return <p className="st-price">{formatMoney(value)}</p>;
 }
 
 export type CardOpts = { level?: 2 | 3; isNew?: boolean; index?: number };
@@ -80,7 +80,7 @@ export function NotFoundBlock({ title, text }: { title: string; text: string }) 
   return (
     <div className="st-wrap">
       <section className="st-empty">
-        <p className="eyebrow"><span></span>NOT IN THE PROTOTYPE CATALOGUE</p>
+        <p className="eyebrow"><span></span>NOT IN THE CATALOGUE</p>
         <h1>{title}</h1><p>{text}</p>
         <Link className="button" href={url.shop()}>Shop all products</Link>
       </section>

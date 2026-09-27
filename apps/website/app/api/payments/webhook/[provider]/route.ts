@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { handlePaymentWebhook } from '@kitsyuu/core';
 import { paymentProvider } from '@/lib/commerce';
+import { sendOrderConfirmation } from '@/lib/order-mail';
 import { db } from '@/lib/server';
 
 /* Payment provider notifications (webhooks), e.g. /api/payments/webhook/razorpay. The provider authenticates the request
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   if (raw === null) return NextResponse.json({ ok: false }, { status: 413 });
   try {
     const r = await handlePaymentWebhook(db(), provider, raw, name => req.headers.get(name));
+    if (r.outcome === 'paid' && r.orderNumber) await sendOrderConfirmation(r.orderNumber);
     return NextResponse.json({ ok: r.status === 200 }, { status: r.status });
   } catch (e) {
     console.error('[payments webhook]', e);

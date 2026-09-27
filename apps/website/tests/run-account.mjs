@@ -57,8 +57,9 @@ try {
     NEXT_PUBLIC_SUPABASE_URL: website.NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: website.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL, MAILER: 'console', LEGACY_SUPABASE_AUTH: 'off',
     PAYMENT_PROVIDER: '', PAYMENTS_ALLOW_TEST_PROVIDER: '', PAYMENTS_TEST_SECRET: '',
-    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', JOBS_SECRET: ''};
-  const log = await startServer(PORT, 'account-server.log', {...base, SITE_URL: BASE,
+    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: ''};
+  const cronSecret = randomBytes(24).toString('hex');
+  const log = await startServer(PORT, 'account-server.log', {...base, SITE_URL: BASE, CRON_SECRET: cronSecret,
     PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on', PAYMENTS_TEST_SECRET: randomBytes(32).toString('hex')});
   const rzpLog = await startServer(3013, 'razorpay-server.log', {...base, SITE_URL: RZP_BASE, PAYMENT_PROVIDER: 'razorpay',
     RAZORPAY_KEY_ID: TEST_KEY_ID, RAZORPAY_KEY_SECRET: keySecret, RAZORPAY_WEBHOOK_SECRET: webhookSecret,
@@ -67,7 +68,7 @@ try {
     WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL.replace(/@localhost:\d+\//, '@localhost:1/')});
   const refusedLog = await startServer(3015, 'test-refused-server.log', {...base, SITE_URL: 'http://localhost:3015', PAYMENT_PROVIDER: 'test'});
   await startServer(3016, 'no-provider-server.log', {...base, SITE_URL: 'http://localhost:3016'});
-  const testEnv = {TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
+  const testEnv = {CRON_SECRET: cronSecret, TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
     BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL: rzp.url, RZP_WEBHOOK_SECRET: webhookSecret, SERVER_LOG: log, RZP_SERVER_LOG: rzpLog, KITSYUU_DB_URL: env.KITSYUU_DB_URL};
   for (const f of ['account', 'commerce']) {
     if (process.env.ONLY && process.env.ONLY !== f) continue;

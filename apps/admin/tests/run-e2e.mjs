@@ -59,9 +59,9 @@ try {
     // orders.test.mjs: 8 fixture orders (2 customers, 11 units taken), then two unpaid ones cancelled (+3 back).
     // m4-catalogue.test.mjs: creates 1 product with 2 sizes (+5 units restocked) and keeps 2 of its 3 uploaded images.
     // customer.test.mjs (M6): 5 customer accounts (asha, ravi, throttle, shared-ip, legacy) and 2 fixture orders.
-    // commerce.test.mjs (M7): 2 customers, 12 checkout orders; 13 units net out of stock (sales held by paid / open orders,
+    // commerce.test.mjs (M7): 2 customers, 13 checkout orders; 15 units net out of stock (sales held by paid / open orders,
     // one test correction of -9); the ledger check proves every one of them is in the ledger.
-    const expect = f === 'commerce.test.mjs' ? {orders: 12, customers: 2, units: 1087}
+    const expect = f === 'commerce.test.mjs' ? {orders: 13, customers: 2, units: 1085}
       : f === 'orders.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 3}
       : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105}
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2} : {};

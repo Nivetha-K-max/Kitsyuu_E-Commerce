@@ -26,6 +26,8 @@ const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.string
     aria-invalid marks from an earlier attempt are therefore never mistaken for the new answer. */
 const submit = async (formSel = MAIN_FORM) => {
   const start = await ev('location.href'), sel = JSON.stringify(formSel);
+  // Wait until React has hydrated the form (its handlers are attached); a click before that is a plain browser submission.
+  await until(`(()=>{const f=document.querySelector(${sel});return !!f && Object.keys(f).some(k=>k.startsWith('__reactProps'))})()`, 20000);
   await ev(`(()=>{const f=document.querySelector(${sel});window.__submitSeen=false;const o=new MutationObserver(()=>{if(f.hasAttribute('aria-busy'))window.__submitSeen=true});
     o.observe(f,{attributes:true,attributeFilter:['aria-busy']});f.querySelector('button[type=submit]').click();return true})()`);
   await until(`location.href !== ${JSON.stringify(start)} || (window.__submitSeen === true && !document.querySelector(${sel})?.hasAttribute('aria-busy'))`, 20000);

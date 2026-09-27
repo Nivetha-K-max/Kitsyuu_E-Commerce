@@ -35,6 +35,7 @@ export {
   placeOrder, preparePayment, submitPaymentResult, cancelOrderByCustomer, expireUnpaidOrders, handlePaymentWebhook,
   applyPaymentResult, checkoutSettings, customerOrderActions, currentPaymentSession, type PaymentStart, type PaymentOutcome,
 } from './checkout.ts';
+export { orderConfirmationEmail } from './notifications.ts';
 export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus } from './payments/provider.ts';
 export { testPaymentProvider, type TestPaymentProvider } from './payments/test-provider.ts';
 export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';

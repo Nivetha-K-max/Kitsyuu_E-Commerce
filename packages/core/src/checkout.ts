@@ -307,7 +307,7 @@ export async function expireUnpaidOrders(db: Db, providers: Record<string, Payme
 /** A provider's notification. Authenticated by the provider; each event id is stored once (a repeated delivery is
     acknowledged without doing anything); a payment in it is applied to the locked order. */
 export async function handlePaymentWebhook(db: Db, provider: PaymentProvider, rawBody: string, header: (name: string) => string | null)
-  : Promise<{ status: 200 | 401 | 404; outcome: string }> {
+  : Promise<{ status: 200 | 401 | 404; outcome: string; orderNumber?: string }> {
   if (!provider.parseWebhook) return { status: 404, outcome: 'not_supported' };
   const event = provider.parseWebhook(rawBody, header);
   if (!event) return { status: 401, outcome: 'not_verified' };
@@ -316,14 +316,14 @@ export async function handlePaymentWebhook(db: Db, provider: PaymentProvider, ra
     const stored = await tx.insertInto('payment_events').values({ id: eventKey, provider: provider.code, type: event.type, payload: rawBody })
       .onConflict(oc => oc.column('id').doNothing()).returning('id').executeTakeFirst();
     if (!stored) return { status: 200 as const, outcome: 'duplicate' };
-    let outcome = 'ignored', orderId: string | null = null;
+    let outcome = 'ignored', orderId: string | null = null, orderNumber: string | undefined;
     if (event.payment) {
       const s = await tx.selectFrom('payments').select('order_id').where('provider', '=', provider.code).where('provider_order_id', '=', event.payment.sessionRef).executeTakeFirst();
       const o = s && await lockOrder(tx, { id: s.order_id });
       if (!o) outcome = 'unknown_order';
-      else { orderId = o.id; outcome = await applyPaymentResult(tx, o, provider.code, event.payment, { source: 'webhook' }); }
+      else { orderId = o.id; orderNumber = o.order_number; outcome = await applyPaymentResult(tx, o, provider.code, event.payment, { source: 'webhook' }); }
     }
     await tx.updateTable('payment_events').set({ processed_at: new Date(), outcome, order_id: orderId }).where('id', '=', eventKey).execute();
-    return { status: 200 as const, outcome };
+    return { status: 200 as const, outcome, orderNumber };
   });
 }

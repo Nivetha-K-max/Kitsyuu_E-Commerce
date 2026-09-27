@@ -23,6 +23,8 @@ const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.string
 /** Clicks the form's submit button and waits for THIS submission to start and finish. */
 const submit = async formSel => {
   const sel = JSON.stringify(formSel), start = await ev('location.pathname + location.search');
+  // Wait until React has hydrated the form (its handlers are attached); a click before that is a plain browser submission.
+  await until(`(()=>{const f=document.querySelector(${sel});return !!f && Object.keys(f).some(k=>k.startsWith('__reactProps'))})()`, 20000);
   // A MutationObserver set up before the click records that the form went busy, however briefly: a fast (or late) answer
   // is never mistaken for "nothing happened yet".
   await ev(`(()=>{const f=document.querySelector(${sel}),btn=document.querySelector(${JSON.stringify(formSel + ' button[type=submit]')});if(!btn)throw new Error('no submit button for ' + ${sel});

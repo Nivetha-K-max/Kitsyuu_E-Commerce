@@ -3,6 +3,7 @@
    customer saw (expectedTotalPaise); the random key makes a double submit return the same order. */
 import Link from 'next/link';
 import { placeOrderAction } from '@/app/checkout/actions';
+import { RETURNS_POLICY } from '@/lib/store-policy';
 import { ActionForm, Hidden, RadioGroup } from './forms';
 
 export type AddressOption = { id: string; label: string; isDefault: boolean };
@@ -13,7 +14,7 @@ export default function CheckoutForm({ addresses, idempotencyKey, expectedTotalP
   return (
     <ActionForm action={placeOrderAction} submitLabel={`Place order · ${totalLabel}`} pendingLabel="Placing your order…" id="st-checkout-form"
       className="st-checkout-form" label="Checkout"
-      footer={<p className="st-note">Next you pay securely. Your items are held for you while the order waits for payment.</p>}>
+      footer={<><p className="st-note" data-returns-policy>{RETURNS_POLICY}</p><p className="st-note">Next you pay securely. Your items are held for you while the order waits for payment.</p></>}>
       <Hidden name="idempotencyKey" value={idempotencyKey} />
       <Hidden name="expectedTotalPaise" value={String(expectedTotalPaise)} />
       <div className="st-form-group">

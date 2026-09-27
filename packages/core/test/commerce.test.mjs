@@ -185,7 +185,7 @@ test('place order: server-side prices, tamper checks, address ownership, stock t
   assert.equal(again.orderNumber, first.orderNumber); assert.equal(again.reused, true, 'the same checkout form returns the same order');
   const o = await orderRow(first.orderNumber);
   assert.equal(o.status, 'pending_payment'); assert.equal(o.customer_id, asha.customerId); assert.equal(o.user_id, null);
-  assert.equal(o.total_paise, cart.totals.totalPaise); assert.equal(o.payment_expires_at, null, 'no payment hold time is configured, so none is set');
+  assert.equal(o.total_paise, cart.totals.totalPaise); assert.ok(Math.abs(o.payment_expires_at - Date.now() - 10 * 86_400_000) < 3_600_000, 'the decided hold time (10 days, migration 1700) is applied');
   assert.equal(o.pricing.tax.code, 'PROTOTYPE_INCLUSIVE'); assert.equal(o.pricing.shipping.configured, false);
   const items = await owner.selectFrom('order_items').selectAll().where('order_id', '=', o.id).execute();
   assert.deepEqual(items.map(i => [i.sku, i.qty, i.unit_price_paise * i.qty === i.line_total_paise]), [[v.sku, 2, true]]);
@@ -279,26 +279,33 @@ test('customer cancellation returns the stock through the ledger; a newer checko
   await cancelOrderByCustomer(db, asha, second.orderNumber, ctx);
 });
 
-test('payment hold time: unset → orders never expire on their own; when configured, unpaid orders past it are cancelled', async () => {
+test('payment hold time: 10 days as decided (migration 1700); past it unpaid orders are cancelled; unset → no expiry', async () => {
   const v = await variant('ky-proto-015');
-  const a = await checkout(ravi, raviAddress, [{productId: 'ky-proto-015', size: v.size, qty: 1}]);
-  await owner.updateTable('orders').set({created_at: new Date(Date.now() - 86_400_000)}).where('order_number', '=', a.orderNumber).execute();
-  assert.deepEqual(await expireUnpaidOrders(db, {test: testPay}), {expired: 0, paid: 0, skipped: 0});
-  assert.equal((await orderRow(a.orderNumber)).status, 'pending_payment');
-  await cancelOrderByCustomer(db, ravi, a.orderNumber, ctx);
-  await owner.insertInto('settings').values({key: 'checkout.payment_window_minutes', value: JSON.stringify(15), description: 'test', is_public: false}).execute();
+  const seeded = await owner.selectFrom('settings').select('value').where('key', '=', 'checkout.payment_window_minutes').executeTakeFirstOrThrow();
+  assert.equal(Number(seeded.value), 14400, 'the business decision: 10 days = 14400 minutes');
+  const b = await checkout(ravi, raviAddress, [{productId: 'ky-proto-015', size: v.size, qty: 1}]);
+  const ob = await orderRow(b.orderNumber);
+  assert.ok(Math.abs(ob.payment_expires_at - Date.now() - 10 * 86_400_000) < 3_600_000, 'items are held for 10 days');
+  assert.deepEqual(await expireUnpaidOrders(db, {test: testPay}), {expired: 0, paid: 0, skipped: 0}, 'nothing expires before the 10 days');
+  await preparePayment(db, testPay, ravi, b.orderNumber);
+  await owner.updateTable('orders').set({payment_expires_at: new Date(Date.now() - 1000)}).where('id', '=', ob.id).execute();
+  assert.deepEqual(await expireUnpaidOrders(db, {}), {expired: 0, paid: 0, skipped: 1}, 'without its provider the order is left alone');
+  assert.deepEqual(await expireUnpaidOrders(db, {test: testPay}), {expired: 1, paid: 0, skipped: 0});
+  assert.equal((await orderRow(b.orderNumber)).status, 'cancelled');
+  assert.equal(await stockOf(v.id), 10);
+  assert.equal(await audits(ob.id, 'order.expired'), 1);
+  // With the setting removed, orders get no expiry and are never cancelled on their own.
+  await owner.deleteFrom('settings').where('key', '=', 'checkout.payment_window_minutes').execute();
   try {
-    const b = await checkout(ravi, raviAddress, [{productId: 'ky-proto-015', size: v.size, qty: 1}]);
-    const ob = await orderRow(b.orderNumber);
-    assert.ok(ob.payment_expires_at > new Date(Date.now() + 14 * 60_000), 'the configured hold time is applied');
-    await preparePayment(db, testPay, ravi, b.orderNumber);
-    await owner.updateTable('orders').set({payment_expires_at: new Date(Date.now() - 1000)}).where('id', '=', ob.id).execute();
-    assert.deepEqual(await expireUnpaidOrders(db, {}), {expired: 0, paid: 0, skipped: 1}, 'without its provider the order is left alone');
-    assert.deepEqual(await expireUnpaidOrders(db, {test: testPay}), {expired: 1, paid: 0, skipped: 0});
-    assert.equal((await orderRow(b.orderNumber)).status, 'cancelled');
-    assert.equal(await stockOf(v.id), 10);
-    assert.equal(await audits(ob.id, 'order.expired'), 1);
-  } finally { await owner.deleteFrom('settings').where('key', '=', 'checkout.payment_window_minutes').execute(); }
+    const a = await checkout(ravi, raviAddress, [{productId: 'ky-proto-015', size: v.size, qty: 1}]);
+    assert.equal((await orderRow(a.orderNumber)).payment_expires_at, null);
+    await owner.updateTable('orders').set({created_at: new Date(Date.now() - 30 * 86_400_000)}).where('order_number', '=', a.orderNumber).execute();
+    assert.deepEqual(await expireUnpaidOrders(db, {test: testPay}), {expired: 0, paid: 0, skipped: 0});
+    await cancelOrderByCustomer(db, ravi, a.orderNumber, ctx);
+  } finally {
+    await owner.insertInto('settings').values({key: 'checkout.payment_window_minutes', value: seeded.value, description: 'restored after test', is_public: false})
+      .onConflict(oc => oc.column('key').doNothing()).execute();
+  }
 });
 
 // ---------------------------------------------------------------- Razorpay adapter (fake Razorpay)
@@ -328,7 +335,7 @@ test('Razorpay webhooks: signature checked, each event once, late failure never 
   const w = rzpFake.webhook('payment.captured', payment);
   assert.deepEqual(await handlePaymentWebhook(db, rzp, w.rawBody, name => name === 'x-razorpay-signature' ? 'b'.repeat(64) : w.eventId), {status: 401, outcome: 'not_verified'});
   assert.deepEqual(await handlePaymentWebhook(db, rzp, w.rawBody.replace('"captured"', '"captured" '), hdr(w)), {status: 401, outcome: 'not_verified'}, 'an altered body is refused');
-  assert.deepEqual(await handlePaymentWebhook(db, rzp, w.rawBody, hdr(w)), {status: 200, outcome: 'paid'});
+  assert.deepEqual(await handlePaymentWebhook(db, rzp, w.rawBody, hdr(w)), {status: 200, outcome: 'paid', orderNumber});
   assert.deepEqual(await handlePaymentWebhook(db, rzp, w.rawBody, hdr(w)), {status: 200, outcome: 'duplicate'});
   const late = rzpFake.webhook('payment.failed', {...payment, status: 'failed'});
   await handlePaymentWebhook(db, rzp, late.rawBody, hdr(late));
@@ -340,7 +347,7 @@ test('Razorpay webhooks: signature checked, each event once, late failure never 
   const cs = await preparePayment(db, rzp, ravi, c.orderNumber);
   await cancelOrderByCustomer(db, ravi, c.orderNumber, ctx);
   const late2 = rzpFake.webhook('payment.captured', rzpFake.pay(cs.client.razorpayOrderId, 'success').payment);
-  assert.deepEqual(await handlePaymentWebhook(db, rzp, late2.rawBody, hdr(late2)), {status: 200, outcome: 'needs_refund'});
+  assert.deepEqual(await handlePaymentWebhook(db, rzp, late2.rawBody, hdr(late2)), {status: 200, outcome: 'needs_refund', orderNumber: c.orderNumber});
   const oc = await orderRow(c.orderNumber);
   assert.equal(oc.status, 'cancelled'); assert.equal(oc.payment_status, 'paid');
   assert.equal(await audits(oc.id, 'payment.captured_after_cancel'), 1);
@@ -361,4 +368,47 @@ test('ledger integrity: every size’s stock equals the sum of its ledger rows',
   const bad = await owner.selectFrom('product_variants as v').select('v.sku')
     .where(sql`v.stock_qty`, '<>', sql`(select coalesce(sum(m.delta), 0) from inventory_movements m where m.variant_id = v.id)`).execute();
   assert.deepEqual(bad, []);
+});
+
+// ---------------------------------------------------------------- email (Resend adapter + order confirmation)
+test('Resend mailer: sends Resend’s API format with the key only in the header; errors never contain the key', async () => {
+  const http = await import('node:http');
+  const seen = [];
+  let answer = 200;
+  const srv = http.createServer(async (req, res) => {
+    let body = ''; for await (const c of req) body += c;
+    seen.push({method: req.method, url: req.url, auth: req.headers.authorization, body: JSON.parse(body)});
+    res.writeHead(answer, {'content-type': 'application/json'}); res.end(answer === 200 ? '{"id":"email_test"}' : '{"message":"invalid from"}');
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const {resendMailer, createMailer} = await import('@kitsyuu/auth');
+  const key = 're_TestKey_' + randomBytes(8).toString('hex');
+  try {
+    const m = resendMailer({apiKey: key, from: 'KITSYUU <orders@example.com>', apiBase: `http://127.0.0.1:${srv.address().port}`});
+    await m.send({to: 'asha@example.com', subject: 'Hello', text: 'Line 1\nLine 2'});
+    assert.deepEqual(seen[0], {method: 'POST', url: '/emails', auth: `Bearer ${key}`,
+      body: {from: 'KITSYUU <orders@example.com>', to: ['asha@example.com'], subject: 'Hello', text: 'Line 1\nLine 2'}});
+    answer = 422;
+    await assert.rejects(m.send({to: 'x@example.com', subject: 's', text: 't'}), e => /Resend answered 422/.test(e.message) && !e.message.includes(key));
+  } finally { await new Promise(r => srv.close(r)); }
+  assert.throws(() => resendMailer({apiKey: 'REPLACE_ME', from: 'a@b.co'}), /RESEND_API_KEY/);
+  assert.throws(() => resendMailer({apiKey: key, from: 'not an address'}), /MAIL_FROM/);
+  assert.throws(() => createMailer('smtp'), /Unknown MAILER/);
+  assert.equal(createMailer('console').kind, 'console');
+});
+
+test('order confirmation email: only for a paid order; facts only (no shipment or refund promises); includes the policy line', async () => {
+  const {orderConfirmationEmail} = await import('@kitsyuu/core');
+  const {orderNumber} = await checkout(asha, ashaAddress, [{productId: 'ky-proto-020', size: (await variant('ky-proto-020')).size, qty: 2}]);
+  const opts = {orderUrl: `http://shop.test/account/orders/${orderNumber}`, policy: 'All sales are final.'};
+  assert.equal(await orderConfirmationEmail(db, orderNumber, opts), null, 'an unpaid order gets no confirmation');
+  assert.equal(await payWithTest(asha, orderNumber, 'success'), 'paid');
+  const m = await orderConfirmationEmail(db, orderNumber, opts);
+  const o = await orderRow(orderNumber);
+  assert.equal(m.to, 'asha.m7@test.local');
+  assert.match(m.subject, new RegExp(orderNumber));
+  assert.ok(m.text.includes(`× 2`) && m.text.includes('12 Test Street') && m.text.includes('All sales are final.') && m.text.includes(opts.orderUrl));
+  const {paiseToRupees} = await import('@kitsyuu/contracts');
+  assert.ok(m.text.includes(`Total paid: ₹${paiseToRupees(o.total_paise)}`), 'the total paid, as recorded on the order');
+  assert.ok(!/let you know|notify|refund|deliver(ed)? (by|within)|ships? (by|within)/i.test(m.text), 'no promises');
 });

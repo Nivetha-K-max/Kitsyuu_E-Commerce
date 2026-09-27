@@ -64,12 +64,12 @@ export default async function StoreHome() {
 
       <section className="st-section" aria-labelledby="st-ft-title"><div className="st-wrap">
         <div className="section-label"><span>04 — FEATURED</span><span data-count="featured">{plural(featured.length, 'piece')}</span></div>
-        <div className="st-section-head"><h2 id="st-ft-title">Featured<br /><em>pieces.</em></h2><p>A prototype selection from the catalogue, chosen for store development.</p></div>
+        <div className="st-section-head"><h2 id="st-ft-title">Featured<br /><em>pieces.</em></h2><p>A selection from the catalogue.</p></div>
         <ProductGrid list={featured} pathOf={idx.categoryPath} opts={(_, i) => ({ index: i + 1 })} />
       </div></section>
 
       <section className="st-section" aria-labelledby="st-ow-title"><div className="st-wrap st-feature">
-        <div className="st-feature-copy"><p className="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br /><em>closures.</em></h2><p>Cropped and stand-collar jackets from the prototype catalogue.</p><Link className="button button-outline" href={url.shop({ category: 'outerwear' })}>Shop outerwear</Link></div>
+        <div className="st-feature-copy"><p className="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br /><em>closures.</em></h2><p>Cropped and stand-collar jackets from the catalogue.</p><Link className="button button-outline" href={url.shop({ category: 'outerwear' })}>Shop outerwear</Link></div>
         <ul className="st-feature-items">{outer.map(p => <ProductCard key={p.id} p={p} categoryPath={idx.categoryPath(p)} />)}</ul>
       </div></section>
 

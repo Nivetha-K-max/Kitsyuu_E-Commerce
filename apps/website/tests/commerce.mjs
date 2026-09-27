@@ -8,7 +8,9 @@ import {createHmac} from 'node:crypto';
 import pg from 'pg';
 import {launch} from './cdp.mjs';
 
-const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG} = process.env;
+const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG} = process.env;
+const RETURNS_POLICY = 'All sales are final. We do not accept returns or offer refunds.';
+const mailsAbout = (log, orderNumber) => fs.readFileSync(log, 'utf8').split(`subject="Your KITSYUU order ${orderNumber} is confirmed"`).length - 1;
 if (!/@localhost[:/]/.test(KITSYUU_DB_URL || '')) throw new Error('commerce tests only run against a local database');
 const out = []; const ok = (n, p, x = '') => { const l = `${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`; out.push(l); console.log(l); };
 const w = ms => new Promise(r => setTimeout(r, ms));
@@ -28,6 +30,8 @@ const loc = () => ev('location.pathname + location.search');
 const MAIN_FORM = 'main form:not(:has([data-logout]))';
 const submit = async (formSel = MAIN_FORM) => {
   const start = await ev('location.href'), sel = JSON.stringify(formSel);
+  // Wait until React has hydrated the form (its handlers are attached); a click before that is a plain browser submission.
+  await until(`(()=>{const f=document.querySelector(${sel});return !!f && Object.keys(f).some(k=>k.startsWith('__reactProps'))})()`, 20000);
   await ev(`(()=>{const f=document.querySelector(${sel});window.__submitSeen=false;const o=new MutationObserver(()=>{if(f.hasAttribute('aria-busy'))window.__submitSeen=true});
     o.observe(f,{attributes:true,attributeFilter:['aria-busy']});f.querySelector('button[type=submit]').click();return true})()`);
   await until(`location.href !== ${JSON.stringify(start)} || (window.__submitSeen === true && !document.querySelector(${sel})?.hasAttribute('aria-busy'))`, 20000);
@@ -123,6 +127,8 @@ try {
     await fill('main [name=city]', 'Bengaluru'); await fill('main [name=state]', 'Karnataka'); await fill('main [name=pin]', '560001');
     await submit();
     ok(`[${tag}] adding an address returns to checkout with it selected`, await until(`location.pathname === '/checkout' && !!document.querySelector('#st-checkout-form input[name=addressId]:checked')`));
+    ok(`[${tag}] checkout shows the returns policy before payment (and the footer states it)`, (await text('#st-checkout-form [data-returns-policy]')) === RETURNS_POLICY
+      && (await text('footer [data-returns-policy]')) === RETURNS_POLICY);
 
     // ---------- tampering and stale totals ----------
     await ev(`(document.querySelector('#st-checkout-form input[name=expectedTotalPaise]').value='100',true)`);
@@ -164,11 +170,13 @@ try {
     ok(`[${tag}] the order is paid in the database; the cart is closed`, orders[0].status === 'paid' && orders[0].payment_status === 'paid'
       && (await until(`document.querySelector('[data-badge=cart]')?.textContent === '0'`)));
     ok(`[${tag}] confirmation page: no horizontal overflow`, (await overflow()) <= 0);
+    ok(`[${tag}] order confirmation email sent once, to the customer`, mailsAbout(SERVER_LOG, orderNumber) === 1
+      && fs.readFileSync(SERVER_LOG, 'utf8').includes(`[mail:begin] to=${email} subject="Your KITSYUU order ${orderNumber} is confirmed"`));
     // Customer texts state facts only: no notification promise (no email/notification service yet), no claim that nothing is processed.
     const confirmText = await ev('document.body.innerText');
     ok(`[${tag}] confirmation promises no shipment notification`, /Your order is confirmed./.test(confirmText) && !/let you know|notify|we will (email|send)/i.test(confirmText));
     ok(`[${tag}] footer no longer says that orders, payments or sign-ups are not processed`, !/No orders, payments or sign-ups are processed/i.test(confirmText)
-      && /prototype catalogue/i.test(await text('footer')));
+      && !/prototype/i.test(await text('footer')) && (await text('footer [data-returns-policy]')) === RETURNS_POLICY);
     await b.shot(`m7-${tag}-confirmation.png`, true);
     await go(`/checkout/pay/${orderNumber}`, '!!document.querySelector("main h1")');
     ok(`[${tag}] a paid order cannot be paid again (sent to its confirmation)`, (await loc()) === `/checkout/complete/${orderNumber}`);
@@ -272,6 +280,7 @@ try {
   ok('[razorpay] signed webhook marks the order paid', (await hook(sig)).status === 200 && (await ordersOf(email)).find(o => o.order_number === down).status === 'paid');
   ok('[razorpay] the same event again is acknowledged and ignored', (await hook(sig)).status === 200
     && (await q(`select count(*)::int n from payments p join orders o on o.id = p.order_id where o.order_number = $1 and p.status = 'captured'`, [down]))[0].n === 1);
+  ok('[razorpay] an order paid by the webhook alone gets exactly one confirmation email (not one per delivery)', mailsAbout(RZP_SERVER_LOG, down) === 1);
   // Oversized webhook bodies are refused before being read into memory, with or without a Content-Length.
   const big = 'x'.repeat(300 * 1024);
   const declared = await fetch(`${RZP_BASE}/api/payments/webhook/razorpay`, {method: 'POST', headers: {'content-type': 'application/json', 'x-razorpay-signature': sig, 'x-razorpay-event-id': 'evt_browser000002'}, body: big});
@@ -294,6 +303,27 @@ try {
   ok('[config] the refused test provider is logged as an error on that server', /PAYMENT_PROVIDER=test is refused in production/.test(fs.readFileSync(TEST_REFUSED_LOG, 'utf8')));
   ok('[config] a production build with the explicit test flag logs a loud warning', /WARNING: the TEST payment provider is enabled in a production build/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
   ok('[config] the example environment leaves the payment provider unset', /^PAYMENT_PROVIDER=s*$/m.test(fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8')));
+
+  // ---------- no prototype wording on the store ----------
+  for (const p of ['/shop', `/product/${P1.slug}`, '/cart']) {
+    await go(p, '!!document.querySelector("main h1")');
+    const body = await ev('document.body.innerText + " " + document.title');
+    ok(`[wording] ${p}: no "prototype" or estimated-price wording`, !/prototype|EST.|estimated|not confirmed company data/i.test(body), (body.match(/.{0,40}(prototype|EST.|estimated).{0,40}/i) || [''])[0]);
+  }
+
+  // ---------- scheduled expiry of unpaid orders (10-day hold, daily job) ----------
+  await addToCart(BASE, P2, 1);
+  const unpaid = await placeOrder(BASE);
+  const [held] = await q(`select id, payment_expires_at from orders where order_number = $1`, [unpaid]);
+  ok('[expiry] a new unpaid order holds its stock for 10 days', Math.abs(new Date(held.payment_expires_at) - Date.now() - 10 * 86_400_000) < 3_600_000);
+  const stockHeld = await stock(P2.vid);
+  await q(`update orders set payment_expires_at = now() - interval '1 minute' where id = $1`, [held.id]);
+  const job = auth => fetch(`${BASE}/api/jobs/expire-orders`, {headers: auth ? {authorization: `Bearer ${auth}`} : {}});
+  ok('[expiry] the job endpoint refuses a wrong or missing secret (404)', (await job('x'.repeat(48))).status === 404 && (await job()).status === 404);
+  const run = await job(CRON_SECRET);
+  const result = await run.json();
+  ok('[expiry] the daily job (Vercel Cron, GET + CRON_SECRET) cancels the expired order and returns its stock', run.status === 200 && result.expired >= 1
+    && (await q(`select status from orders where id = $1`, [held.id]))[0].status === 'cancelled' && (await stock(P2.vid)) === stockHeld + 1, JSON.stringify(result));
 
   // ---------- database unavailable ----------
   await go(`${DOWN_BASE}/checkout`, '!!document.querySelector("main h1")');

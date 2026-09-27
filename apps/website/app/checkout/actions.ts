@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { DomainError, orderNumberInput, paymentResultInput, placeOrderInput, type ActionState } from '@kitsyuu/contracts';
 import { cancelOrderByCustomer, currentPaymentSession, placeOrder, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
+import { sendOrderConfirmation } from '@/lib/order-mail';
 import { commerceConfig, paymentProvider, testProvider } from '@/lib/commerce';
 import { db, requestContext, requireCustomer } from '@/lib/server';
 
@@ -23,9 +24,10 @@ export async function placeOrderAction(_: ActionState, form: FormData): Promise<
 
 export type PaymentReply = { ok: boolean; outcome?: PaymentOutcome; message?: string };
 
-async function paymentReply(work: () => Promise<PaymentOutcome>): Promise<PaymentReply> {
+async function paymentReply(orderNumber: string, work: () => Promise<PaymentOutcome>): Promise<PaymentReply> {
   try {
     const outcome = await work();
+    if (outcome === 'paid') await sendOrderConfirmation(orderNumber);      // only the call that made it paid sends it
     revalidatePath('/account', 'layout');
     return { ok: outcome === 'paid' || outcome === 'already_paid', outcome };
   } catch (e) {
@@ -43,7 +45,7 @@ export async function submitPaymentResultAction(raw: unknown): Promise<PaymentRe
   const me = await requireCustomer(`/account/orders/${encodeURIComponent(input.data.orderNumber)}`);
   const provider = paymentProvider();
   if (!provider) return { ok: false, message: 'Online payment is not set up yet.' };
-  return paymentReply(async () => submitPaymentResult(db(), provider, me, input.data, await requestContext()));
+  return paymentReply(input.data.orderNumber, async () => submitPaymentResult(db(), provider, me, input.data, await requestContext()));
 }
 
 /** Development test provider only: the simulated provider answers on the server (amount from the order in the database),
@@ -53,7 +55,7 @@ export async function testPaymentAction(raw: unknown, outcome: 'success' | 'fail
   const provider = testProvider();
   if (!input.success || !provider || (outcome !== 'success' && outcome !== 'failure')) return { ok: false, message: 'Test payments are not available.' };
   const me = await requireCustomer(`/account/orders/${encodeURIComponent(input.data.orderNumber)}`);
-  return paymentReply(async () => {
+  return paymentReply(input.data.orderNumber, async () => {
     const o = await db().selectFrom('orders').select(['id', 'total_paise', 'currency']).where('order_number', '=', input.data.orderNumber)
       .where('customer_id', '=', me.customerId).executeTakeFirst();
     const session = o && await currentPaymentSession(db(), o.id, provider.code, o.total_paise);
