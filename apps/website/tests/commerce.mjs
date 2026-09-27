@@ -95,6 +95,8 @@ try {
 
     // ---------- guest ----------
     ok(`[${tag}] guest adds to cart (kept in this browser)`, await addToCart(BASE, P1, 2) && (await ev(`JSON.parse(localStorage.getItem('kitsyuu-cart-v1')||'[]').length`)) === 1);
+    await go('/cart', '!!document.querySelector(".st-summary")');
+    ok(`[${tag}] guest cart states that shipping is not set up yet (same wording as checkout)`, (await text('.st-summary [data-shipping]')) === 'Not set up yet');
     await go('/checkout', '!!document.querySelector("main h1")');
     ok(`[${tag}] guest checkout asks to log in; the cart is kept`, await exists('[data-checkout-login]') && !(await exists('#st-checkout-form'))
       && (await ev(`JSON.parse(localStorage.getItem('kitsyuu-cart-v1')||'[]').length`)) === 1);
@@ -160,6 +162,8 @@ try {
     await click('[data-test-pay=failure]');
     ok(`[${tag}] a declined payment is explained; the order can still be paid`, await until(`document.querySelector('[data-payment-note]')?.dataset.paymentNote === 'declined'`)
       && (await ordersOf(email))[0].status === 'payment_failed');
+    const payLayout = await ev(`(()=>{const h=document.getElementById('st-pay-title').getBoundingClientRect(),n=document.querySelector('[data-payment-note]').getBoundingClientRect();return {headingBottom:Math.round(h.bottom),noteTop:Math.round(n.top)}})()`);
+    ok(`[${tag}] payment page: the alert starts below the Payment heading (no overlap)`, payLayout.noteTop >= payLayout.headingBottom, JSON.stringify(payLayout));
     await click('[data-test-pay=success]');
     ok(`[${tag}] a successful payment leads to the confirmation page`, await until(`location.pathname === '/checkout/complete/${orderNumber}'`, 20000));
     await until(`!!document.querySelector('[data-order-number]')`);
@@ -183,6 +187,13 @@ try {
     await go(`/account/orders/${orderNumber}`, '!!document.querySelector("main h1")');
     ok(`[${tag}] account order history shows the order, without pay or cancel actions`, (await ev(`document.querySelector('[data-order-status]').dataset.orderStatus`)) === 'paid'
       && !(await exists('[data-pay-order]')) && !(await exists('#st-cancel-order')));
+    // Layout: items and progress sit under their headings at full width; nothing is pushed past the screen edge.
+    const layout = await ev(`(()=>{const item=document.querySelector('.st-order-item').getBoundingClientRect();
+      const xs=[...document.querySelectorAll('.st-order-timeline li')].map(l=>Math.round(l.getBoundingClientRect().left));
+      const past=[...document.querySelectorAll('main *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1}).length;
+      return {itemWidth:Math.round(item.width),itemTop:Math.round(item.top),heading:Math.round(document.getElementById('st-ord-items').getBoundingClientRect().bottom),timelineX:[...new Set(xs)],past}})()`);
+    ok(`[${tag}] order detail layout: items under the heading at full width, one timeline column, nothing off-screen`, layout.itemTop >= layout.heading && layout.itemWidth >= (W > 500 ? 500 : 300)
+      && layout.timelineX.length === 1 && layout.past === 0, JSON.stringify(layout));
     check();
 
     // ---------- another customer cannot reach it ----------
@@ -209,6 +220,8 @@ try {
       && cancelled.stock[1] === before2 && cancelled.status === 'cancelled', JSON.stringify(cancelled));   // before2 = stock before the order took its unit
     await go(`/account/orders/${second}`, '!!document.querySelector("main h1")');
     ok(`[${tag}] a cancelled order promises no refund (no refund policy or provider is configured)`, /This order was cancelled./.test(await text('main')) && !/refund/i.test(await text('main')));
+    ok(`[${tag}] a cancelled unpaid order shows its payment as not paid (no active pending payment)`, (await ev(`document.querySelector('[data-payment-status]')?.dataset.paymentStatus`)) === 'unpaid'
+      && (await q(`select p.status from payments p join orders o on o.id = p.order_id where o.order_number = $1`, [second])).every(p => p.status === 'failed'));
 
     // ---------- expired session at checkout ----------
     await addToCart(BASE, P3, 1);
@@ -303,6 +316,23 @@ try {
   ok('[config] the refused test provider is logged as an error on that server', /PAYMENT_PROVIDER=test is refused in production/.test(fs.readFileSync(TEST_REFUSED_LOG, 'utf8')));
   ok('[config] a production build with the explicit test flag logs a loud warning', /WARNING: the TEST payment provider is enabled in a production build/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
   ok('[config] the example environment leaves the payment provider unset', /^PAYMENT_PROVIDER=s*$/m.test(fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8')));
+
+  // ---------- demo polish: labels and captions ----------
+  await b.viewport(1440, 900);
+  const signedIn = await cookieOf();
+  await b.send('Network.clearBrowserCookies');
+  await go('/product/asymmetric-zip-collar-top', '!!document.querySelector(".st-pdp-meta")');
+  const crumbs = await ev(`[...document.querySelectorAll('.st-crumbs li')].map(l=>l.innerText.trim())`);
+  ok('[polish] a subcategory named like its category is shown once (product meta and breadcrumb)', (await text('.st-pdp-meta b')).toUpperCase() === 'TOPS'
+    && !crumbs.some((c, i) => i > 0 && c.toUpperCase() === crumbs[i - 1].toUpperCase()), JSON.stringify({meta: await text('.st-pdp-meta b'), crumbs}));
+  await go('/', '!!document.querySelector("#store")');
+  await until(`document.querySelector('.st-tool-account')?.dataset.auth === 'guest'`);
+  const account = await ev(`(()=>{const l=document.querySelector('.st-tool-account .st-tool-label');return {text:l.innerText,lines:l.getClientRects().length,height:Math.round(l.getBoundingClientRect().height)}})()`);
+  ok('[polish] "Log in" stays on one line in the 1440 px header', account.lines === 1 && account.height < 20, JSON.stringify(account));
+  ok('[polish] no "concept image / not a catalogue item" captions in the store (the preserved landing keeps its own wording)', !/not a catalogue item/i.test(await ev('document.body.innerText'))
+    && !(await exists('#store .st-caption')));
+  ok('[polish] the 1440 px header does not overflow', (await ev('document.documentElement.scrollWidth - innerWidth')) <= 0);
+  await setCookie(signedIn);
 
   // ---------- no prototype wording on the store ----------
   for (const p of ['/shop', `/product/${P1.slug}`, '/cart']) {

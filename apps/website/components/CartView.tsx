@@ -25,7 +25,7 @@ export function PageHead({ label, title, aside }: { label: string; title: string
 
 /** Amounts as the server priced them (signed in), or the catalogue subtotal (guest; the final amounts are worked out at checkout). */
 export function Totals({ cart, subtotal, count }: { cart: StoreCart | null; subtotal: number; count: number }) {
-  if (!cart) return <dl><dt>Subtotal <small>({plural(count, 'item')})</small></dt><dd>{formatMoney(subtotal)}</dd><dt>Shipping</dt><dd>Worked out at checkout</dd></dl>;
+  if (!cart) return <dl><dt>Subtotal <small>({plural(count, 'item')})</small></dt><dd>{formatMoney(subtotal)}</dd><dt>Shipping</dt><dd data-shipping>Not set up yet</dd></dl>;
   const t = cart.totals;
   return (
     <dl>

@@ -7,7 +7,7 @@ import { recordAudit, sql, type Db, type OrderStatus } from '@kitsyuu/db';
 import { canTransition, ConflictError, DomainError, NotFoundError, NOTE_REQUIRED_FOR, ORDER_TRANSITIONS, type OrderListQuery, type UpdateOrderStatusInput } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
-import { applyOrderTransition } from './order-state.ts';
+import { applyOrderTransition, closeUnpaidPayments } from './order-state.ts';
 
 export const ORDER_PAGE_SIZE = 50;
 const OPEN_STATUSES: OrderStatus[] = ['pending_payment', 'paid', 'processing', 'shipped'];
@@ -57,7 +57,10 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
       .leftJoin('audit_logs as a', join => join.on('a.action', '=', 'order.status_update').on('a.entity_id', '=', orderId)
         .on(sql<boolean>`(a.metadata->>'history_id')::bigint = h.id`))
       .leftJoin('staff_users as s', 's.id', 'a.staff_id')
-      .select(['h.id', 'h.from_status', 'h.to_status', 'h.note', 'h.created_at', 's.email as staff_email'])
+      .select(['h.id', 'h.from_status', 'h.to_status', 'h.note', 'h.created_at', 's.email as staff_email',
+        // A change the customer made themselves (placing or cancelling the order) is audited in the same transaction.
+        sql<boolean>`exists (select 1 from public.audit_logs c where c.entity_type = 'orders' and c.entity_id = ${orderId} and c.actor_type = 'customer'
+          and c.action in ('order.placed', 'order.cancelled_by_customer') and c.occurred_at = h.created_at)`.as('by_customer')])
       .where('h.order_id', '=', orderId).orderBy('h.created_at').orderBy('h.id').execute(),
   ]);
   const contact = (o.contact ?? {}) as Record<string, unknown>;
@@ -123,6 +126,7 @@ export async function updateOrderStatus(db: Db, actor: StaffPrincipal, input: Up
       }
     }
     const h = { id: (await applyOrderTransition(tx, o, input.toStatus, { actor: 'staff', note: input.note })).historyId };
+    if (input.toStatus === 'cancelled') await closeUnpaidPayments(tx, o.id);
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.status_update', entityType: 'orders', entityId: o.id,
       before: { status: o.status }, after: { status: input.toStatus },
       metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released }, ...auditCtx(ctx) });

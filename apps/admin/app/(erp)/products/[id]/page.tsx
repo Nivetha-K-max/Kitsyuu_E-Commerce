@@ -12,6 +12,9 @@ import { db, productImageUrl, requireActor } from '@/lib/server';
 import { adjustStockAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
 import { addVariantAction, moveImageAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
+/** The initial-stock rows written by the catalogue seed carry an internal note; the reason ("Initial stock") says it all. */
+const SEED_NOTE = 'Prototype demo stock';
+
 export const metadata: Metadata = { title: 'Product' };
 type Params = Promise<{ id: string }>;
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -59,7 +62,6 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
           <div><dt>Price</dt><dd data-fact="price"><b className="price">₹{paiseToRupees(p.price_paise)}</b> <span className="note">tax-inclusive</span></dd></div>
           <div><dt>Stock</dt><dd data-fact="stock">{variants ? <>{formatNumber(units)} units in {sellable.length} sizes{attention > 0 && <> · <span className="badge low_stock">{attention} low</span></>}</> : <span className="note">needs inventory.read</span>}</dd></div>
           <div><dt>Colour</dt><dd>{p.colour_label ?? '—'}</dd></div>
-          <div><dt>Data</dt><dd>{p.data_status}</dd></div>
           <div><dt>Last changed</dt><dd>{formatDateTime(p.updated_at)}</dd></div>
         </dl>
       </section>
@@ -272,7 +274,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                     <tr key={m.id} data-movement={m.sku}>
                       <td className="nowrap">{formatDateTime(m.created_at)}</td><td className="mono">{m.sku}</td>
                       <td className="num">{m.delta > 0 ? `+${m.delta}` : m.delta}</td><td className="num">{m.balance_after ?? '—'}</td>
-                      <td>{m.reason}</td><td>{m.staff_email ?? <span className="note">system</span>}</td><td>{m.note ?? ''}</td>
+                      <td>{m.reason}</td><td>{m.staff_email ?? <span className="note">system</span>}</td><td>{m.note === SEED_NOTE ? '' : m.note ?? ''}</td>
                     </tr>))}
                   </tbody>
                 </table></div>

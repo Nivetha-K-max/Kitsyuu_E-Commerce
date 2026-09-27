@@ -30,6 +30,17 @@ export async function applyOrderTransition(tx: Tx, order: LockedOrder, to: Order
   return { historyId: h.id, from: order.status, to };
 }
 
+/** Closes the payment side of an UNPAID order being cancelled (callers have checked that no payment is authorised or
+    captured): an order still waiting for payment becomes 'unpaid', and any payment session that was opened but never used
+    ('created') is closed as 'failed' with the reason, since no payment can be completed for a cancelled order any more.
+    Declined attempts keep their own status. A payment that still arrives later is recorded against the order and flagged
+    for staff (payment.captured_after_cancel), as before. */
+export async function closeUnpaidPayments(tx: Tx, orderId: string): Promise<void> {
+  await tx.updateTable('orders').set({ payment_status: 'unpaid' }).where('id', '=', orderId).where('payment_status', '=', 'pending').execute();
+  await tx.updateTable('payments').set({ status: 'failed', failure_reason: 'Order cancelled before payment' })
+    .where('order_id', '=', orderId).where('status', '=', 'created').execute();
+}
+
 /** Returns what a cancelled order still holds to stock (ledger reason 'cancel'); a second call returns nothing. */
 export async function releaseOrderStock(tx: Tx, orderId: string, note?: string): Promise<number> {
   const r = await sql<{ n: number }>`select public.release_order_stock(${orderId}::uuid, ${note ?? null}::text) as n`.execute(tx);

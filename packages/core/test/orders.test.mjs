@@ -169,15 +169,21 @@ test('cancelling an unpaid order needs a reason, returns exactly the stock it to
   assert.deepEqual([m.delta, m.reason, m.staff_id, m.balance_after], [2, 'cancel', sales.staffId, 10]);
   const [a] = await q(`select metadata from audit_logs where action = 'order.status_update' and entity_id = $1 order by id desc limit 1`, [F.ids['KTS-TEST-0001']]);
   assert.deepEqual(a.metadata.stock_released, [{variantId: v, qty: 2}]);
+  const [p1] = await q(`select payment_status from orders where id = $1`, [F.ids['KTS-TEST-0001']]);
+  assert.equal(p1.payment_status, 'unpaid', 'a cancelled order no longer shows a pending payment');
   await assert.rejects(updateOrderStatus(db, sales, {orderId: F.ids['KTS-TEST-0001'], toStatus: 'cancelled', expectedStatus: 'cancelled', note: 'again'}, ctx), DomainError, 'cancelled is final');
   const released = await updateOrderStatus(db, sales, input('KTS-TEST-0007', 'cancelled', 'payment_failed', 'Payment never completed'), ctx);
   assert.equal(released.released[0].qty, 1, 'a failed-payment order returns its held unit');
+  const [p7] = await q(`select o.payment_status, p.status, p.failure_reason from orders o join payments p on p.order_id = o.id where o.id = $1`, [F.ids['KTS-TEST-0007']]);
+  assert.deepEqual([p7.payment_status, p7.status, p7.failure_reason], ['failed', 'failed', 'Declined by bank (test fixture)'], 'a declined attempt keeps its own status and reason');
 });
 
 test('an order with an authorised or captured payment cannot be cancelled here (needs the refund flow)', async () => {
   const [h, m] = [await n(`select count(*)::int n from order_status_history`), await n(`select count(*)::int n from inventory_movements`)];
   await assert.rejects(updateOrderStatus(db, sales, input('KTS-TEST-0008', 'cancelled', 'pending_payment', 'try'), ctx), ConflictError);
   assert.equal(await statusOf('KTS-TEST-0008'), 'pending_payment');
+  const [p8] = await q(`select o.payment_status, p.status from orders o join payments p on p.order_id = o.id where o.id = $1`, [F.ids['KTS-TEST-0008']]);
+  assert.deepEqual([p8.payment_status, p8.status], ['authorized', 'authorized'], 'money in flight: payment state untouched');
   assert.deepEqual([await n(`select count(*)::int n from order_status_history`), await n(`select count(*)::int n from inventory_movements`)], [h, m]);
 });
 

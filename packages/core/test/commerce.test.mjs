@@ -412,3 +412,41 @@ test('order confirmation email: only for a paid order; facts only (no shipment o
   assert.ok(m.text.includes(`Total paid: ₹${paiseToRupees(o.total_paise)}`), 'the total paid, as recorded on the order');
   assert.ok(!/let you know|notify|refund|deliver(ed)? (by|within)|ships? (by|within)/i.test(m.text), 'no promises');
 });
+
+// ---------------------------------------------------------------- cancelled unpaid orders: payment state
+test('a cancelled unpaid order no longer looks payable: pending → unpaid, an unused session closed; declined attempts and paid orders untouched', async () => {
+  const pays = async id => (await owner.selectFrom('payments').select(['status', 'failure_reason']).where('order_id', '=', id).orderBy('created_at').execute());
+  // customer cancels after opening the payment step (a session exists, nothing was paid)
+  const a = await checkout(asha, ashaAddress, [{productId: 'ky-proto-021', size: (await variant('ky-proto-021')).size, qty: 1}]);
+  await preparePayment(db, testPay, asha, a.orderNumber);
+  await cancelOrderByCustomer(db, asha, a.orderNumber, ctx);
+  const oa = await orderRow(a.orderNumber);
+  assert.deepEqual([oa.status, oa.payment_status], ['cancelled', 'unpaid']);
+  assert.deepEqual(await pays(oa.id), [{status: 'failed', failure_reason: 'Order cancelled before payment'}]);
+  assert.equal((await getCustomerOrder(db, asha, a.orderNumber)).paymentStatus, 'unpaid');
+  const {getOrder} = await import('@kitsyuu/core');
+  const staffView = await getOrder(owner, {staffId: '00000000-0000-4000-8000-000000000001', permissions: new Set(['orders.read'])}, oa.id);
+  assert.deepEqual(staffView.history.map(h => [h.to_status, h.by_customer]), [['pending_payment', true], ['cancelled', true]],
+    'the admin history attributes placing and cancelling to the customer');
+  // declined, then cancelled: the order keeps "failed" and the declined attempt keeps its reason
+  const b = await checkout(asha, ashaAddress, [{productId: 'ky-proto-021', size: (await variant('ky-proto-021')).size, qty: 1}]);
+  assert.equal(await payWithTest(asha, b.orderNumber, 'failure'), 'failed');
+  await cancelOrderByCustomer(db, asha, b.orderNumber, ctx);
+  const ob = await orderRow(b.orderNumber);
+  assert.deepEqual([ob.status, ob.payment_status], ['cancelled', 'failed']);
+  assert.deepEqual(await pays(ob.id), [{status: 'failed', failure_reason: 'Declined (test payment)'}]);
+  // replaced by a newer checkout (system path)
+  const c = await checkout(asha, ashaAddress, [{productId: 'ky-proto-021', size: (await variant('ky-proto-021')).size, qty: 1}]);
+  await preparePayment(db, testPay, asha, c.orderNumber);
+  const total = (await getCustomerCart(db, asha)).totals.totalPaise;
+  const d = await placeOrder(db, asha, {idempotencyKey: key(), addressId: ashaAddress, expectedTotalPaise: total}, ctx);
+  const oc = await orderRow(c.orderNumber);
+  assert.deepEqual([oc.status, oc.payment_status], ['cancelled', 'unpaid']);
+  assert.deepEqual((await pays(oc.id)).map(p => p.status), ['failed']);
+  // the new order is untouched and still payable; paying it works as before
+  assert.equal((await orderRow(d.orderNumber)).payment_status, 'pending');
+  assert.equal(await payWithTest(asha, d.orderNumber, 'success'), 'paid');
+  const od = await orderRow(d.orderNumber);
+  assert.deepEqual([od.status, od.payment_status], ['paid', 'paid']);
+  assert.deepEqual((await pays(od.id)).map(p => p.status), ['captured']);
+});

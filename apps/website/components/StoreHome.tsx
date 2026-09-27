@@ -25,7 +25,6 @@ export default async function StoreHome() {
             <Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>New arrivals <span aria-hidden="true">↗</span></Link>
           </div>
         </div>
-        <span className="st-caption" aria-hidden="true">Concept image / not a catalogue item</span>
         <HeroTurntable />
       </section>
 
@@ -58,7 +57,7 @@ export default async function StoreHome() {
       </div></section>
 
       <section className="st-editorial" aria-labelledby="st-ed-title">
-        <div className="st-editorial-img"><img src="/assets/editorial.webp" alt="Oversized washed streetwear layers photographed in a narrow Japanese alley" width={1024} height={1024} loading="lazy" /><span className="st-caption">Concept editorial / not a catalogue item</span></div>
+        <div className="st-editorial-img"><img src="/assets/editorial.webp" alt="Oversized washed streetwear layers photographed in a narrow Japanese alley" width={1024} height={1024} loading="lazy" /></div>
         <div className="st-editorial-copy"><p className="eyebrow">03 — AFTER HOURS</p><h2 id="st-ed-title">Wide legs.<br />Washed<br /><em>layers.</em></h2><p>Balloon trousers, wide denim and washed tops. Start with the volume below and build the rest around it.</p><Link className="text-link" href={url.shop({ category: 'bottoms' })}>Shop bottoms <span aria-hidden="true">↗</span></Link></div>
       </section>
 

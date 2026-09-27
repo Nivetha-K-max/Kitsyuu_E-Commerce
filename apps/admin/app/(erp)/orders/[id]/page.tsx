@@ -81,7 +81,7 @@ export default async function OrderPage({ params }: { params: Params }) {
               {d.history.map(h => (
                 <li key={h.id} data-history-row={h.to_status}>
                   <b>{h.from_status ? `${label(h.from_status)} → ` : ''}{label(h.to_status)}</b>
-                  <span className="note"> · {formatDateTime(h.created_at)} · {h.staff_email ?? 'system'}</span>
+                  <span className="note"> · {formatDateTime(h.created_at)} · {h.staff_email ?? (h.by_customer ? 'customer' : 'system')}</span>
                   {h.note && <div className="note">“{h.note}”</div>}
                 </li>
               ))}

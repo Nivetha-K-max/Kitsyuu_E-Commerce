@@ -25,7 +25,8 @@ export function indexCatalogue(c: Catalogue) {
       return col && { ...col, products: col.productIds.map(i => byId.get(i)).filter((p): p is Product => !!p) };
     },
     featured: () => c.products.filter(p => p.featured),
-    categoryPath: (p: Product) => [catLabel(p.category), catLabel(p.subcategory)].filter(Boolean).join(' / ')
+    /** "Tops / Shirts"; a subcategory with the same name as its category ("Tops / Tops") is shown once. */
+    categoryPath: (p: Product) => [...new Set([catLabel(p.category), catLabel(p.subcategory)].filter(Boolean))].join(' / ')
   };
 }
 

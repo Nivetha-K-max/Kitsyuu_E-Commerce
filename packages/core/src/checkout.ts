@@ -19,7 +19,7 @@ import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db'
 import { canTransitionAs, ConflictError, DomainError, NotFoundError, UNPAID_ORDER_STATUSES, type PaymentResultInput, type PlaceOrderInput } from '@kitsyuu/contracts';
 import type { CustomerPrincipal, RequestContext } from '@kitsyuu/auth';
 import { lineProblemText, lockActiveCart, priceCart } from './cart.ts';
-import { applyOrderTransition, lockOrder, releaseOrderStock } from './order-state.ts';
+import { applyOrderTransition, closeUnpaidPayments, lockOrder, releaseOrderStock } from './order-state.ts';
 import type { CommerceConfig } from './pricing.ts';
 import type { PaymentProvider, ProviderPayment } from './payments/provider.ts';
 
@@ -51,6 +51,7 @@ async function hasMoneyInFlight(q: Queryable, orderId: string) {
 /** Cancels an unpaid order and returns its stock (system: replaced / expired; customer: cancelled by them). */
 async function cancelUnpaid(tx: Tx, o: Order, actor: 'system' | 'customer', note: string, audit: { action: string; customerId?: string; ctx?: RequestContext }) {
   const t = await applyOrderTransition(tx, o, 'cancelled', { actor, note });
+  await closeUnpaidPayments(tx, o.id);
   const released = await releaseOrderStock(tx, o.id, `Order ${o.order_number}: ${note}`);
   await recordAudit(tx, { actorType: actor, customerId: audit.customerId ?? null, action: audit.action, entityType: 'orders', entityId: o.id,
     before: { status: t.from }, after: { status: 'cancelled' }, metadata: { order_number: o.order_number, units_released: released, note }, ...ctxAudit(audit.ctx) });
