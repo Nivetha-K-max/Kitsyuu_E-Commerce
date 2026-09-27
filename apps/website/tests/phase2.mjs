@@ -23,7 +23,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   let c = await ev(counts); ok(`[${tag}] header counts start at 0`, c.cart === '0' && c.wish === '0', JSON.stringify(c));
   await go('cart'); ok(`[${tag}] empty cart state`, (await ev(`document.querySelector('.st-empty-inline h2')?.textContent`)) === 'Your cart is empty.');
   await go('wishlist'); ok(`[${tag}] empty wishlist state`, (await ev(`document.querySelector('.st-empty-inline h2')?.textContent`)) === 'Your wishlist is empty.');
-  await go('checkout'); ok(`[${tag}] checkout with empty cart shows empty state`, (await ev(`!document.querySelector('.st-checkout-form')&&!!document.querySelector('.st-empty-inline')`)));
+  await go('checkout'); ok(`[${tag}] checkout as a guest asks to log in`, (await ev(`!document.querySelector('#st-checkout-form')&&!!document.querySelector('[data-checkout-login]')`)));
 
   // PDP: size required
   const hood = P['KTS-TOP-006'], jeans = P['KTS-BTM-004'];
@@ -86,7 +86,8 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   await click(`[data-wish="${P['KTS-OUT-002'].id}"]`); await w(50);
   c = await ev(counts);
   ok(`[${tag}] card heart toggles on + count`, c.wish === '2' && (await ev(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]').getAttribute('aria-pressed')`)) === 'true', c.wish);
-  await ev('location.reload()'); await w(300); await settle(`document.readyState==='complete' && document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]')?.getAttribute('aria-pressed')==='true'`);
+  // A full new page load (location.reload() + a fixed wait could read the old page while the new one was still loading).
+  await go('shop?category=outerwear'); await settle(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]')?.getAttribute('aria-pressed')==='true'`);
   ok(`[${tag}] wishlist persists after refresh (heart still pressed)`, (await ev(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]').getAttribute('aria-pressed')`)) === 'true' && (await ev(counts)).wish === '2');
   await go('wishlist');
   let wl = await ev(`[...document.querySelectorAll('.st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`);
@@ -130,25 +131,17 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   ok(`[${tag}] subcategory navigation`, (await ev(`document.querySelectorAll('#st-results .st-card').length`)) === 2 && (await ev('location.search')) === '?category=bottoms.jeans');
   await b.shot(`p2-${tag}-shop.png`);
 
-  // Checkout prototype
+  // Checkout (M7): guests are asked to log in; the browser cart is kept and merged into the account after login.
+  // (The signed-in checkout, payment and confirmation are covered by tests/commerce.mjs against a local database.)
   await go('checkout');
-  ok(`[${tag}] checkout labelled prototype, no payment inputs`, (await ev(`document.body.innerText.includes('not a real purchase')&&!document.querySelector('input[autocomplete^="cc-"],input[name*=card],input[name*=upi]')`)));
-  await click('.st-place'); await w(100);
-  const alertTxt = await ev(`document.querySelector('#st-form-alert').textContent`); st = await ev(store);
-  ok(`[${tag}] invalid checkout blocked, errors shown, cart kept`, alertTxt.includes('7 fields') && (await ev(`document.activeElement.name`)) === 'name' && st.cart.length === 2, alertTxt);
-  await b.shot(`p2-${tag}-checkout-errors.png`);
-  await ev(`(()=>{const v={name:'Test Person',email:'test@example.com',phone:'9876543210',address1:'12 Linking Road',city:'Mumbai',state:'Maharashtra',pin:'400050'};for(const [k,x] of Object.entries(v)){const i=document.querySelector('[name='+k+']');i.value=x;}})()`);
-  await ev(`document.querySelector('[name=pin]').value='12345'`); await click('.st-place'); await w(100);
-  ok(`[${tag}] bad PIN blocked`, (await ev(`document.querySelector('#st-e-pin').textContent`)) === 'Enter a 6-digit PIN code.' && (await ev(store)).cart.length === 2);
-  await ev(`document.querySelector('[name=pin]').value='400050'`);
-  await ev(`document.querySelector('.st-place').click()`); await w(1500); await b.eval(R);
-  const conf = await ev(`({url:location.pathname,ref:document.querySelector('.st-confirm-ref dd')?.textContent,h1:document.querySelector('h1').textContent,lead:document.querySelector('.st-confirm-lead')?.textContent,items:document.querySelectorAll('.st-mini li').length,ship:document.querySelectorAll('.st-form-group')[1]?.innerText})`);
-  st = await ev(store); c = await ev(counts);
-  ok(`[${tag}] confirmation page with prototype reference`, conf.url.endsWith('/confirmation') && /^KTS-PROTO-\d{6}-[A-Z2-9]{4}$/.test(conf.ref) && conf.items === 2 && conf.ship.includes('Mumbai'), JSON.stringify({ref: conf.ref, h1: conf.h1, items: conf.items}));
-  ok(`[${tag}] confirmation does not claim a real order`, conf.lead.includes('No order was placed') && conf.h1.includes('Prototype'));
-  ok(`[${tag}] cart cleared after confirmation`, st.cart.length === 0 && c.cart === '0');
-  ok(`[${tag}] confirmation no overflow`, (await ev(ov)) <= 0);
-  await b.shot(`p2-${tag}-confirmation.png`, true);
+  st = await ev(store);
+  ok(`[${tag}] guest checkout asks to log in, no payment inputs, cart kept`, (await ev(`!!document.querySelector('[data-checkout-login]')&&!document.querySelector('input[autocomplete^="cc-"],input[name*=card],input[name*=upi]')`)) && st.cart.length === 2);
+  ok(`[${tag}] log in from checkout comes back to checkout`, (await ev(`document.querySelector('[data-checkout-login] a[href^="/login"]').getAttribute('href')`)) === '/login?next=%2Fcheckout');
+  ok(`[${tag}] checkout page no overflow`, (await ev(ov)) <= 0);
+  ok(`[${tag}] the prototype checkout wording is gone`, !(await ev(`/not a real purchase|prototype order/i.test(document.querySelector('main').innerText)`)));
+  await b.shot(`p2-${tag}-checkout-guest.png`);
+  await go('confirmation'); await w(500);
+  ok(`[${tag}] old prototype confirmation URL leads to the account orders (log in first)`, (await ev('location.pathname')) === '/login' && (await ev('location.search')).includes('next=%2Faccount%2Forders'));
 
   // Header + mobile nav
   await go('');

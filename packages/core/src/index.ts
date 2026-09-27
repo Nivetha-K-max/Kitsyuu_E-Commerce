@@ -20,3 +20,21 @@ export {
   deleteCustomerAddress, listCustomerOrders, getCustomerOrder,
   type CustomerProfile, type CustomerAddress, type CustomerOrderSummary, type CustomerOrderDetail,
 } from './customer-account.ts';
+// ---------- M7: core commerce ----------
+export { applyOrderTransition, lockOrder, releaseOrderStock } from './order-state.ts';
+export {
+  priceOrder, currentTaxRate, unconfiguredShipping, defaultCommerceConfig,
+  type CartTotals, type CommerceConfig, type ShippingProvider, type ShippingQuote, type DiscountRule, type DiscountLine, type TaxRate, type ShipTo,
+} from './pricing.ts';
+export {
+  getCustomerCart, addCartLine, setCartLineQty, removeCartLine, mergeGuestCart, priceCart, lineProblemText,
+  type PricedCart, type PricedLine, type LineProblem,
+} from './cart.ts';
+export { getWishlist, setWishlisted, mergeGuestWishlist } from './wishlist.ts';
+export {
+  placeOrder, preparePayment, submitPaymentResult, cancelOrderByCustomer, expireUnpaidOrders, handlePaymentWebhook,
+  applyPaymentResult, checkoutSettings, customerOrderActions, currentPaymentSession, type PaymentStart, type PaymentOutcome,
+} from './checkout.ts';
+export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus } from './payments/provider.ts';
+export { testPaymentProvider, type TestPaymentProvider } from './payments/test-provider.ts';
+export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';

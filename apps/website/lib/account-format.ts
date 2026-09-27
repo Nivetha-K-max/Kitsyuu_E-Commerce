@@ -18,6 +18,18 @@ export const PAYMENT_STATUS_LABEL: Record<string, string> = {
   refunded: 'Refunded', partially_refunded: 'Partly refunded',
 };
 
+/** What happens next, per order status (customer wording). */
+export const NEXT_STEP: Record<string, string> = {
+  pending_payment: 'This order is waiting for payment.',
+  paid: 'Your order is confirmed. We will let you know when it ships.',
+  processing: 'Your order is being packed.',
+  shipped: 'Your order is on its way.',
+  delivered: 'Your order has been delivered.',
+  cancelled: 'This order was cancelled. Any payment taken is refunded to the original payment method.',
+  payment_failed: 'The last payment attempt did not go through, so nothing was charged. You can try again.',
+  refunded: 'This order has been refunded to the original payment method.',
+};
+
 /** Public URL of a product image stored in the product-images bucket (same URLs the catalogue uses). */
 export function productImageUrl(path: string | null): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;

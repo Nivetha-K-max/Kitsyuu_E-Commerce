@@ -26,7 +26,10 @@ export async function saveAddressAction(_: ActionState, form: FormData): Promise
     saved = input.addressId ? 'updated' : 'added';
     return { ok: true };
   });
-  if (saved) { revalidatePath('/account', 'layout'); redirect(`/account/addresses?notice=${saved}`); }
+  if (saved) {
+    revalidatePath('/account', 'layout');
+    redirect(form.get('next') === '/checkout' ? '/checkout' : `/account/addresses?notice=${saved}`);   // only this one destination
+  }
   return result;
 }
 

@@ -7,6 +7,7 @@ import { ActionForm, CheckField, Field, Hidden, SelectField } from './forms';
 import {
   changePasswordAction, deleteAddressAction, endSessionAction, logoutEverywhereAction, saveAddressAction, setDefaultAddressAction, updateProfileAction,
 } from '@/app/account/actions';
+import { cancelOrderAction } from '@/app/checkout/actions';
 
 export function ProfileForm({ fullName, phone }: { fullName: string | null; phone: string | null }) {
   return (
@@ -18,11 +19,13 @@ export function ProfileForm({ fullName, phone }: { fullName: string | null; phon
   );
 }
 
-export function AddressForm({ address }: { address?: CustomerAddress }) {
+/** next: where to go after saving (only the checkout, which sends customers here to add an address). */
+export function AddressForm({ address, next }: { address?: CustomerAddress; next?: '/checkout' }) {
   return (
     <ActionForm action={saveAddressAction} submitLabel={address ? 'Save address' : 'Add address'} pendingLabel="Saving…"
       label={address ? 'Edit address' : 'Add an address'} id="st-address-form" className="st-auth-form st-address-form">
       {address && <Hidden name="addressId" value={address.id} />}
+      {next && <Hidden name="next" value={next} />}
       <Field name="fullName" label="Full name" autoComplete="name" defaultValue={address?.fullName} required />
       <Field name="phone" label="Mobile number" type="tel" inputMode="tel" autoComplete="tel-national" defaultValue={address?.phone} required
         hint="10-digit Indian mobile number, for the delivery partner." />
@@ -78,5 +81,14 @@ export function LogoutEverywhereButton() {
     <form action={logoutEverywhereAction} onSubmit={e => { if (!window.confirm('Sign out on every device, including this one?')) e.preventDefault(); }}>
       <button className="button button-outline" type="submit" data-logout-everywhere>Sign out everywhere</button>
     </form>
+  );
+}
+
+export function CancelOrderButton({ orderNumber }: { orderNumber: string }) {
+  return (
+    <ActionForm action={cancelOrderAction} submitLabel="Cancel order" pendingLabel="Cancelling…" className="st-inline-form" buttonClass="button button-outline"
+      label={`Cancel order ${orderNumber}`} confirmText={`Cancel order ${orderNumber}? Its items go back on sale.`} id="st-cancel-order">
+      <Hidden name="orderNumber" value={orderNumber} />
+    </ActionForm>
   );
 }

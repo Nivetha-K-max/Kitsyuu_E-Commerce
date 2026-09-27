@@ -5,8 +5,9 @@ import { requireCustomer } from '@/lib/server';
 
 export const metadata: Metadata = { title: 'Add an address' };
 
-export default async function NewAddressPage() {
-  await requireCustomer('/account/addresses/new');
+export default async function NewAddressPage({ searchParams }: { searchParams: Promise<{ next?: string | string[] }> }) {
+  const fromCheckout = (await searchParams).next === '/checkout';
+  await requireCustomer(fromCheckout ? '/account/addresses/new?next=/checkout' : '/account/addresses/new');
   return (
     <>
       <Crumbs list={[{ label: 'Addresses', href: '/account/addresses' }, { label: 'Add' }]} />
@@ -14,7 +15,7 @@ export default async function NewAddressPage() {
         <h1 id="st-page-title">Add an address</h1>
         <div className="st-plp-aside"><p className="st-result-count">India only</p><p>We currently deliver within India. Fields marked * are required.</p></div>
       </header>
-      <AddressForm />
+      <AddressForm next={fromCheckout ? '/checkout' : undefined} />
     </>
   );
 }

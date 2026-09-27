@@ -7,6 +7,7 @@ import { recordAudit, sql, type Db, type OrderStatus } from '@kitsyuu/db';
 import { canTransition, ConflictError, DomainError, NotFoundError, NOTE_REQUIRED_FOR, ORDER_TRANSITIONS, type OrderListQuery, type UpdateOrderStatusInput } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
+import { applyOrderTransition } from './order-state.ts';
 
 export const ORDER_PAGE_SIZE = 50;
 const OPEN_STATUSES: OrderStatus[] = ['pending_payment', 'paid', 'processing', 'shipped'];
@@ -121,9 +122,7 @@ export async function updateOrderStatus(db: Db, actor: StaffPrincipal, input: Up
         released.push({ variantId: t.variant_id, qty: -t.net });
       }
     }
-    await tx.updateTable('orders').set({ status: input.toStatus }).where('id', '=', o.id).execute();
-    const h = await tx.insertInto('order_status_history').values({ order_id: o.id, from_status: o.status, to_status: input.toStatus, note: input.note })
-      .returning('id').executeTakeFirstOrThrow();
+    const h = { id: (await applyOrderTransition(tx, o, input.toStatus, { actor: 'staff', note: input.note })).historyId };
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.status_update', entityType: 'orders', entityId: o.id,
       before: { status: o.status }, after: { status: input.toStatus },
       metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released }, ...auditCtx(ctx) });

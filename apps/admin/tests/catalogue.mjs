@@ -28,8 +28,11 @@ const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.string
   Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value').set.call(el,${JSON.stringify(v)});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
 const submit = async formSel => {
   const sel = JSON.stringify(formSel), start = await ev('location.pathname + location.search');
-  await ev(`(()=>{const btn=document.querySelector(${JSON.stringify(formSel + ' button[type=submit]')});if(!btn)throw new Error('no submit button for ' + ${sel});btn.click();return true})()`);
-  await until(`!!document.querySelector(${sel})?.matches('[aria-busy=true]') || (location.pathname + location.search) !== ${JSON.stringify(start)}`, 3000);
+  // A MutationObserver set up before the click records that the form went busy, however briefly: a fast (or late) answer
+  // is never mistaken for "nothing happened yet".
+  await ev(`(()=>{const f=document.querySelector(${sel}),btn=document.querySelector(${JSON.stringify(formSel + ' button[type=submit]')});if(!btn)throw new Error('no submit button for ' + ${sel});
+    window.__busySeen=false;if(f)new MutationObserver(()=>{if(f.matches('[aria-busy=true]'))window.__busySeen=true}).observe(f,{attributes:true,attributeFilter:['aria-busy']});btn.click();return true})()`);
+  await until(`window.__busySeen === true || !!document.querySelector(${sel})?.matches('[aria-busy=true]') || (location.pathname + location.search) !== ${JSON.stringify(start)}`, 3000);
   if (!(await until(`!document.querySelector(${sel})?.matches('[aria-busy=true]')`, 30000))) throw new Error(`submission of ${formSel} did not finish`);
 };
 const message = sel => ev(`document.querySelector(${JSON.stringify(sel + ' [data-form-message]')})?.innerText ?? ''`);

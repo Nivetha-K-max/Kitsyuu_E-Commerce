@@ -143,6 +143,31 @@ export const ORDER_TRANSITIONS: Readonly<Record<OrderStatusCode, readonly OrderS
   refunded: [],
 };
 export const canTransition = (from: OrderStatusCode, to: OrderStatusCode) => ORDER_TRANSITIONS[from]?.includes(to) ?? false;
+
+/** The order state machine, per actor (M7). Every status change goes through core's applyOrderTransition(), which checks
+    these maps; no page or component changes a status itself.
+    - staff:    fulfilment forward, and cancelling unpaid orders (ORDER_TRANSITIONS above).
+    - system:   the payment flow, driven only by verified Razorpay data (signature + provider API or signed webhook):
+                paid, payment failed (the customer may retry), and cancelling an unpaid order whose payment window expired
+                or that a new checkout replaced.
+    - customer: may cancel their own unpaid order. */
+export type OrderActor = 'staff' | 'system' | 'customer';
+const NONE: readonly OrderStatusCode[] = [];
+export const ORDER_TRANSITIONS_BY_ACTOR: Readonly<Record<OrderActor, Readonly<Record<OrderStatusCode, readonly OrderStatusCode[]>>>> = {
+  staff: ORDER_TRANSITIONS,
+  system: {
+    pending_payment: ['paid', 'payment_failed', 'cancelled'], payment_failed: ['paid', 'cancelled'],
+    paid: NONE, processing: NONE, shipped: NONE, delivered: NONE, cancelled: NONE, refunded: NONE,
+  },
+  customer: {
+    pending_payment: ['cancelled'], payment_failed: ['cancelled'],
+    paid: NONE, processing: NONE, shipped: NONE, delivered: NONE, cancelled: NONE, refunded: NONE,
+  },
+};
+export const canTransitionAs = (actor: OrderActor, from: OrderStatusCode, to: OrderStatusCode) =>
+  ORDER_TRANSITIONS_BY_ACTOR[actor][from]?.includes(to) ?? false;
+/** Orders that still wait for payment (they hold stock until payment_expires_at). */
+export const UNPAID_ORDER_STATUSES: readonly OrderStatusCode[] = ['pending_payment', 'payment_failed'];
 /** Transitions that need a written reason (kept in the order's status history). */
 export const NOTE_REQUIRED_FOR: readonly OrderStatusCode[] = ['cancelled'];
 
@@ -307,3 +332,41 @@ export const orderNumberInput = z.object({ orderNumber: z.string().trim().regex(
 export type SignupInput = z.infer<typeof signupInput>;
 export type CustomerProfileInput = z.infer<typeof customerProfileInput>;
 export type AddressInput = z.infer<typeof addressInput>;
+
+// ======================= commerce (M7) =======================
+// The browser only ever sends WHAT it wants (product, size, quantity, which saved address): prices, stock, discounts, tax
+// and totals are always resolved on the server. expectedTotalPaise is only compared, so a customer is never charged an
+// amount different from the one they were shown.
+/** Units of one size per order line: the existing limit of the store and of order_items (qty between 1 and 10). */
+export const MAX_QTY_PER_LINE = 10;
+/** Technical cap on lines accepted in one request (not a business rule). */
+export const MAX_LINES_PER_REQUEST = 100;
+const size = z.string().trim().min(1, 'Choose a size.').max(20, 'Unknown size.');
+const qty = z.coerce.number({ message: 'Enter a quantity.' }).int('Enter a whole number.')
+  .min(1, 'The quantity must be at least 1.').max(MAX_QTY_PER_LINE, `At most ${MAX_QTY_PER_LINE} per size.`);
+export const cartLineInput = z.object({ productId, size, qty });
+export const cartLineKey = z.object({ productId, size });
+export const wishlistInput = z.object({ productId });
+/** Guest (browser) cart / wishlist merged after login. Invalid lines are dropped, not fatal. */
+export const guestMergeInput = z.object({
+  cart: z.array(z.unknown()).max(MAX_LINES_PER_REQUEST).default([]),
+  wishlist: z.array(z.unknown()).max(MAX_LINES_PER_REQUEST).default([]),
+});
+export const idempotencyKey = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/, 'Reload the checkout page and try again.');
+export const placeOrderInput = z.object({
+  idempotencyKey,
+  addressId: z.union([uuid, z.literal('').transform(() => undefined)]).optional()
+    .refine(v => v !== undefined, 'Choose a delivery address.'),
+  expectedTotalPaise: z.coerce.number().int().min(0),
+});
+/** What the payment provider's browser widget reported. Provider-specific fields are checked by that provider (signature
+    and read-back); here only the shape is limited. */
+export const paymentResultInput = z.object({
+  orderNumber: orderNumberInput.shape.orderNumber,
+  result: z.record(z.string().regex(/^[a-z_]{1,40}$/), z.string().max(300))
+    .refine(r => Object.keys(r).length <= 12, 'We could not verify this payment.'),
+});
+
+export type CartLineInput = z.infer<typeof cartLineInput>;
+export type PlaceOrderInput = z.infer<typeof placeOrderInput>;
+export type PaymentResultInput = z.infer<typeof paymentResultInput>;

@@ -23,8 +23,11 @@ const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.string
 // read text left over from an earlier attempt.
 const submit = async (formSel = 'main form') => {
   const sel = JSON.stringify(formSel), start = await ev('location.pathname + location.search');
-  await ev(`(()=>{const btn=document.querySelector(${JSON.stringify(formSel + ' button[type=submit]')});if(!btn)throw new Error('no submit button for ' + ${sel});btn.click();return true})()`);
-  await until(`!!document.querySelector(${sel})?.matches('[aria-busy=true]') || (location.pathname + location.search) !== ${JSON.stringify(start)}`, 3000);
+  // A MutationObserver set up before the click records that the form went busy, however briefly: a fast (or late) answer
+  // is never mistaken for "nothing happened yet".
+  await ev(`(()=>{const f=document.querySelector(${sel}),btn=document.querySelector(${JSON.stringify(formSel + ' button[type=submit]')});if(!btn)throw new Error('no submit button for ' + ${sel});
+    window.__busySeen=false;if(f)new MutationObserver(()=>{if(f.matches('[aria-busy=true]'))window.__busySeen=true}).observe(f,{attributes:true,attributeFilter:['aria-busy']});btn.click();return true})()`);
+  await until(`window.__busySeen === true || !!document.querySelector(${sel})?.matches('[aria-busy=true]') || (location.pathname + location.search) !== ${JSON.stringify(start)}`, 3000);
   if (!(await until(`!document.querySelector(${sel})?.matches('[aria-busy=true]')`, 20000))) throw new Error(`submission of ${formSel} did not finish`);
 };
 const formMessage = () => ev(`document.querySelector('main [data-form-message]')?.innerText ?? ''`);
@@ -112,6 +115,7 @@ try {
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));
   }
   await visit('/dashboard', '!!document.querySelector("[data-kpis]")');
+  await until('!!document.querySelector("[data-kpis]") && !document.querySelector("[data-loading]")', 15000);   // a slow render must not read as a failure
   ok('support without audit.read sees no activity feed', /Needs the audit\.read permission/.test(await text('main')));
 
   // ---------- sign out / sign in ----------

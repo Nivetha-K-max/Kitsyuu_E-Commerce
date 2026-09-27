@@ -14,3 +14,7 @@ export class NotFoundError extends DomainError {
 export class ConflictError extends DomainError {
   constructor(message: string) { super('conflict', message); this.name = 'ConflictError'; }
 }
+/** A service the operation depends on (e.g. the payment provider) did not answer. Nothing was lost; try again later. */
+export class UnavailableError extends DomainError {
+  constructor(message: string) { super('unavailable', message); this.name = 'UnavailableError'; }
+}

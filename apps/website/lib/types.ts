@@ -63,3 +63,16 @@ export type CartLine = {
   size: string;
   qty: number;
 };
+
+/* M7: a signed-in customer's cart as the server priced it (rupees, for display). Lines use the same fields as CartLine. */
+export type StoreCartLine = { id: string; sku: string; name: string; size: string; qty: number; price: number; lineTotal: number; available: number; problem: string | null };
+export type StoreCart = {
+  lines: StoreCartLine[];
+  totals: { units: number; subtotal: number; discount: number; shipping: number; shippingLabel: string | null; tax: number; pricesIncludeTax: boolean; total: number };
+  canCheckout: boolean;
+  removed: number;
+};
+/** Signed-in store state (null for guests, whose cart and wishlist stay in this browser). */
+export type CustomerStore = { cart: StoreCart; wishlist: string[] };
+/** Result of a cart / wishlist change made by a signed-in customer. */
+export type StoreResult = { ok: boolean; message?: string; store?: CustomerStore; capped?: boolean; qty?: number };

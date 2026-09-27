@@ -89,3 +89,22 @@ export function CheckField({ name, label, defaultChecked }: { name: string; labe
 export function Hidden({ name, value }: { name: string; value: string }) {
   return <input type="hidden" name={name} value={value} />;
 }
+
+/** A required choice from a short list (e.g. the delivery address), with its error shown under the group. */
+export function RadioGroup({ name, legend, options, defaultValue }: {
+  name: string; legend: string; options: { value: string; label: ReactNode }[]; defaultValue?: string;
+}) {
+  const id = useId(), error = useFieldError(name);
+  return (
+    <fieldset className="st-radio-group" aria-describedby={error ? `${id}-d` : undefined}>
+      <legend>{legend}</legend>
+      {options.map((o, i) => (
+        <label className="st-radio" key={o.value}>
+          <input type="radio" name={name} value={o.value} defaultChecked={o.value === defaultValue} aria-invalid={error && i === 0 ? true : undefined} />
+          <span>{o.label}</span>
+        </label>
+      ))}
+      {error && <p className="st-field-error" id={`${id}-d`}>{error}</p>}
+    </fieldset>
+  );
+}

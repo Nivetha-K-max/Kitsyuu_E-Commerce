@@ -1,14 +1,16 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
-import { formatMoney, imageOf, MAX_QTY, plural, url } from '@/lib/catalogue-utils';
-import type { CartLine } from '@/lib/types';
-import { useStore } from './StoreProvider';
+import { asset, formatMoney, imageOf, MAX_QTY, plural, url } from '@/lib/catalogue-utils';
+import type { CartLine, StoreCart } from '@/lib/types';
+import { useStore, type ShownLine } from './StoreProvider';
 import { Crumbs, EmptyState } from './ui';
 
 export function LineImage({ line }: { line: CartLine }) {
   const { idx } = useStore();
-  const img = imageOf(idx.byId.get(line.id)!);
+  const p = idx.byId.get(line.id);
+  if (!p) return <img src={asset('store/images/placeholder.svg')} alt="" width={600} height={800} />;
+  const img = imageOf(p);
   return img.held ? <img src={img.src} alt="" width={600} height={800} /> : <img src={img.src} alt="" width={img.width} height={img.height} loading="lazy" decoding="async" />;
 }
 
@@ -21,15 +23,30 @@ export function PageHead({ label, title, aside }: { label: string; title: string
   );
 }
 
+/** Amounts as the server priced them (signed in), or the catalogue subtotal (guest; the final amounts are worked out at checkout). */
+export function Totals({ cart, subtotal, count }: { cart: StoreCart | null; subtotal: number; count: number }) {
+  if (!cart) return <dl><dt>Subtotal <small>({plural(count, 'item')})</small></dt><dd>{formatMoney(subtotal)}</dd><dt>Shipping</dt><dd>Worked out at checkout</dd></dl>;
+  const t = cart.totals;
+  return (
+    <dl>
+      <dt>Subtotal <small>({plural(t.units, 'item')})</small></dt><dd>{formatMoney(t.subtotal)}</dd>
+      {t.discount > 0 && <><dt>Discount</dt><dd>−{formatMoney(t.discount)}</dd></>}
+      <dt>Shipping</dt><dd data-shipping>{t.shippingLabel ? formatMoney(t.shipping) : 'Not set up yet'}</dd>
+      {!t.pricesIncludeTax && <><dt>Tax</dt><dd>{formatMoney(t.tax)}</dd></>}
+      <dt className="st-total">Total</dt><dd className="st-total" data-total>{formatMoney(t.total)}</dd>
+    </dl>
+  );
+}
+
 export default function CartView() {
-  const { idx, ready, lines, cartCount, subtotal, setQty, removeLine, toast } = useStore();
+  const { idx, ready, lines, cartCount, subtotal, setQty, removeLine, toast, serverCart, mode } = useStore();
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     if (!focusNext.current) return;
     const sel = focusNext.current; focusNext.current = null;
     (document.querySelector<HTMLElement>(sel) || document.getElementById('st-page-title'))?.focus();
   });
-  const key = (l: CartLine) => `${l.id}|${l.size}`;
+  const key = (l: ShownLine) => `${l.id}|${l.size}`;
   const sel = (k: string, inner: string) => `[data-line="${CSS.escape(k)}"] ${inner}`;
   if (!ready) return <div className="st-wrap"><p className="st-status">Loading…</p></div>;
 
@@ -40,32 +57,34 @@ export default function CartView() {
         <div className="st-cart">
           <ul className="st-lines" aria-label="Items in your cart">
             {lines.map((l, n) => {
-              const p = idx.byId.get(l.id)!, href = url.product(p), k = key(l);
-              const step = (d: number) => {
-                const next = setQty(l.id, l.size, l.qty + d);
+              const p = idx.byId.get(l.id), href = p ? url.product(p) : url.shop(), k = key(l);
+              const max = Math.min(MAX_QTY, l.available ?? MAX_QTY);
+              const step = async (d: number) => {
+                const next = await setQty(l.id, l.size, l.qty + d);
                 focusNext.current = sel(k, `[data-line-step="${d}"]:not(:disabled)`);
                 if (next) toast(`${l.name}, size ${l.size}: quantity ${next.qty}.`);
               };
               return (
-                <li className="st-line" data-line={k} key={k}>
+                <li className={`st-line${l.problem ? ' has-problem' : ''}`} data-line={k} key={k}>
                   <Link className="st-line-media" href={href} tabIndex={-1} aria-hidden="true"><LineImage line={l} /></Link>
                   <div className="st-line-info">
                     <h2 className="st-line-name"><Link href={href}>{l.name}</Link></h2>
                     <p className="st-line-meta">SKU {l.sku}<br />Size <b>{l.size}</b></p>
                     <p className="st-line-unit">{formatMoney(l.price)} <small>each</small></p>
+                    {l.problem && <p className="st-line-problem" role="alert" data-line-problem>{l.problem}</p>}
                   </div>
                   <div className="st-line-controls">
                     <div className="st-qty" role="group" aria-label={`Quantity for ${l.name}, size ${l.size}`}>
                       <button type="button" data-line-step="-1" aria-label="Decrease quantity" disabled={l.qty <= 1} onClick={() => step(-1)}>−</button>
-                      <input type="number" inputMode="numeric" min={1} max={MAX_QTY} defaultValue={l.qty} key={l.qty} data-line-qty="" aria-label="Quantity"
-                        onBlur={e => { if (Number(e.target.value) !== l.qty) { setQty(l.id, l.size, Number(e.target.value)); focusNext.current = sel(k, '[data-line-qty]'); } }}
+                      <input type="number" inputMode="numeric" min={1} max={max} defaultValue={l.qty} key={l.qty} data-line-qty="" aria-label="Quantity"
+                        onBlur={e => { if (Number(e.target.value) !== l.qty) { void setQty(l.id, l.size, Number(e.target.value)); focusNext.current = sel(k, '[data-line-qty]'); } }}
                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
-                      <button type="button" data-line-step="1" aria-label="Increase quantity" disabled={l.qty >= MAX_QTY} onClick={() => step(1)}>+</button>
+                      <button type="button" data-line-step="1" aria-label="Increase quantity" disabled={l.qty >= max} onClick={() => step(1)}>+</button>
                     </div>
-                    <button className="st-line-remove" type="button" data-line-remove="" onClick={() => {
+                    <button className="st-line-remove" type="button" data-line-remove="" onClick={async () => {
                       const nb = lines[n + 1] || lines[n - 1];
                       focusNext.current = nb ? sel(key(nb), '[data-line-remove]') : '#st-page-title';
-                      removeLine(l.id, l.size); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
+                      await removeLine(l.id, l.size); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
                     }}>Remove<span className="sr-only"> {l.name}, size {l.size}</span></button>
                   </div>
                   <p className="st-line-total"><span className="sr-only">Line total </span>{formatMoney(l.price * l.qty)}</p>
@@ -75,9 +94,13 @@ export default function CartView() {
           </ul>
           <aside className="st-summary" aria-labelledby="st-summary-title">
             <h2 id="st-summary-title">Summary</h2>
-            <dl><dt>Subtotal <small>({plural(cartCount, 'item')})</small></dt><dd>{formatMoney(subtotal)}</dd><dt>Shipping</dt><dd>Not calculated</dd></dl>
-            <Link className="button st-checkout" href={url.checkout}>Checkout (prototype)</Link>
-            <p className="st-note">Prototype checkout. No payment is taken and no order is placed. Prices are estimates in INR; tax inclusion is unconfirmed.</p>
+            <Totals cart={serverCart} subtotal={subtotal} count={cartCount} />
+            {serverCart && !serverCart.canCheckout
+              ? <p className="st-form-alert" role="alert" data-cart-blocked>Some items cannot be bought as they are. Update or remove them to check out.</p>
+              : <Link className="button st-checkout" href={url.checkout}>Checkout</Link>}
+            <p className="st-note">{mode === 'customer'
+              ? 'Prices are checked again when you place your order.'
+              : 'You will be asked to log in at checkout; your cart comes with you. Prices are checked again when you place your order.'}</p>
             <Link className="text-link" href={url.shop()}>Continue shopping <span aria-hidden="true">↗</span></Link>
           </aside>
         </div>

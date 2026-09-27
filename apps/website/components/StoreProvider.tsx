@@ -1,32 +1,43 @@
 'use client';
 /* Client state for the storefront: catalogue index, cart, wishlist and the toast.
-   Same localStorage keys, line format and rules as the static store (dist/store/store.js):
-   same product + size merges, a different size is a new line, max 10 per line, every read re-checked against the catalogue.
-   Phase 4.5 swaps the storage for Supabase-backed cart/wishlist APIs for signed-in customers. */
+   - Guests: the cart and wishlist live in this browser (localStorage), with the same keys, line format and rules as the
+     static store (dist/store/store.js): same product + size merges, a different size is a new line, max 10 per line,
+     every read re-checked against the catalogue. Nothing a guest stores here is trusted: checkout re-prices everything.
+   - Signed-in customers (M7): the cart and wishlist are kept in the database. Changes go through server actions, which
+     resolve prices and stock on the server; this state only shows what the server returned. On login the guest cart and
+     wishlist are merged into the saved ones once, then cleared from this browser. */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { Catalogue, CartLine, Product } from '@/lib/types';
+import { usePathname } from 'next/navigation';
+import type { Catalogue, CartLine, CustomerStore, Product, StoreCart, StoreResult } from '@/lib/types';
 import { indexCatalogue, MAX_QTY, type Index } from '@/lib/catalogue-utils';
+import { addToCartAction, mergeGuestStoreAction, removeCartLineAction, setCartQtyAction, setWishlistedAction } from '@/app/store-actions';
+import { useAuth } from './AuthProvider';
 
-export const KEYS = { cart: 'kitsyuu-cart-v1', wish: 'kitsyuu-wishlist-v1', order: 'kitsyuu-prototype-order' };
+export const KEYS = { cart: 'kitsyuu-cart-v1', wish: 'kitsyuu-wishlist-v1' };
 const clampQty = (n: unknown) => Math.min(MAX_QTY, Math.max(1, Math.round(Number(n)) || 1));
 
 function readList(key: string): unknown[] {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
-type AddResult = { ok: boolean; merged: boolean; capped: boolean; qty: number };
+export type AddResult = { ok: boolean; merged: boolean; capped: boolean; qty: number; message?: string };
+/** A cart line as shown; for a signed-in customer it carries the server's verdict on stock. */
+export type ShownLine = CartLine & { available?: number; problem?: string | null };
 type StoreState = {
   idx: Index;
   ready: boolean;
-  lines: CartLine[];
+  /** 'customer' once the saved cart has loaded; 'guest' uses this browser's storage. */
+  mode: 'guest' | 'customer';
+  lines: ShownLine[];
   cartCount: number;
   subtotal: number;
+  /** Totals as priced by the server (signed-in customers only). */
+  serverCart: StoreCart | null;
   wishIds: string[];
-  addToCart: (p: Product, size: string, qty: number) => AddResult;
-  setQty: (id: string, size: string, qty: number) => CartLine | undefined;
-  removeLine: (id: string, size: string) => void;
-  clearCart: () => boolean;
-  toggleWish: (id: string) => boolean;
+  addToCart: (p: Product, size: string, qty: number) => Promise<AddResult>;
+  setQty: (id: string, size: string, qty: number) => Promise<ShownLine | undefined>;
+  removeLine: (id: string, size: string) => Promise<void>;
+  toggleWish: (id: string) => Promise<boolean>;
   toast: (msg: string) => void;
 };
 const Ctx = createContext<StoreState | null>(null);
@@ -45,9 +56,15 @@ export function useStore() {
 
 export default function StoreProvider({ catalogue, children }: { catalogue: Catalogue; children: React.ReactNode }) {
   const idx = useMemo(() => indexCatalogue(catalogue), [catalogue]);
+  const auth = useAuth();
+  const path = usePathname();
   const [rawCart, setRawCart] = useState<unknown[]>([]);
   const [rawWish, setRawWish] = useState<unknown[]>([]);
-  const [ready, setReady] = useState(false);
+  const [saved, setSaved] = useState<CustomerStore | null>(null);
+  /** Loading the saved cart: 'failed' falls back to this browser's cart (and says so) instead of loading forever. */
+  const [savedStatus, setSavedStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+  const savedStatusRef = useRef<string>('idle');
+  const [localReady, setLocalReady] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -60,50 +77,111 @@ export default function StoreProvider({ catalogue, children }: { catalogue: Cata
 
   useEffect(() => {
     const load = () => { setRawCart(readList(KEYS.cart)); setRawWish(readList(KEYS.wish)); };
-    load(); setReady(true);
+    load(); setLocalReady(true);
     const onStorage = (e: StorageEvent) => { if (e.key === KEYS.cart || e.key === KEYS.wish || e.key === null) load(); };
     addEventListener('storage', onStorage);
     try { if (localStorage.getItem('kietsu-reduce-motion') === 'true') document.documentElement.classList.add('st-reduce'); } catch {}
     return () => removeEventListener('storage', onStorage);
   }, []);
 
-  const lineFor = useCallback((p: Product, size: string, qty: unknown): CartLine =>
-    ({ id: p.id, sku: p.sku, name: p.name, image: p.media?.primary?.src || null, price: p.price, size, qty: clampQty(qty) }), []);
-
-  /* Unknown products or sizes are dropped; name, SKU, image and price always come from the catalogue. */
-  const lines = useMemo(() => rawCart
-    .filter((l): l is { id: string; size: string; qty: unknown } => !!l && typeof (l as CartLine).id === 'string')
-    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && v.available))
-    .map(l => lineFor(idx.byId.get(l.id)!, l.size, l.qty)), [rawCart, idx, lineFor]);
-  const wishIds = useMemo(() => [...new Set(rawWish.filter((x): x is string => typeof x === 'string'))].filter(id => idx.byId.has(id)), [rawWish, idx]);
-
   const write = useCallback((key: string, list: unknown[]) => {
     try { localStorage.setItem(key, JSON.stringify(list)); return true; }
     catch { toast('This browser blocked saving, so the change may not survive a refresh.'); return false; }
   }, [toast]);
-  const saveCart = useCallback((next: CartLine[]) => { const ok = write(KEYS.cart, next); setRawCart(next); return ok; }, [write]);
 
-  const addToCart = useCallback((p: Product, size: string, qty: number): AddResult => {
-    const next = lines.map(l => ({ ...l }));
+  /* Signed in → load the saved cart and wishlist, merging this browser's guest lists into them once. Reloaded on each
+     navigation, so changes made on the server (an order paid, another tab) show up. */
+  useEffect(() => {
+    if (auth.status !== 'user') { setSaved(null); setSavedStatus('idle'); savedStatusRef.current = 'idle'; return; }
+    let live = true;
+    setSavedStatus(s => (s === 'ready' ? s : 'loading'));
+    (async () => {
+      const guestCart = readList(KEYS.cart), guestWish = readList(KEYS.wish);
+      let store: CustomerStore | null = null;
+      if (guestCart.length || guestWish.length) {
+        const r = await mergeGuestStoreAction({ cart: guestCart, wishlist: guestWish }).catch(() => null);
+        if (r?.ok && r.store) { write(KEYS.cart, []); write(KEYS.wish, []); setRawCart([]); setRawWish([]); store = r.store; }
+      }
+      if (!store) {
+        const res = await fetch('/api/store', { cache: 'no-store', credentials: 'same-origin' }).catch(() => null);
+        const body = res?.ok ? await res.json() as { status: string } & Partial<CustomerStore> : null;
+        if (body?.status === 'customer' && body.cart) store = { cart: body.cart, wishlist: body.wishlist ?? [] };
+      }
+      if (!live) return;
+      if (!store && savedStatusRef.current === 'ready') return;          // a reload failed: keep showing the last saved state
+      setSaved(store); setSavedStatus(store ? 'ready' : 'failed');
+      if (!store && savedStatusRef.current !== 'failed') toast('Your saved cart could not be loaded right now. Items you add are kept in this browser for now.');
+      savedStatusRef.current = store ? 'ready' : 'failed';
+    })();
+    return () => { live = false; };
+  }, [auth.status, path, write, toast]);
+
+  const mode: 'guest' | 'customer' = saved ? 'customer' : 'guest';
+  const ready = localReady && (auth.status === 'guest' || savedStatus === 'ready' || savedStatus === 'failed');
+  const apply = useCallback((r: StoreResult) => { if (r.store) setSaved(r.store); if (!r.ok && r.message) toast(r.message); return r; }, [toast]);
+
+  const lineFor = useCallback((p: Product, size: string, qty: unknown): CartLine =>
+    ({ id: p.id, sku: p.sku, name: p.name, image: p.media?.primary?.src || null, price: p.price, size, qty: clampQty(qty) }), []);
+
+  /* Guest lines: unknown products or sizes are dropped; name, SKU, image and price always come from the catalogue. */
+  const guestLines = useMemo(() => rawCart
+    .filter((l): l is { id: string; size: string; qty: unknown } => !!l && typeof (l as CartLine).id === 'string')
+    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && v.available))
+    .map(l => lineFor(idx.byId.get(l.id)!, l.size, l.qty)), [rawCart, idx, lineFor]);
+  const savedLines = useMemo<ShownLine[]>(() => (saved?.cart.lines ?? []).map(l => ({
+    id: l.id, sku: l.sku, name: l.name, size: l.size, qty: l.qty, price: l.price, available: l.available, problem: l.problem,
+    image: idx.byId.get(l.id)?.media?.primary?.src || null,
+  })), [saved, idx]);
+  const lines: ShownLine[] = saved ? savedLines : guestLines;
+  const wishIds = useMemo(() => saved ? saved.wishlist.filter(id => idx.byId.has(id))
+    : [...new Set(rawWish.filter((x): x is string => typeof x === 'string'))].filter(id => idx.byId.has(id)), [saved, rawWish, idx]);
+
+  const saveGuestCart = useCallback((next: CartLine[]) => { const ok = write(KEYS.cart, next); setRawCart(next); return ok; }, [write]);
+
+  const addToCart = useCallback(async (p: Product, size: string, qty: number): Promise<AddResult> => {
+    if (saved) {
+      const before = saved.cart.lines.find(l => l.id === p.id && l.size === size);
+      const r = apply(await addToCartAction({ productId: p.id, size, qty: clampQty(qty) }));
+      return { ok: r.ok, merged: !!before, capped: !!r.capped, qty: r.qty ?? 0, message: r.message };
+    }
+    const next = guestLines.map(l => ({ ...l }));
     const hit = next.find(l => l.id === p.id && l.size === size), want = (hit ? hit.qty : 0) + clampQty(qty);
     if (hit) hit.qty = Math.min(MAX_QTY, want); else next.push(lineFor(p, size, qty));
-    return { ok: saveCart(next), merged: !!hit, capped: want > MAX_QTY, qty: Math.min(MAX_QTY, want) };
-  }, [lines, lineFor, saveCart]);
-  const setQty = useCallback((id: string, size: string, qty: number) => {
-    const next = lines.map(l => ({ ...l })), l = next.find(x => x.id === id && x.size === size);
-    if (l) { l.qty = clampQty(qty); saveCart(next); }
+    return { ok: saveGuestCart(next), merged: !!hit, capped: want > MAX_QTY, qty: Math.min(MAX_QTY, want) };
+  }, [saved, apply, guestLines, lineFor, saveGuestCart]);
+
+  const setQty = useCallback(async (id: string, size: string, qty: number): Promise<ShownLine | undefined> => {
+    if (saved) {
+      const r = apply(await setCartQtyAction({ productId: id, size, qty: clampQty(qty) }));
+      const l = r.store?.cart.lines.find(x => x.id === id && x.size === size);
+      return l && r.ok ? { ...l, image: null } : undefined;
+    }
+    const next = guestLines.map(l => ({ ...l })), l = next.find(x => x.id === id && x.size === size);
+    if (l) { l.qty = clampQty(qty); saveGuestCart(next); }
     return l;
-  }, [lines, saveCart]);
-  const removeLine = useCallback((id: string, size: string) => { saveCart(lines.filter(l => !(l.id === id && l.size === size))); }, [lines, saveCart]);
-  const clearCart = useCallback(() => saveCart([]), [saveCart]);
-  const toggleWish = useCallback((id: string) => {
-    const on = !wishIds.includes(id), next = on ? [...wishIds, id] : wishIds.filter(x => x !== id);
+  }, [saved, apply, guestLines, saveGuestCart]);
+
+  const removeLine = useCallback(async (id: string, size: string) => {
+    if (saved) { apply(await removeCartLineAction({ productId: id, size })); return; }
+    saveGuestCart(guestLines.filter(l => !(l.id === id && l.size === size)));
+  }, [saved, apply, guestLines, saveGuestCart]);
+
+  const toggleWish = useCallback(async (id: string) => {
+    const on = !wishIds.includes(id);
+    if (saved) {
+      setSaved(s => s && { ...s, wishlist: on ? [...s.wishlist, id] : s.wishlist.filter(x => x !== id) });   // shown at once
+      const r = apply(await setWishlistedAction({ productId: id }, on));
+      return r.ok ? on : !on;
+    }
+    const next = on ? [...wishIds, id] : wishIds.filter(x => x !== id);
     write(KEYS.wish, next); setRawWish(next); return on;
-  }, [wishIds, write]);
+  }, [saved, wishIds, apply, write]);
 
   const value: StoreState = {
-    idx, ready, lines, wishIds, toast, addToCart, setQty, removeLine, clearCart, toggleWish,
-    cartCount: lines.reduce((n, l) => n + l.qty, 0), subtotal: lines.reduce((s, l) => s + l.price * l.qty, 0)
+    idx, ready, mode, lines, wishIds, toast, addToCart, setQty, removeLine, toggleWish,
+    serverCart: saved?.cart ?? null,
+    cartCount: lines.reduce((n, l) => n + l.qty, 0),
+    subtotal: saved ? saved.cart.totals.subtotal : lines.reduce((s, l) => s + l.price * l.qty, 0),
   };
   return <Ctx.Provider value={value}>{children}<p className="st-toast" role="status" aria-live="polite">{toastMsg}</p></Ctx.Provider>;
 }

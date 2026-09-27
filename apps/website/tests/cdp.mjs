@@ -34,7 +34,8 @@ export async function launch(port = 9333) {
       errors.length = 0;
       const loaded = new Promise(r => { const l = m => { if (m.method === 'Page.loadEventFired') { listeners.splice(listeners.indexOf(l), 1); r(); } }; listeners.push(l); });
       await send('Page.navigate', {url}); await loaded;
-      for (let i = 0; i < 50; i++) { if (await api.eval(readyExpr)) break; await sleep(100); }
+      // Up to 20 s for the page to be ready (it only waits that long when a page is slow; the caller then checks the content).
+      for (let i = 0; i < 200; i++) { if (await api.eval(readyExpr).catch(() => false)) break; await sleep(100); }
       await api.eval('document.querySelectorAll("img[loading=lazy]").forEach(i=>i.loading="eager"),Promise.race([new Promise(r=>setTimeout(r,6000)),Promise.all([...document.images].map(i=>i.complete?0:new Promise(r=>{i.addEventListener("load",r);i.addEventListener("error",r)})))])');
       await sleep(250);
     },

@@ -194,26 +194,58 @@ export interface AddressesTable {
 export type OrderStatus = 'pending_payment' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'payment_failed' | 'refunded';
 export type PaymentStatus = 'unpaid' | 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded' | 'partially_refunded';
 export interface OrdersTable {
-  id: string; order_number: string; user_id: string; customer_id: string | null;
-  status: OrderStatus; payment_status: PaymentStatus | null; currency: string;
-  subtotal_paise: ColumnType<number, number, never>; total_paise: ColumnType<number, number, never>;   // never updated
+  id: Generated<string>; order_number: Generated<string>;
+  user_id: string | null;                // legacy Supabase owner (fixtures / pre-M7); platform orders use customer_id (M7)
+  customer_id: string | null; cart_id: string | null; idempotency_key: string | null;
+  status: Generated<OrderStatus>; payment_status: PaymentStatus | null; currency: Generated<string>;
+  // Amounts are fixed when the order is created and never updated.
+  subtotal_paise: ColumnType<number, number, never>; discount_paise: ColumnType<number, number | undefined, never>;
+  shipping_paise: ColumnType<number, number | undefined, never>; tax_paise: ColumnType<number, number | undefined, never>;
+  total_paise: ColumnType<number, number, never>; prices_include_tax: ColumnType<boolean, boolean | undefined, never>;
+  pricing: ColumnType<unknown, string | undefined, never>;   // how tax, shipping and discounts were worked out
   contact: ColumnType<unknown, string, never>; shipping_address: ColumnType<unknown, string, never>;
-  razorpay_order_id: string | null; razorpay_payment_id: string | null; paid_at: Timestamp | null;
+  razorpay_order_id: string | null; razorpay_payment_id: string | null; paid_at: Timestamp | null; payment_expires_at: Timestamp | null;
   created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
 }
 /** Snapshot of what was bought, at the price paid. Read-only to the admin app. */
 export interface OrderItemsTable {
-  id: string; order_id: string; product_id: string | null; variant_id: string | null; sku: string; name: string; size: string;
+  id: Generated<string>; order_id: string; product_id: string | null; variant_id: string | null; sku: string; name: string; size: string;
   image_path: string | null; unit_price_paise: number; qty: number; line_total_paise: number;
 }
 export interface OrderStatusHistoryTable {
-  id: ColumnType<number, never, never>; order_id: string; from_status: OrderStatus | null; to_status: OrderStatus;
+  id: Generated<number>; order_id: string; from_status: OrderStatus | null; to_status: OrderStatus;
   changed_by: string | null; note: string | null; created_at: Generated<Timestamp>;
 }
+export type PaymentRecordStatus = 'created' | 'authorized' | 'captured' | 'failed' | 'refunded' | 'partially_refunded';
 export interface PaymentsTable {
-  id: string; order_id: string; provider: string; provider_order_id: string | null; provider_payment_id: string | null; amount_paise: number;
-  currency: string; status: 'created' | 'authorized' | 'captured' | 'failed' | 'refunded' | 'partially_refunded'; method: string | null;
-  failure_reason: string | null; captured_at: Timestamp | null; created_at: Timestamp;
+  id: Generated<string>; order_id: string; provider: string; provider_order_id: string | null; provider_payment_id: string | null; amount_paise: number;
+  currency: Generated<string>; status: Generated<PaymentRecordStatus>; method: string | null;
+  failure_reason: string | null; raw: ColumnType<unknown, string | undefined, string | undefined>; captured_at: Timestamp | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+/** Razorpay webhook events: the event id is the primary key, so each event is stored (and processed) once. */
+export interface PaymentEventsTable {
+  id: string; provider: Generated<string>; type: string; payload: ColumnType<unknown, string, never>; order_id: string | null;
+  outcome: string | null; received_at: Generated<Timestamp>; processed_at: Timestamp | null;
+}
+// Carts (M2 tables, used from M7). A signed-in customer has at most one active cart.
+export type CartStatus = 'active' | 'converted' | 'merged' | 'abandoned';
+export interface CartsTable {
+  id: Generated<string>; customer_id: string | null; guest_token_hash: Buffer | null; status: Generated<CartStatus>;
+  currency: Generated<string>; expires_at: Timestamp | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface WishlistsTable { id: Generated<string>; customer_id: string; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp> }
+export interface WishlistItemsTable {
+  id: Generated<string>; wishlist_id: string | null; user_id: string | null; product_id: string; created_at: Generated<Timestamp>;
+}
+export interface CartItemsTable {
+  id: Generated<string>; cart_id: string | null; user_id: string | null; variant_id: string; qty: number;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+/** Tax configuration (M2). Basis points: 1800 = 18 %. is_inclusive: the rate is already inside the listed price. */
+export interface TaxRatesTable {
+  id: Generated<string>; code: string; label: string; rate_bp: number; is_inclusive: boolean; is_active: boolean;
+  valid_from: Date; valid_to: Date | null;
 }
 export interface RefundsTable {
   id: string; payment_id: string; order_id: string; amount_paise: number; reason: string; status: 'requested' | 'pending' | 'processed' | 'failed';
@@ -257,7 +289,13 @@ export interface Database {
   order_items: OrderItemsTable;
   order_status_history: OrderStatusHistoryTable;
   payments: PaymentsTable;
+  payment_events: PaymentEventsTable;
+  carts: CartsTable;
+  cart_items: CartItemsTable;
   refunds: RefundsTable;
+  tax_rates: TaxRatesTable;
+  wishlists: WishlistsTable;
+  wishlist_items: WishlistItemsTable;
   invoices: InvoicesTable;
   v_sales_daily: SalesDailyView;
   v_low_stock: LowStockView;

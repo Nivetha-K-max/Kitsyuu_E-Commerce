@@ -4,6 +4,7 @@
    in the same transaction. */
 import { recordAudit, sql, type Db, type OrderStatus, type PaymentStatus } from '@kitsyuu/db';
 import { ConflictError, NotFoundError, type AddressInput, type CustomerProfileInput } from '@kitsyuu/contracts';
+import { customerOrderActions } from './checkout.ts';
 import type { CustomerPrincipal, RequestContext } from '@kitsyuu/auth';
 
 const audit = (p: CustomerPrincipal, ctx: RequestContext, action: string, entityType: string, entityId: string | null, extra: { before?: unknown; after?: unknown } = {}) =>
@@ -144,7 +145,12 @@ export async function listCustomerOrders(db: Db, p: CustomerPrincipal): Promise<
 
 export interface CustomerOrderDetail extends CustomerOrderSummary {
   paidAt: Date | null;
-  subtotalPaise: number;
+  subtotalPaise: number; discountPaise: number; shippingPaise: number; taxPaise: number; pricesIncludeTax: boolean;
+  contact: { name: string | null; email: string | null; phone: string | null };
+  /** Unpaid orders: until when the items are held. */
+  paymentExpiresAt: Date | null;
+  /** The customer can pay (again) / cancel this order now. */
+  canPay: boolean; canCancel: boolean;
   items: { sku: string; name: string; size: string; imagePath: string | null; productId: string | null; unitPricePaise: number; qty: number; lineTotalPaise: number }[];
   shipping: { name: string | null; phone: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null; country: string | null };
   history: { status: OrderStatus; at: Date }[];
@@ -156,7 +162,8 @@ const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : nul
 export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber: string): Promise<CustomerOrderDetail> {
   const { legacy } = await ownerFilter(db, p);
   const o = await db.selectFrom('orders as o')
-    .select(['o.id', 'o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.total_paise', 'o.subtotal_paise', 'o.currency', 'o.paid_at', 'o.shipping_address'])
+    .select(['o.id', 'o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.total_paise', 'o.subtotal_paise', 'o.currency', 'o.paid_at', 'o.shipping_address',
+      'o.contact', 'o.discount_paise', 'o.shipping_paise', 'o.tax_paise', 'o.prices_include_tax', 'o.payment_expires_at', 'o.customer_id'])
     .where('o.order_number', '=', orderNumber)
     .where(eb => eb.or([
       eb('o.customer_id', '=', p.customerId),
@@ -170,12 +177,19 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     db.selectFrom('order_status_history').select(['to_status', 'created_at']).where('order_id', '=', o.id).orderBy('created_at').execute(),
   ]);
   const a = (o.shipping_address ?? {}) as Record<string, unknown>;
+  const c = (o.contact ?? {}) as Record<string, unknown>;
+  const actions = customerOrderActions(o, true);
   return {
     orderNumber: o.order_number, createdAt: o.created_at as Date, status: o.status, paymentStatus: o.payment_status, totalPaise: o.total_paise,
-    subtotalPaise: o.subtotal_paise, currency: o.currency, paidAt: o.paid_at,
+    subtotalPaise: o.subtotal_paise, discountPaise: o.discount_paise, shippingPaise: o.shipping_paise, taxPaise: o.tax_paise, pricesIncludeTax: o.prices_include_tax,
+    currency: o.currency, paidAt: o.paid_at,
+    contact: { name: text(c.name), email: text(c.email), phone: text(c.phone) },
+    paymentExpiresAt: actions.canPay ? (o.payment_expires_at as Date | null) : null,
+    // Asked of the order workflow. canPay assumes a payment provider is configured; the website also checks that.
+    canPay: actions.canPay, canCancel: actions.canCancel,
     units: items.reduce((n, i) => n + i.qty, 0), lines: items.length,
     items: items.map(i => ({ sku: i.sku, name: i.name, size: i.size, imagePath: i.image_path, productId: i.product_id, unitPricePaise: i.unit_price_paise, qty: i.qty, lineTotalPaise: i.line_total_paise })),
-    shipping: { name: text(a.name), phone: text(a.phone), line1: text(a.line1), line2: text(a.line2), city: text(a.city), state: text(a.state), pin: text(a.pin), country: text(a.country) },
+    shipping: { name: text(a.name ?? a.full_name), phone: text(a.phone), line1: text(a.line1), line2: text(a.line2), city: text(a.city), state: text(a.state), pin: text(a.pin), country: text(a.country) },
     history: history.map(h => ({ status: h.to_status, at: h.created_at as Date })),
   };
 }

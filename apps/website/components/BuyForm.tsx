@@ -10,22 +10,24 @@ export default function BuyForm({ productId }: { productId: string }) {
   const { idx, addToCart } = useStore();
   const p = idx.byId.get(productId)!;
   const [size, setSize] = useState(''), [qty, setQtyState] = useState(1), [invalid, setInvalid] = useState(false);
-  const [status, setStatus] = useState<React.ReactNode>(null);
+  const [status, setStatus] = useState<React.ReactNode>(null), [busy, setBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   const clamp = (v: unknown) => Math.min(MAX_QTY, Math.max(1, Math.round(Number(v)) || 1));
   const setQty = (v: unknown) => setQtyState(clamp(v));
 
   return (
-    <form className="st-buy" noValidate ref={form} onSubmit={e => {
+    <form className="st-buy" noValidate ref={form} aria-busy={busy || undefined} onSubmit={async e => {
       e.preventDefault();
+      if (busy) return;
       if (!size) {
         setInvalid(true); setStatus('Select a size to add this to your cart.');
         form.current!.querySelector<HTMLInputElement>('input[name="size"]:not(:disabled)')?.focus(); return;
       }
       const input = form.current!.querySelector<HTMLInputElement>('#st-qty')!, n = clamp(input.value);
       setQty(n);
-      const r = addToCart(p, size, n);
-      if (!r.ok) { setStatus('Your cart could not be saved in this browser.'); return; }
+      setBusy(true);
+      const r = await addToCart(p, size, n).finally(() => setBusy(false));
+      if (!r.ok) { setStatus(r.message ?? 'Your cart could not be saved in this browser.'); return; }
       setStatus(<>{r.capped ? `Your cart now has the maximum of ${MAX_QTY} in size ${size}.` : `Added to cart: size ${size}, quantity ${r.merged ? `now ${r.qty}` : r.qty}.`} <Link href={url.cart}>View cart</Link></>);
     }}>
       <fieldset className={`st-fieldset${invalid ? ' is-invalid' : ''}`} {...(invalid ? { 'aria-describedby': 'st-buy-status' } : {})}>
@@ -46,7 +48,7 @@ export default function BuyForm({ productId }: { productId: string }) {
             onChange={e => setQtyState(Number(e.target.value) || 0)} onBlur={e => setQty(e.target.value)} />
           <button type="button" data-step="1" aria-label="Increase quantity" disabled={qty >= MAX_QTY} onClick={() => setQtyState(q => clamp(q + 1))}>+</button>
         </div>
-        <button className="button st-add" type="submit">Add to cart</button>
+        <button className="button st-add" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add to cart'}</button>
       </div>
       <WishButton id={p.id} label={`Save ${p.name} to wishlist`} variant="pdp" />
       <p className="st-phase-note st-buy-status" id="st-buy-status" role="status" aria-live="polite">{status}</p>

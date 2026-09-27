@@ -110,3 +110,24 @@
  .st-order-item-total{grid-column:2}
  .st-session-list li{flex-direction:column;align-items:flex-start}
 }
+
+/* ---------- M7: cart, checkout, payment, confirmation ---------- */
+.st-summary .st-total{padding-top:12px;border-top:1px solid var(--line);font-weight:600}
+.st-summary dd.st-total{font:600 20px var(--body)}
+.st-line.has-problem .st-line-media img{opacity:.55}
+.st-line-problem{margin:8px 0 0;padding:6px 10px;border-left:3px solid var(--st-error);background:#2a1418;font-size:13px;line-height:1.5}
+.st-mini li.has-problem{opacity:.6}
+.st-summary .st-form-alert{margin:0 0 14px}
+.st-radio-group{margin:0 0 12px;padding:0;border:0;min-width:0}
+.st-radio-group legend{margin-bottom:12px;color:var(--muted);font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-radio{display:flex;gap:12px;align-items:flex-start;margin:0 0 10px;padding:14px 16px;border:1px solid var(--line);cursor:pointer;line-height:1.55;font-size:14px;overflow-wrap:anywhere}
+.st-radio:has(input:checked){border-color:var(--paper)}
+.st-radio input{flex:none;width:18px;height:18px;margin-top:2px;accent-color:var(--red)}
+.st-checkout-form .st-place{width:100%;justify-content:center}
+.st-order-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:0 0 28px}
+.st-order-actions .st-inline-form{margin:0}
+.st-empty-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+.st-pay-test{display:grid;gap:12px;padding:18px;border:1px dashed var(--line)}
+.st-pay-test p{margin:0;line-height:1.6}
+.st-pay .st-note{margin-top:16px;color:var(--muted)}
+.st-confirm-ref dd{overflow-wrap:anywhere}

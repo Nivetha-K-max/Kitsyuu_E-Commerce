@@ -6,9 +6,9 @@ import { Icons } from './icons';
 export default function WishButton({ id, label, variant }: { id: string; label: string; variant: 'card' | 'pdp' }) {
   const { wishIds, toggleWish, toast, idx } = useStore();
   const on = useHydrated() && wishIds.includes(id);
-  const click = () => {
+  const click = async () => {
     const p = idx.byId.get(id); if (!p) return;
-    const now = toggleWish(id);
+    const now = await toggleWish(id);
     toast(now ? `Saved ${p.name} to your wishlist.` : `Removed ${p.name} from your wishlist.`);
   };
   if (variant === 'card') {
