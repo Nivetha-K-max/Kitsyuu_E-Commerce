@@ -25,7 +25,7 @@ import type { PaymentProvider, ProviderPayment } from './payments/provider.ts';
 
 type Order = NonNullable<Awaited<ReturnType<typeof lockOrder>>>;
 const ctxAudit = (ctx?: RequestContext) => ({ ip: ctx?.ip ?? null, userAgent: ctx?.userAgent ?? null, requestId: ctx?.requestId ?? null });
-const NOT_VERIFIED = 'We could not verify this payment. If money was taken from your account, it will be matched to your order or refunded.';
+const NOT_VERIFIED = 'We could not verify this payment. Check your order before trying again.';
 
 /** Checkout settings. Values nobody has decided stay null (no invented defaults). */
 export async function checkoutSettings(q: Queryable): Promise<{ paymentWindowMinutes: number | null }> {

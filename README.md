@@ -140,7 +140,7 @@ npm install
 
 1. **Environment.** Copy `apps/website/.env.example` to `apps/website/.env.local` and `apps/admin/.env.example` to `apps/admin/.env.local`, then fill in the values. Never commit these files.
    - Each app needs its own database role URL (`WEBSITE_DATABASE_URL`, `ADMIN_DATABASE_URL`). `npm run db:app-role` creates one.
-   - For local development, `PAYMENT_PROVIDER=test` enables the test payment provider (no money moves).
+   - `PAYMENT_PROVIDER` is empty by default, which means no online payment. For local development you can opt in to the test payment provider with `PAYMENT_PROVIDER=test` (no money moves); production builds refuse it.
 2. **Database.** Migrations are applied with `npm run db:apply`. Read [database/README.md](database/README.md) first: every live change follows a preflight → rehearsal → snapshot → apply → verify procedure.
 3. **Run.**
 
@@ -159,7 +159,7 @@ Providers and secrets come from each app's environment. Business settings come f
 
 | What | Where | Now |
 |---|---|---|
-| Payment provider | `PAYMENT_PROVIDER` | `test` in development; Razorpay adapter ready but not enabled |
+| Payment provider | `PAYMENT_PROVIDER` | Unset by default: no online payment, and checkout refuses orders. `test` is opt-in for development and refused in production. The Razorpay adapter is ready but not enabled. |
 | Shipping | `ShippingProvider` in `apps/website/lib/commerce.ts` | Not set up: no charge, shown as "Not set up yet" |
 | Discounts | `DiscountRule[]` in `apps/website/lib/commerce.ts` | None |
 | Tax | `tax_rates` table | One 0 % tax-inclusive prototype rate |
@@ -174,7 +174,7 @@ Every suite runs against a **throwaway local database**, never against Supabase.
 | Command | Covers | Checks |
 |---|---|---|
 | `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, orders) and the admin browser tests | 6 core suites (88 tests) and 234 browser checks, with database safety checks before and after each file |
-| `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 82 checks |
+| `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 97 checks |
 | `npm run test:website` | Storefront: catalogue, product pages, cart, wishlist, search, sorting, guest checkout (needs `node server.cjs` on :3000 and the website on :3001) | 133 checks |
 
 The browser tests drive headless Chrome over the DevTools Protocol, with no test dependencies. They run one at a time because they share a Chrome profile.

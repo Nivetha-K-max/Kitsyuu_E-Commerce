@@ -1,7 +1,11 @@
 import 'server-only';
-/* Commerce wiring for the website (M7): which providers are plugged in, from configuration. Nothing is assumed:
-   - PAYMENT_PROVIDER: 'test' (development; refused in production unless PAYMENTS_ALLOW_TEST_PROVIDER=on) or 'razorpay'
-     (once credentials exist). Unset → no online payment: checkout explains that orders cannot be paid yet.
+/* Commerce wiring for the website (M7): which providers are plugged in, from configuration. Nothing is assumed, and a
+   missing or wrong configuration fails SAFE (online payment off, checkout says so and refuses orders), never open:
+   - PAYMENT_PROVIDER unset (the default) → no online payment.
+   - PAYMENT_PROVIDER=test → the development test provider, explicitly opted into. In a production build it is refused
+     (logged as an error, payment off) unless PAYMENTS_ALLOW_TEST_PROVIDER=on, which only automated tests of a production
+     build may set; that case logs a loud warning.
+   - PAYMENT_PROVIDER=razorpay → the Razorpay adapter (needs its credentials; a provider that cannot start is logged and off).
    - Shipping and discounts: none are configured yet (core defaults: no charge, no rules). A shipping provider or discount
      rules are added here when they are decided.
    See apps/website/.env.example. */
@@ -10,22 +14,37 @@ import { defaultCommerceConfig, razorpayProvider, testPaymentProvider, type Comm
 
 const g = globalThis as unknown as { __kitsyuuPayment?: PaymentProvider | null };
 
-/** The configured payment provider, or null when none is set up. */
-export function paymentProvider(): PaymentProvider | null {
-  if (g.__kitsyuuPayment !== undefined) return g.__kitsyuuPayment;
+function selectPaymentProvider(): PaymentProvider | null {
   const code = (process.env.PAYMENT_PROVIDER || '').trim();
-  let p: PaymentProvider | null = null;
-  if (code === 'test') {
-    p = testPaymentProvider({ secret: process.env.PAYMENTS_TEST_SECRET, production: process.env.NODE_ENV === 'production',
-      allowInProduction: process.env.PAYMENTS_ALLOW_TEST_PROVIDER === 'on' });
-  } else if (code === 'razorpay') {
-    p = razorpayProvider({ keyId: process.env.RAZORPAY_KEY_ID ?? '', keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
-      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, apiBase: process.env.RAZORPAY_API_BASE || undefined,
-      checkoutScriptUrl: process.env.RAZORPAY_CHECKOUT_URL || undefined });
-  } else if (code) {
-    throw new Error(`PAYMENT_PROVIDER "${code}" is not supported. See apps/website/.env.example.`);
+  if (!code) return null;
+  const production = process.env.NODE_ENV === 'production';
+  try {
+    if (code === 'test') {
+      if (production && process.env.PAYMENTS_ALLOW_TEST_PROVIDER !== 'on') {
+        console.error('[payments] ERROR: PAYMENT_PROVIDER=test is refused in production (it takes no money). Online payment is OFF. '
+          + 'Configure a real payment provider, or leave PAYMENT_PROVIDER unset.');
+        return null;
+      }
+      if (production) console.warn('[payments] WARNING: the TEST payment provider is enabled in a production build (PAYMENTS_ALLOW_TEST_PROVIDER=on). '
+        + 'Orders can be marked paid without any money. For automated tests only, never for a real store.');
+      return testPaymentProvider({ secret: process.env.PAYMENTS_TEST_SECRET, production, allowInProduction: process.env.PAYMENTS_ALLOW_TEST_PROVIDER === 'on' });
+    }
+    if (code === 'razorpay') {
+      return razorpayProvider({ keyId: process.env.RAZORPAY_KEY_ID ?? '', keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
+        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, apiBase: process.env.RAZORPAY_API_BASE || undefined,
+        checkoutScriptUrl: process.env.RAZORPAY_CHECKOUT_URL || undefined });
+    }
+    console.error(`[payments] ERROR: PAYMENT_PROVIDER "${code}" is not supported. Online payment is OFF. See apps/website/.env.example.`);
+  } catch (e) {
+    console.error(`[payments] ERROR: payment provider "${code}" could not start: ${(e as Error).message} Online payment is OFF.`);
   }
-  return (g.__kitsyuuPayment = p);
+  return null;
+}
+
+/** The configured payment provider, or null when none is set up (or its configuration is not usable). */
+export function paymentProvider(): PaymentProvider | null {
+  if (g.__kitsyuuPayment === undefined) g.__kitsyuuPayment = selectPaymentProvider();
+  return g.__kitsyuuPayment;
 }
 export const testProvider = (): TestPaymentProvider | null => {
   const p = paymentProvider();

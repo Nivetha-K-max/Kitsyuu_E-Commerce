@@ -23,7 +23,7 @@ export default function Footer({ catalogue }: { catalogue: Catalogue }) {
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
           <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/#story">The story</a></li><li><a href="/#edit">Style studies</a></li><li><a href="/#about">Our world</a></li></ul></nav>
-          <div><h2>Prototype store</h2><p className="st-footer-note">Product names, sizes, prices and descriptions come from a prototype catalogue and are estimates, not confirmed company data. Product images are prototype-quality catalogue cutouts, not final product photography. Photography and commercial details may be updated. No orders, payments or sign-ups are processed.</p></div>
+          <div><h2>Prototype store</h2><p className="st-footer-note">Product names, sizes, prices and descriptions come from a prototype catalogue and are estimates, not confirmed company data. Product images are prototype-quality catalogue cutouts, not final product photography. Photography and commercial details may be updated.</p></div>
         </div>
         <div className="st-footer-bottom"><span>KITSYUU STORE / PROTOTYPE BUILD</span><a href="#main">Back to top ↑</a></div>
       </div>

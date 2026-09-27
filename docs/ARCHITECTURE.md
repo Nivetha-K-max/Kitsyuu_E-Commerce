@@ -152,6 +152,7 @@ sequenceDiagram
   - An order takes its stock when it is created, so two customers cannot buy the last unit (tested with concurrent checkouts).
   - An unpaid order returns its stock through the ledger when it is cancelled, or replaced by a newer checkout of the same cart.
   - It also returns its stock when its payment hold time runs out, but only if a hold time is configured (see [Decisions](#decisions-that-are-still-open)).
+- **Webhooks** accept at most 256 KB. An oversized request is refused on its `Content-Length`, or, without one, as soon as the streamed body passes the limit, so it is never read into memory.
 - **Failure states**, each shown with a clear message: declined payment (retry allowed), payment window closed, provider unavailable (order kept), database unavailable (checkout error page, no internal details), network cut during payment (nothing marked paid), and an ended session (back to login, then to checkout).
 
 ## Order workflow
@@ -185,7 +186,7 @@ Refunds and returns are not in this workflow yet (M8).
 
 | Capability | Interface | What is plugged in now | Later |
 |---|---|---|---|
-| Payments | `PaymentProvider` (`packages/core/src/payments/provider.ts`) | `test`: development only, no money moves; refused in production | `razorpay`: adapter built, test mode only, not enabled |
+| Payments | `PaymentProvider` (`packages/core/src/payments/provider.ts`) | None by default (no online payment). `test` is an opt-in development provider: no money moves, refused in production | `razorpay`: adapter built, test mode only, not enabled |
 | Shipping | `ShippingProvider` (`pricing.ts`) | `none`: no charge; pages say "Not set up yet" | Flat rate, rate table or carrier |
 | Discounts | `DiscountRule[]` (`pricing.ts`) | No rules | Coupons, sales, customer groups |
 | Tax | `tax_rates` table | One 0 % tax-inclusive prototype rate | Real GST rates (per product / HSN) |
@@ -196,8 +197,8 @@ The website chooses providers from its environment (see `apps/website/.env.examp
 
 | Variable | Meaning |
 |---|---|
-| `PAYMENT_PROVIDER` | `test` or `razorpay`. Unset = no online payment; checkout says so. |
-| `PAYMENTS_TEST_SECRET` / `PAYMENTS_ALLOW_TEST_PROVIDER` | Test provider signing secret. The test provider only runs in production when explicitly allowed (automated tests only). |
+| `PAYMENT_PROVIDER` | Empty by default = no online payment: checkout says so and refuses orders. `test` or `razorpay` when chosen. A wrong or unusable value also switches payment off (logged as an error); it never fails open. |
+| `PAYMENTS_TEST_SECRET` / `PAYMENTS_ALLOW_TEST_PROVIDER` | Test provider signing secret. In a production build the test provider is refused (logged as an error) unless `PAYMENTS_ALLOW_TEST_PROVIDER=on`, which only automated tests may set and which logs a loud warning. |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay credentials (server-only; the key id is passed to the browser by the server). Live keys are refused. |
 | `JOBS_SECRET` | Enables the scheduled job endpoint `POST /api/jobs/expire-orders`. |
 

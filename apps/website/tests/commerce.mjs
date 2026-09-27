@@ -8,7 +8,7 @@ import {createHmac} from 'node:crypto';
 import pg from 'pg';
 import {launch} from './cdp.mjs';
 
-const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL} = process.env;
+const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG} = process.env;
 if (!/@localhost[:/]/.test(KITSYUU_DB_URL || '')) throw new Error('commerce tests only run against a local database');
 const out = []; const ok = (n, p, x = '') => { const l = `${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`; out.push(l); console.log(l); };
 const w = ms => new Promise(r => setTimeout(r, ms));
@@ -56,6 +56,11 @@ const ordersOf = async email => q(`select o.order_number, o.status, o.payment_st
 
 async function addToCart(base, p, qty = 1) {
   await go(`${base}/product/${p.slug}`, '!!document.querySelector(".st-buy")');
+  // Like a shopper, act once the page has settled: a guest is known, or a signed-in customer's saved cart has loaded
+  // (/api/store answered). Clicking earlier puts the item in the browser cart until the next page view (known gap, reported).
+  await until(`(()=>{const a=document.querySelector('.st-tool-account')?.dataset.auth;
+    return a==='guest' || (a==='customer' && performance.getEntriesByType('resource').some(e=>/\\/api\\/store$/.test(e.name)))})()`);
+  await w(200);
   await ev(`(document.querySelector('input[name=size][value="${p.size}"]').click(),true)`);
   await fill('#st-qty', String(qty));
   await ev(`(document.querySelector('.st-buy button[type=submit]').click(),true)`);
@@ -159,6 +164,11 @@ try {
     ok(`[${tag}] the order is paid in the database; the cart is closed`, orders[0].status === 'paid' && orders[0].payment_status === 'paid'
       && (await until(`document.querySelector('[data-badge=cart]')?.textContent === '0'`)));
     ok(`[${tag}] confirmation page: no horizontal overflow`, (await overflow()) <= 0);
+    // Customer texts state facts only: no notification promise (no email/notification service yet), no claim that nothing is processed.
+    const confirmText = await ev('document.body.innerText');
+    ok(`[${tag}] confirmation promises no shipment notification`, /Your order is confirmed./.test(confirmText) && !/let you know|notify|we will (email|send)/i.test(confirmText));
+    ok(`[${tag}] footer no longer says that orders, payments or sign-ups are not processed`, !/No orders, payments or sign-ups are processed/i.test(confirmText)
+      && /prototype catalogue/i.test(await text('footer')));
     await b.shot(`m7-${tag}-confirmation.png`, true);
     await go(`/checkout/pay/${orderNumber}`, '!!document.querySelector("main h1")');
     ok(`[${tag}] a paid order cannot be paid again (sent to its confirmation)`, (await loc()) === `/checkout/complete/${orderNumber}`);
@@ -189,6 +199,8 @@ try {
     const cancelled = {main: (await text('main')).slice(0, 160), stock: [before2, await stock(P2.vid)], status: (await ordersOf(email)).find(o => o.order_number === second)?.status};
     ok(`[${tag}] cancelling returns the stock and the order shows as cancelled`, /cancelled/i.test(cancelled.main)
       && cancelled.stock[1] === before2 && cancelled.status === 'cancelled', JSON.stringify(cancelled));   // before2 = stock before the order took its unit
+    await go(`/account/orders/${second}`, '!!document.querySelector("main h1")');
+    ok(`[${tag}] a cancelled order promises no refund (no refund policy or provider is configured)`, /This order was cancelled./.test(await text('main')) && !/refund/i.test(await text('main')));
 
     // ---------- expired session at checkout ----------
     await addToCart(BASE, P3, 1);
@@ -260,7 +272,28 @@ try {
   ok('[razorpay] signed webhook marks the order paid', (await hook(sig)).status === 200 && (await ordersOf(email)).find(o => o.order_number === down).status === 'paid');
   ok('[razorpay] the same event again is acknowledged and ignored', (await hook(sig)).status === 200
     && (await q(`select count(*)::int n from payments p join orders o on o.id = p.order_id where o.order_number = $1 and p.status = 'captured'`, [down]))[0].n === 1);
+  // Oversized webhook bodies are refused before being read into memory, with or without a Content-Length.
+  const big = 'x'.repeat(300 * 1024);
+  const declared = await fetch(`${RZP_BASE}/api/payments/webhook/razorpay`, {method: 'POST', headers: {'content-type': 'application/json', 'x-razorpay-signature': sig, 'x-razorpay-event-id': 'evt_browser000002'}, body: big});
+  ok('[webhook] oversized body with Content-Length → 413', declared.status === 413);
+  const chunked = new ReadableStream({start(c) { for (let i = 0; i < 30; i++) c.enqueue(new TextEncoder().encode('y'.repeat(10 * 1024))); c.close(); }});
+  const streamed = await fetch(`${RZP_BASE}/api/payments/webhook/razorpay`, {method: 'POST', duplex: 'half', headers: {'content-type': 'application/json', 'x-razorpay-signature': sig, 'x-razorpay-event-id': 'evt_browser000003'}, body: chunked});
+  ok('[webhook] oversized chunked body (no Content-Length) → 413', streamed.status === 413);
+  ok('[webhook] a body under the limit is still verified as before (wrong signature → 401)', (await hook('1'.repeat(64), 'evt_browser000005')).status === 401);
+  ok('[webhook] refused oversized events were not stored', (await q(`select count(*)::int n from payment_events where id in ('razorpay:evt_browser000002','razorpay:evt_browser000003')`))[0].n === 0);
   check();
+
+  // ---------- payment provider configuration fails safe ----------
+  // :3015 has PAYMENT_PROVIDER=test in a production build WITHOUT the explicit test flag; :3016 has no provider (the default).
+  for (const [base, label] of [[TEST_REFUSED_BASE, 'test provider in production without the explicit flag'], [NO_PROVIDER_BASE, 'no payment provider configured']]) {
+    const added = await addToCart(base, P3, 1);
+    await go(`${base}/checkout`, '!!document.querySelector("main h1")');
+    ok(`[config] ${label}: checkout says payment is not set up and offers no order button`, (await exists('[data-no-payments]')) && !(await exists('#st-checkout-form')),
+      JSON.stringify({added, status: await text('#st-buy-status'), main: (await text('main')).slice(0, 200)}));
+  }
+  ok('[config] the refused test provider is logged as an error on that server', /PAYMENT_PROVIDER=test is refused in production/.test(fs.readFileSync(TEST_REFUSED_LOG, 'utf8')));
+  ok('[config] a production build with the explicit test flag logs a loud warning', /WARNING: the TEST payment provider is enabled in a production build/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
+  ok('[config] the example environment leaves the payment provider unset', /^PAYMENT_PROVIDER=s*$/m.test(fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8')));
 
   // ---------- database unavailable ----------
   await go(`${DOWN_BASE}/checkout`, '!!document.querySelector("main h1")');
