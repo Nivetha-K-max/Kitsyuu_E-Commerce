@@ -31,7 +31,8 @@ const message = formSel => ev(`document.querySelector(${JSON.stringify(formSel +
 const fieldError = (formSel, name) => ev(`document.querySelector(${JSON.stringify(`${formSel} [name=${name}]`)})?.closest('.field')?.querySelector('.field-error')?.innerText ?? ''`);
 const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+// Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
 let confirmQuestions = [];
 const autoConfirm = () => ev(`window.__q=[];window.confirm=q=>{window.__q.push(q);return true};true`);
 const confirmsSeen = async () => (confirmQuestions = await ev('window.__q ?? []'));

@@ -42,7 +42,8 @@ const setFile = async (sel, file) => {
   await b.send('DOM.setFileInputFiles', {nodeId, files: [file]});
 };
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+// Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
 const autoConfirm = () => ev(`window.__q=[];window.confirm=q=>{window.__q.push(q);return true};true`);
 
 async function signIn(key, name) {

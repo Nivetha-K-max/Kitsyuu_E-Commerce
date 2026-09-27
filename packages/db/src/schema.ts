@@ -170,7 +170,26 @@ export interface InventoryStatusView {
   product_status: ProductStatus; category_id: string; is_active: boolean; stock_qty: number; reorder_level: number;
   stock_status: 'out_of_stock' | 'low_stock' | 'in_stock'; last_movement_at: Date | null;
 }
-export interface CustomersTable { id: string; email: string; status: 'active' | 'disabled'; created_at: Timestamp; }
+// Customers (M2 + M6). id = the Supabase Auth user id for accounts mirrored from Supabase (legacy_auth_user_id set).
+export type CustomerStatus = 'active' | 'disabled';
+export interface CustomersTable {
+  id: Generated<string>; email: string; full_name: string | null; phone: string | null;
+  password_hash: string | null;          // argon2id; null for a mirrored Supabase account until its first platform login
+  status: Generated<CustomerStatus>; email_verified_at: Timestamp | null; last_login_at: Timestamp | null;
+  password_changed_at: Timestamp | null; legacy_auth_user_id: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+/** Same design as staff_sessions: only the SHA-256 of the cookie token is stored. */
+export interface CustomerSessionsTable {
+  id: Generated<string>; customer_id: string; token_hash: Buffer;
+  created_at: Generated<Timestamp>; last_seen_at: Generated<Timestamp>; idle_expires_at: Timestamp; expires_at: Timestamp;
+  revoked_at: Timestamp | null; ip: string | null; user_agent: string | null;
+}
+export interface AddressesTable {
+  id: Generated<string>; customer_id: string | null; user_id: string | null;   // user_id: legacy Supabase owner (existing rows)
+  full_name: string; phone: string; line1: string; line2: string | null; city: string; state: string; pin: string;
+  country: Generated<string>; is_default: Generated<boolean>; created_at: Generated<Timestamp>;
+}
 // Orders (Phase 4.2 + M2). Amounts are integer paise and are never edited by the admin app.
 export type OrderStatus = 'pending_payment' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'payment_failed' | 'refunded';
 export type PaymentStatus = 'unpaid' | 'pending' | 'authorized' | 'paid' | 'failed' | 'refunded' | 'partially_refunded';
@@ -232,6 +251,8 @@ export interface Database {
   inventory_movements: InventoryMovementsTable;
   v_inventory_status: InventoryStatusView;
   customers: CustomersTable;
+  customer_sessions: CustomerSessionsTable;
+  addresses: AddressesTable;
   orders: OrdersTable;
   order_items: OrderItemsTable;
   order_status_history: OrderStatusHistoryTable;

@@ -15,3 +15,8 @@ export { addVariant, updateVariant, moveVariant } from './variants.ts';
 export { listCategoryTree, createCategory, updateCategory, setCategoryActive, moveCategory } from './categories.ts';
 export { uploadProductImage, setPrimaryImage, updateImageAlt, moveImage, removeImage, processImage, sniffImageType } from './images.ts';
 export { supabaseStorage, localStorage, type ObjectStorage } from './storage.ts';
+export {
+  getCustomerProfile, updateCustomerProfile, listCustomerAddresses, getCustomerAddress, saveCustomerAddress, setDefaultCustomerAddress,
+  deleteCustomerAddress, listCustomerOrders, getCustomerOrder,
+  type CustomerProfile, type CustomerAddress, type CustomerOrderSummary, type CustomerOrderDetail,
+} from './customer-account.ts';

@@ -13,7 +13,7 @@
     "start:website": "npm run start -w @kitsyuu/website",
     "typecheck:website": "npm run typecheck -w @kitsyuu/website",
     "test:website": "npm run test -w @kitsyuu/website",
-    "test:auth": "npm run test:auth -w @kitsyuu/website",
+    "test:account": "npm run test:account -w @kitsyuu/website",
     "dev:admin": "npm run dev -w @kitsyuu/admin",
     "build:admin": "npm run build -w @kitsyuu/admin",
     "start:admin": "npm run start -w @kitsyuu/admin",

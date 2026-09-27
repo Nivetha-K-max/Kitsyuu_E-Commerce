@@ -58,8 +58,10 @@ try {
     // orders.test.mjs loads 8 fixture orders (2 customers, 11 units taken) and then cancels two unpaid ones (+3 back).
     // orders.test.mjs: 8 fixture orders (2 customers, 11 units taken), then two unpaid ones cancelled (+3 back).
     // m4-catalogue.test.mjs: creates 1 product with 2 sizes (+5 units restocked) and keeps 2 of its 3 uploaded images.
+    // customer.test.mjs (M6): 5 customer accounts (asha, ravi, throttle, shared-ip, legacy) and 2 fixture orders.
     const expect = f === 'orders.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 3}
-      : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105} : {};
+      : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105}
+      : f === 'customer.test.mjs' ? {customers: 5, orders: 2} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 

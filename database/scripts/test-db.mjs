@@ -33,7 +33,7 @@ async function create() {
   await drop();
   await run(dbUrl('postgres'), c => c.query(`create database ${NAME}`));
   const migrations = fs.readdirSync(path.join(ROOT, 'migrations')).filter(f => f.endsWith('.sql')).sort();
-  const adminPassword = crypto.randomBytes(24).toString('base64url');
+  const adminPassword = crypto.randomBytes(24).toString('base64url'), websitePassword = crypto.randomBytes(24).toString('base64url');
   await run(dbUrl(NAME), async c => {
     await c.query(fs.readFileSync(path.join(ROOT, 'test/supabase-shim.sql'), 'utf8'));
     for (const f of migrations) {
@@ -44,13 +44,15 @@ async function create() {
     await c.query(fs.readFileSync(path.join(ROOT, 'seed/catalogue.sql'), 'utf8'));
     // Local cluster only: the app role logs in with a random password for this test run.
     await c.query(`alter role kitsyuu_admin with login password ${c.escapeLiteral(adminPassword)}`);
+    await c.query(`alter role kitsyuu_website with login password ${c.escapeLiteral(websitePassword)}`);
     const counts = (await c.query(`select (select count(*)::int from public.products) products, (select count(*)::int from public.product_variants) variants,
       (select count(*)::int from public.roles) roles, (select count(*)::int from public.permissions) permissions`)).rows[0];
     console.log(`test database ${NAME}: ${migrations.length} migrations + seed → ${JSON.stringify(counts)}`);
   });
   const appUrl = new URL(dbUrl(NAME)); appUrl.username = 'kitsyuu_admin'; appUrl.password = adminPassword;
+  const webUrl = new URL(dbUrl(NAME)); webUrl.username = 'kitsyuu_website'; webUrl.password = websitePassword;
   fs.mkdirSync(path.dirname(OUT), {recursive: true});
-  fs.writeFileSync(OUT, `ADMIN_DATABASE_URL=${appUrl}\nKITSYUU_DB_URL=${dbUrl(NAME)}\n`, {mode: 0o600});
+  fs.writeFileSync(OUT, `ADMIN_DATABASE_URL=${appUrl}\nWEBSITE_DATABASE_URL=${webUrl}\nKITSYUU_DB_URL=${dbUrl(NAME)}\n`, {mode: 0o600});
 }
 
 try {

@@ -11,3 +11,12 @@ export {
   loginStaff, logoutStaff, issueStaffInvite, acceptStaffInvite, requestStaffPasswordReset, resetStaffPassword, changeStaffPassword,
   type LoginResult,
 } from './staff-auth.ts';
+export {
+  createCustomerSession, validateCustomerSession, revokeCustomerSession, revokeAllCustomerSessions, listCustomerSessions,
+  type CustomerPrincipal, type CustomerSessionInfo,
+} from './customer-sessions.ts';
+export {
+  signupCustomer, verifyCustomerEmail, resendCustomerVerification, loginCustomer, logoutCustomer, logoutCustomerEverywhere,
+  endCustomerSession, requestCustomerPasswordReset, resetCustomerPassword, changeCustomerPassword,
+  type CustomerLoginResult, type LegacyPasswordCheck,
+} from './customer-auth.ts';

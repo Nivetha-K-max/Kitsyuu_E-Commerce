@@ -266,3 +266,44 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   for (const issue of error.issues) { const k = String(issue.path[0] ?? 'form'); out[k] ??= issue.message; }
   return out;
 }
+
+// ======================= customers (M6) =======================
+// Shape checks only: every customer operation is scoped to the signed-in customer on the server.
+
+export const signupInput = z.object({ fullName, email, password: newPassword, confirm: z.string() })
+  .refine(v => v.password === v.confirm, confirmMatches);
+export const verifyEmailInput = z.object({ token: oneTimeToken });
+
+/** Indian mobile number, stored as the 10 digits (an optional +91 / 0 prefix and spaces or hyphens are accepted). */
+export const indianMobile = z.string().trim().transform(v => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, ''))
+  .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a 10-digit Indian mobile number.'));
+const optionalMobile = z.string().trim().max(20).transform(v => v === '' ? null : v)
+  .pipe(z.union([z.null(), indianMobile]));
+export const customerProfileInput = z.object({ fullName, phone: optionalMobile.default('') });
+
+export const INDIAN_STATES = [
+  'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir',
+  'Jharkhand', 'Karnataka', 'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+  'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+] as const;
+const optionalLine = z.string().trim().max(200).transform(v => v === '' ? null : v);
+export const addressInput = z.object({
+  addressId: uuid.optional(),                            // present when editing
+  fullName,
+  phone: indianMobile,
+  line1: z.string().trim().min(3, 'Enter the house number and street.').max(200),
+  line2: optionalLine.default(''),
+  city: z.string().trim().min(2, 'Enter the city or town.').max(80),
+  state: z.enum(INDIAN_STATES, { message: 'Choose a state or union territory.' }),
+  pin: z.string().trim().regex(/^[1-9][0-9]{5}$/, 'Enter a 6-digit PIN code.'),
+  isDefault: onOff,
+});
+export const addressIdInput = z.object({ addressId: uuid });
+export const sessionIdInput = z.object({ sessionId: uuid });
+export const orderNumberInput = z.object({ orderNumber: z.string().trim().regex(/^[A-Z0-9-]{4,40}$/, 'Unknown order.') });
+
+export type SignupInput = z.infer<typeof signupInput>;
+export type CustomerProfileInput = z.infer<typeof customerProfileInput>;
+export type AddressInput = z.infer<typeof addressInput>;

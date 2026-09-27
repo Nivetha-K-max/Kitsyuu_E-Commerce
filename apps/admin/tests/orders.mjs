@@ -30,7 +30,8 @@ const fieldError = name => ev(`document.querySelector('${F} [name=${name}]')?.cl
 const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const rows = () => ev(`[...document.querySelectorAll('[data-order-row]')].map(r=>r.dataset.orderRow)`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+// Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
 const autoConfirm = () => ev(`window.__q=[];window.confirm=q=>{window.__q.push(q);return true};true`);
 const confirms = () => ev('window.__q ?? []');
 const id = async num => (await q(`select id from orders where order_number = $1`, [num]))[0].id;

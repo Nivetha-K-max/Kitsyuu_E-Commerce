@@ -5,20 +5,26 @@ import type { Queryable } from '@kitsyuu/db';
 export interface AuthSettings {
   staffIdleMinutes: number;
   staffAbsoluteHours: number;
+  customerIdleDays: number;
+  customerAbsoluteDays: number;
   loginMaxFailures: number;
+  customerIpMaxFailures: number;
   loginWindowMinutes: number;
   tokenTtlMinutes: { email_verification: number; password_reset: number; staff_invitation: number };
 }
 
 const FALLBACK: AuthSettings = {
-  staffIdleMinutes: 30, staffAbsoluteHours: 12, loginMaxFailures: 5, loginWindowMinutes: 15,
+  staffIdleMinutes: 30, staffAbsoluteHours: 12, customerIdleDays: 30, customerAbsoluteDays: 90, loginMaxFailures: 5, customerIpMaxFailures: 50, loginWindowMinutes: 15,
   tokenTtlMinutes: { email_verification: 1440, password_reset: 60, staff_invitation: 4320 },
 };
 
 const KEYS = {
   staffIdleMinutes: 'auth.staff_session_idle_minutes',
   staffAbsoluteHours: 'auth.staff_session_absolute_hours',
+  customerIdleDays: 'auth.customer_session_days',
+  customerAbsoluteDays: 'auth.customer_session_absolute_days',
   loginMaxFailures: 'auth.login_max_failures',
+  customerIpMaxFailures: 'auth.customer_login_max_failures_per_ip',
   loginWindowMinutes: 'auth.login_window_minutes',
   tokenTtlMinutes: 'auth.token_ttl_minutes',
 } as const;
@@ -31,7 +37,10 @@ export async function authSettings(q: Queryable): Promise<AuthSettings> {
   return {
     staffIdleMinutes: num('staffIdleMinutes'),
     staffAbsoluteHours: num('staffAbsoluteHours'),
+    customerIdleDays: num('customerIdleDays'),
+    customerAbsoluteDays: num('customerAbsoluteDays'),
     loginMaxFailures: num('loginMaxFailures'),
+    customerIpMaxFailures: num('customerIpMaxFailures'),
     loginWindowMinutes: num('loginWindowMinutes'),
     tokenTtlMinutes: { ...FALLBACK.tokenTtlMinutes, ...(ttl && typeof ttl === 'object' ? ttl : {}) },
   };
