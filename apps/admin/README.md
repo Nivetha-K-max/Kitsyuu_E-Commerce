@@ -1,5 +1,9 @@
 # @kitsyuu/admin
 
-KITSYUU Admin/ERP application (separate Next.js app, independently deployable).
+KITSYUU Admin/ERP: a separate Next.js app, deployed independently from the customer website and never served from it.
 
-Placeholder created in M1. The Next.js app, staff login, permissions, dashboard and audit log are built in M3; catalogue and inventory management in M4. It will never be served from the customer website.
+- Staff login, invitations, roles and permissions, audit log (M3).
+- Dashboard, products, categories, sizes, images, New Arrivals, stock adjustments and orders (M4).
+- ERP modules (customers, payments, fulfilment, returns/refunds, reports, settings) arrive in M8.
+
+Runs on http://localhost:3002 (`npm run dev:admin`). Configuration: `apps/admin/.env.example`. Tests: `npm run test:admin`.

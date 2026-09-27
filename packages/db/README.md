@@ -1,5 +1,5 @@
 # @kitsyuu/db
 
-Server-only database access: Postgres client through the Supabase pooler, generated table types, transaction helper.
+Server-only database access for the KITSYUU apps: Kysely over node-postgres, the typed schema (`src/schema.ts`) and the audit writer (`recordAudit`, always called inside the transaction of the change it records).
 
-Placeholder created in M1. Implemented from M2/M3. Browser code must never import this package.
+Each app connects with its own database role (`kitsyuu_website`, `kitsyuu_admin`) through the Supabase pooler; local test databases connect without TLS. Browser code must never import this package (it throws if it is loaded in a browser).

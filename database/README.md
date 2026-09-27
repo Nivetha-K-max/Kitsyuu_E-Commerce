@@ -36,7 +36,33 @@ SUPABASE_DB_POOLER_HOST=<session pooler host> npm run db:apply -- --status
 | `npm run db:upload-images` | Upload the catalogue images from `dist/store/images/products/` to Storage |
 | `npm run db:promote-admin` | Current Supabase Auth admin promotion; retired in M6 |
 
-Safe order for a new migration: `--dry-run --repeat` → `db:snapshot` → apply with `--no-seed` → `db:snapshot` + `--compare` → verify.
+## Changing the live database
+
+Every live migration follows these steps. Nothing is dropped, reset or truncated.
+
+1. **Read-only preflight** of the live database: migration log, the structure the migration touches (columns, constraints,
+   indexes, RLS policies, grants, functions) and counts of the data it could affect, inside a `READ ONLY` transaction.
+   Note: `db:apply -- --status` first runs `create schema/table if not exists` for its migration log; for a strictly
+   read-only check, query `app_private.applied_migrations` in a read-only transaction instead.
+2. **Rehearsal** on a throwaway local database built to the live state (the migrations already applied on live, the seed,
+   the migration log, and rows of every kind the migration converts). Compare its structure with the live preflight, then
+   run the migration in a transaction and roll back, twice (the second run proves it is safe to re-run), fingerprinting
+   every existing row before and after.
+3. `db:snapshot` → apply with `db:apply -- --no-seed` → `db:snapshot` + `--compare` → verify the new objects and
+   permissions (on Supabase, also that new functions are not executable by `anon` / `authenticated`).
+
+The live database is reachable only from networks that allow outbound 5432/6543 (use the session pooler on IPv4).
+
+## Migrations
+
+| File | Milestone | What it adds |
+|---|---|---|
+| `…0100`–`…0300` | Phase 4.2 | Catalogue, orders, auth roles and RLS, Storage |
+| `…0400`–`…1100` | M2 | Staff access, customers, stock ledger, carts/wishlists, billing, platform settings + audit, reporting views, app roles |
+| `…1200` | M3 | `kitsyuu_admin` login |
+| `…1300` | M4 | Category active flag |
+| `…1400`–`…1500` | M6 | Customer accounts on the platform, addresses per customer, website audit; `kitsyuu_website` login |
+| `…1600` | M7 | Orders, cart and wishlist lines owned by platform customers; pricing, idempotency and payment-hold columns; provider-neutral payment events; `reserve_order_stock` / `release_order_stock` for the website role |
 
 ## Conventions
 
@@ -48,5 +74,7 @@ Safe order for a new migration: `--dry-run --repeat` → `db:snapshot` → apply
   identity keys.
 - Stock changes only through `public.adjust_stock()`. A trigger rejects direct changes to `product_variants.stock_qty`.
 - `audit_logs` is append-only: no role has UPDATE/DELETE/TRUNCATE, and a trigger blocks them for everyone.
-- App database roles `kitsyuu_website` and `kitsyuu_admin` exist as NOLOGIN. Login is enabled in M3 with a password from
-  the environment, never from a migration.
+- App database roles `kitsyuu_admin` (login since M3, migration 1200) and `kitsyuu_website` (login since M6, migration 1500)
+  get their passwords from `npm run db:app-role`, never from a migration. Each app keeps its URL only in its own environment.
+- Business values nobody has decided (shipping, discounts, tax rules, unpaid-order hold time) are not seeded: they stay
+  absent from `settings` until decided.
