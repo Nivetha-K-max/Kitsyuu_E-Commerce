@@ -41,6 +41,8 @@ export type Product = {
   attrs: Record<string, string[]>;
   /** Search-engine text set in the admin (M11); null = use the product name / description. */
   seo: { title: string | null; description: string | null };
+  /** Average of APPROVED reviews (M12); null when there are none. */
+  rating: { average: number; count: number } | null;
 };
 
 /** A product attribute the store can filter by (defined in the admin); only active attributes reach the store. */

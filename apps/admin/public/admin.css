@@ -508,3 +508,14 @@ ul.plain li:last-child{border-bottom:0}
 .select-col input{width:18px;height:18px;cursor:pointer}
 .bulk-bar{margin-top:16px;display:grid;gap:8px}
 .side-panels{display:grid;gap:16px;align-content:start}
+
+/* Reviews moderation (M12) */
+.review-list{display:grid;gap:14px}
+.review-card{display:grid;gap:10px}
+.review-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.review-stars{color:#d49a00;letter-spacing:2px;font-size:16px}
+.review-title{margin:2px 0 0;font-size:16px}
+.review-body{margin:0;white-space:pre-line;line-height:1.6}
+.review-photos{display:flex;flex-wrap:wrap;gap:8px}
+.review-photos img{width:120px;height:120px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--border)}
+.tabs{margin-bottom:14px}

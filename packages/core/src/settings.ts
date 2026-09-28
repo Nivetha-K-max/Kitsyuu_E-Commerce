@@ -62,6 +62,9 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('shipping.method', 'Delivery charge', 'Shipping', 'How delivery is charged at checkout. "Not set up" charges nothing and tells customers so.',
     { kind: 'choice', options: [{ value: 'none', label: 'Not set up (no charge)' }, { value: 'flat', label: 'Flat rate per order' }] }),
   def('shipping.flat_rate_paise', 'Flat delivery charge', 'Shipping', 'Charged once per order when the flat rate is chosen.', { kind: 'money' }),
+  // M12: when a purchase counts as "bought" for reviews. Not decided yet, so it starts closed (no reviews can be written).
+  def('reviews.eligibility', 'Who can review', 'Reviews', 'Customers can review an item once their order reaches this point. Reviews are always checked by staff before they appear.',
+    { kind: 'choice', options: [{ value: 'off', label: 'Closed (no reviews yet)' }, { value: 'paid', label: 'After payment' }, { value: 'delivered', label: 'After delivery' }] }),
   def('shipping.free_from_paise', 'Free delivery from', 'Shipping', 'Orders at or above this amount ship free. Leave empty for no free delivery.', { kind: 'money', optional: true }),
 ];
 const byKey = new Map(SETTINGS_REGISTRY.map(d => [d.key, d]));

@@ -14,7 +14,8 @@ export type Tab = { label: string; id: string; n: number };
 export default function ShopResults({ productIds, tabs, isNew, base, initialSort }:
   { productIds: string[]; tabs: { label: string; items: Tab[]; current: string } | null; isNew: boolean; base: string; initialSort: string }) {
   const { idx } = useStore();
-  const sorts = SORTS(base);
+  // "Customer rating" is offered only once some product in the list has approved reviews.
+  const sorts = SORTS(base).filter(s => s.id !== 'rating' || productIds.some(id => idx.byId.get(id)?.rating));
   const facets = useMemo(() => facetsFor(idx), [idx]);
   const list = useMemo(() => productIds.map(id => idx.byId.get(id)).filter((p): p is Product => !!p), [productIds, idx]);
   const [sort, setSort] = useState(sorts.some(s => s.id === initialSort) ? initialSort : 'default');

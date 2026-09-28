@@ -6,6 +6,7 @@ import { formatMoney, imagesOf, indexCatalogue, plural, url } from '@/lib/catalo
 import { Crumbs, ProductGrid } from '@/components/ui';
 import BuyForm from '@/components/BuyForm';
 import Gallery from '@/components/Gallery';
+import ProductReviews from '@/components/ProductReviews';
 
 type Params = Promise<{ slug: string }>;
 
@@ -45,6 +46,7 @@ export default async function ProductPage({ params }: { params: Params }) {
           </div>
         </div>
       </article>
+      <ProductReviews productId={p.id} />
       {styled.length > 0 && (
         <section className="st-rail" aria-labelledby="st-styled">
           <div className="section-label"><span>STYLED WITH</span><span>AS PAIRED IN THE CATALOGUE</span></div>

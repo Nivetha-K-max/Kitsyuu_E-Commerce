@@ -1,27 +1,11 @@
 import type { NextConfig } from 'next';
+import { STATIC_SECURITY_HEADERS, storefrontCsp } from './lib/csp';
 
-/* M9: security headers for every storefront page. The browser may only load from this origin, product images from
-   Supabase Storage, and Razorpay Checkout (script + its frames/API) for the payment step. Development adds what the
-   Next.js dev server needs (eval for React debugging, websocket for hot reload); production never gets them. */
+/* M9: security headers (see lib/csp.ts). Checkout pages get their Content-Security-Policy from proxy.ts at request time,
+   because it names the payment provider's origins from the deployment's configuration. */
 const dev = process.env.NODE_ENV !== 'production';
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''} https://checkout.razorpay.com`,   // Next.js inline bootstrap
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com",
-  "font-src 'self' data:",
-  `connect-src 'self' https://*.supabase.co https://*.razorpay.com${dev ? ' ws: wss:' : ''}`,
-  'frame-src https://api.razorpay.com https://checkout.razorpay.com',
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join('; ');
 const securityHeaders = [
-  { key: 'Content-Security-Policy', value: csp },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  ...STATIC_SECURITY_HEADERS,
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com" "https://api.razorpay.com")' },
 ];
 
@@ -30,6 +14,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // M12: review photos (up to 3 × 5 MB, checked again on the server) travel in the server-action body; the default is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: '16mb' } },
   async redirects() {
     return [
       { source: '/store', destination: '/#store', permanent: false },
@@ -44,6 +30,7 @@ const nextConfig: NextConfig = {
     // A changed sequence must use a new folder name. Nothing else gets a long-lived cache.
     return [
       { source: '/:path*', headers: securityHeaders },
+      { source: '/((?!checkout(?:/|$)).*)', headers: [{ key: 'Content-Security-Policy', value: storefrontCsp({ dev }) }] },
       { source: '/assets/upscaled-1440/:frame*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] }
     ];
   }

@@ -52,7 +52,7 @@ export async function createAttribute(db: Db, actor: StaffPrincipal, input: Crea
     return { id: input.id };
   });
 }
-const RESERVED = new Set(['category', 'collection', 'sort', 'type', 'size', 'colour', 'color', 'min', 'max', 'stock', 'q', 'page']);
+const RESERVED = new Set(['category', 'collection', 'sort', 'type', 'size', 'colour', 'color', 'min', 'max', 'stock', 'q', 'page', 'rating']);
 
 export async function updateAttribute(db: Db, actor: StaffPrincipal, input: UpdateAttributeInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');

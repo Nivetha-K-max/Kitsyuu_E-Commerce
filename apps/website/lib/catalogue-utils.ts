@@ -50,14 +50,17 @@ export function imagesOf(p: Product): ImageInfo[] {
 /* Sorting only uses fields the catalogue already has. Ties keep catalogue order. */
 export const SORTS = (base: string) => [
   { id: 'default', label: base }, { id: 'new', label: 'New arrivals first' }, { id: 'featured', label: 'Featured first' },
-  { id: 'price-asc', label: 'Price: low to high' }, { id: 'price-desc', label: 'Price: high to low' }
+  { id: 'price-asc', label: 'Price: low to high' }, { id: 'price-desc', label: 'Price: high to low' },
+  { id: 'rating', label: 'Customer rating' }
 ];
 export function sortList(idx: Index, list: Product[], sort: string): Product[] {
   const na = idx.collection('new-arrivals')?.productIds || [];
   const rank = (p: Product) => { const i = na.indexOf(p.id); return i < 0 ? Infinity : i; };
   const by: Record<string, (a: Product, b: Product) => number> = {
     new: (a, b) => rank(a) - rank(b), featured: (a, b) => Number(b.featured) - Number(a.featured),
-    'price-asc': (a, b) => a.price - b.price, 'price-desc': (a, b) => b.price - a.price
+    'price-asc': (a, b) => a.price - b.price, 'price-desc': (a, b) => b.price - a.price,
+    // Rated products first (higher average, then more reviews); unrated keep catalogue order after them.
+    rating: (a, b) => (b.rating?.average ?? -1) - (a.rating?.average ?? -1) || (b.rating?.count ?? 0) - (a.rating?.count ?? 0)
   };
   const f = by[sort];
   return f ? list.map((p, i) => [p, i] as const).sort((x, y) => f(x[0], y[0]) || x[1] - y[1]).map(x => x[0]) : list;

@@ -126,6 +126,13 @@ export type ProductStatus = 'active' | 'draft' | 'archived';
 export interface CategoriesTable { id: string; label: string; parent_id: string | null; sort_order: number; is_active: Generated<boolean>; description: Generated<string>; created_at: Generated<Timestamp>; }
 export interface CollectionsTable { id: string; label: string; data_status: string; note: string | null; is_active: Generated<boolean>; sort_order: Generated<number>; }
 export interface CollectionProductsTable { collection_id: string; product_id: string; position: number; }
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+export interface ReviewsTable {
+  id: Generated<string>; product_id: string; customer_id: string; order_item_id: string; rating: number; title: string | null; body: string;
+  display_name: string; status: Generated<ReviewStatus>; moderation_note: string | null; moderated_by: string | null; moderated_at: Timestamp | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ReviewPhotosTable { id: Generated<string>; review_id: string; position: number; content_type: Generated<string>; width: number; height: number; bytes: Buffer; created_at: Generated<Timestamp>; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -298,6 +305,8 @@ export interface Database {
   collections: CollectionsTable;
   collection_products: CollectionProductsTable;
   product_relations: ProductRelationsTable;
+  reviews: ReviewsTable;
+  review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;
   product_attribute_values: ProductAttributeValuesTable;

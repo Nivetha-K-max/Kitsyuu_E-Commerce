@@ -60,3 +60,8 @@ export {
   listCollections, getCollection, createCollection, updateCollection, setCollectionActive, moveCollection, setCollectionMember, moveCollectionMember,
   listRelated, setRelated, moveRelated, bulkSetProductStatus, MAX_RELATED,
 } from './merchandising.ts';
+// ---------- M12: reviews ----------
+export {
+  reviewEligibility, customerReviewState, submitReview, processReviewPhoto, approvedReviews, ratingSummary, reviewPhoto, listReviews, moderateReview,
+  REVIEW_ELIGIBILITY_KEY, REVIEW_MAX_PHOTOS, type ReviewEligibility,
+} from './reviews.ts';

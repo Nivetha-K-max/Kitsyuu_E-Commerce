@@ -482,3 +482,20 @@ export type CreateCollectionInput = z.infer<typeof createCollectionInput>;
 export type UpdateCollectionInput = z.infer<typeof updateCollectionInput>;
 export type SetCollectionActiveInput = z.infer<typeof setCollectionActiveInput>;
 export type BulkProductStatusInput = z.infer<typeof bulkProductStatusInput>;
+
+// ---------- M12: reviews ----------
+export const submitReviewInput = z.object({
+  orderItemId: uuid,
+  rating: z.coerce.number({ message: 'Choose a rating.' }).int().min(1, 'Choose a rating.').max(5),
+  title: z.string().trim().max(80, 'Keep the title under 80 characters.').transform(v => v || null),
+  body: z.string().trim().min(10, 'Write at least a sentence (10 characters).').max(2000, 'Keep it under 2000 characters.'),
+  displayName: z.string().trim().min(1, 'Enter the name to show.').max(40),
+});
+export const moderateReviewInput = z.object({
+  reviewId: uuid,
+  decision: z.enum(['approved', 'rejected']),
+  note: z.string().trim().max(300).optional().transform(v => v || null),
+  expectedStatus: z.enum(['pending', 'approved', 'rejected']),
+});
+export type SubmitReviewInput = z.infer<typeof submitReviewInput>;
+export type ModerateReviewInput = z.infer<typeof moderateReviewInput>;

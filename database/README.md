@@ -70,6 +70,7 @@ The live database is reachable only from networks that allow outbound 5432/6543 
 | `20260929002000` | M9 (**local only**) | Operations: permission `system.read` (super_admin, admin), setting `security.checkout_orders_per_hour` = 10, index on `auth_attempts(attempted_at)` |
 | `20260929002100` | M10 (**local only**) | `products.hsn_code` (4/6/8 digits, nullable; set by the business). Company details and the delivery charge are settings rows written from the admin, not seeded |
 | `20260929002200` | M11 (**local only**) | `products.seo_title` / `seo_description`; `collections.is_active` + `sort_order` (existing collections stay active); the store sees only active collections and their product lists |
+| `20260929002300` | M12 (**local only**) | Reviews: `reviews` (one per order line, pending → approved/rejected), `review_photos` (WebP, stored in the database), permissions `reviews.read` / `reviews.moderate`, public view `v_product_ratings` (approved totals only) |
 
 > **M8 is local only.** Migrations 1800 and 1900 have been applied only to throwaway local test databases. They must go through the live-migration procedure above (preflight, rehearsal, snapshot, apply, verify) before any deployment. Do not add `grant select on all tables … to kitsyuu_admin` in later migrations: it would undo 1800.
 

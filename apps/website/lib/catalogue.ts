@@ -40,7 +40,7 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
     sb.from('collections').select('*, collection_products (product_id, position)')
   ]);
   fail('categories', cats.error); fail('products', prods.error); fail('collections', cols.error);
-  const [attr, seo] = await Promise.all([readAttributes(sb), readSeo(sb)]);
+  const [attr, seo, ratings] = await Promise.all([readAttributes(sb), readSeo(sb), readRatings(sb)]);
 
   const publicUrl = (path: string) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const toImage = (i: Row['product_images'][number], name: string): MediaImage =>
@@ -62,7 +62,8 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
       media: { status: primary ? (primary.quality === 'official' ? 'official' : 'prototype') : 'held', primary, placeholder: PLACEHOLDER, gallery: imgs.slice(1).map(i => toImage(i, r.name)) },
       catalogueRef: r.catalogue_ref, material: r.material, care: r.care, origin: r.origin,
       attrs: attr.byProduct.get(r.id) ?? {},
-      seo: seo.get(r.id) ?? { title: null, description: null }
+      seo: seo.get(r.id) ?? { title: null, description: null },
+      rating: ratings.get(r.id) ?? null
     };
   });
 
@@ -83,6 +84,15 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
   /* Prices are prototype INR estimates; tax inclusion is unconfirmed (null keeps the existing "unconfirmed" wording). */
   return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products, attributes: attr.attributes };
 });
+
+/* Rating totals of approved reviews (M12), from the public view v_product_ratings (aggregates only). Optional: before
+   migration 2300 the view does not exist and products simply have no rating. Any other error fails as usual. */
+async function readRatings(sb: ReturnType<typeof publicSupabase>): Promise<Map<string, { average: number; count: number }>> {
+  const r = await sb.from('v_product_ratings').select('product_id, average, count');
+  if (r.error && ['42P01', 'PGRST205'].includes(r.error.code ?? '')) return new Map();
+  fail('product ratings', r.error);
+  return new Map((r.data ?? []).map(x => [x.product_id, { average: Number(x.average), count: Number(x.count) }]));
+}
 
 /* SEO text per product (M11). Optional: before migration 2200 the columns do not exist and every product uses its
    name and description. Any other error fails as usual. */

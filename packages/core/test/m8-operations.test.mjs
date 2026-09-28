@@ -234,7 +234,7 @@ test('settings: typed registry, locked business rules, audited edits of safe set
   assert.equal((await listSettings(db, admin)).groups.flatMap(g => g.items).find(i => i.key === 'inventory.low_stock_threshold').canEdit, true);
   // M10 added company details and the delivery charge (entered by the business); every rule-bearing setting stays locked.
   assert.deepEqual(all.filter(i => i.editable).map(i => i.key).sort(), ['company.address', 'company.gstin', 'company.legal_name', 'company.phone', 'company.support_email',
-    'inventory.low_stock_threshold', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method'], 'editable settings');
+    'inventory.low_stock_threshold', 'reviews.eligibility', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method'], 'editable settings');
   assert.ok(s.policies.some(p => /returns/i.test(p.label) && /None/.test(p.value)));
   await assert.rejects(listSettings(db, support), ForbiddenError);
 

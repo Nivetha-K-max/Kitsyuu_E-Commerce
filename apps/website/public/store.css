@@ -549,3 +549,26 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
  @keyframes st-filter-in{from{transform:translateY(40px);opacity:0}}
  .st-filter-head,.st-filter-body,.st-filter-foot{padding-left:var(--st-gutter);padding-right:var(--st-gutter)}
 }
+
+/* Reviews (M12): product page list, account pages, review form */
+.st-reviews{padding:72px 0}
+.st-reviews-summary{margin:0 0 6px;color:var(--paper);font:12px var(--mono);letter-spacing:1px}
+.st-stars{color:#e0b64a;letter-spacing:3px}
+.store .st-review-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+.st-review{display:grid;gap:8px;padding:22px;background:var(--st-soft);border:1px solid var(--line)}
+.st-review p{margin:0}
+.st-review h3{margin:0;font:600 20px/1.1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+.st-review-body{color:#d8d5ce;line-height:1.7;white-space:pre-line}
+.st-review-photos{display:flex;gap:8px;flex-wrap:wrap}
+.st-review-photos img{width:88px;height:88px;object-fit:cover;border:1px solid var(--line)}
+.st-review-meta{color:var(--muted);font:10px var(--mono)!important;letter-spacing:1px;text-transform:uppercase}
+.st-account-section{margin:0 0 40px}
+.st-account-section h2{margin:0 0 14px;font:600 24px/1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.store .st-review-todo,.store .st-review-mine{display:grid;gap:10px}
+.st-review-todo li,.st-review-mine li{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line)}
+.st-review-todo small,.st-review-mine small{display:block;color:var(--muted);font:10px var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-review-mine li[data-status=approved] small{color:#7fc49a}
+.st-review-mine li[data-status=rejected] small{color:#ef7a8b}
+.st-textarea,.st-file{width:100%;padding:12px 14px;background:#161617;border:1px solid #ffffff2e;border-radius:0;color:var(--paper);font:inherit}
+.st-textarea{min-height:140px;resize:vertical}
+.st-review-form .st-radio-group .st-radio span{color:#e0b64a;letter-spacing:3px}
