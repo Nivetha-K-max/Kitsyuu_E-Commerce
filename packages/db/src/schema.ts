@@ -141,6 +141,10 @@ export interface PurchaseOrderLinesTable { id: Generated<string>; purchase_order
 export interface GoodsReceiptsTable { id: Generated<string>; purchase_order_id: string; received_at: Generated<Timestamp>; received_by: string | null; note: string | null; }
 export interface GoodsReceiptLinesTable { id: Generated<string>; goods_receipt_id: string; purchase_order_line_id: string; qty: string; }
 export interface MaterialMovementsTable { id: Generated<string>; material_id: string; delta: string; balance_after: string; reason: string; goods_receipt_id: string | null; staff_id: string | null; note: string | null; created_at: Generated<Timestamp>; }
+export type ProductionStatusDb = 'planned' | 'in_progress' | 'completed' | 'cancelled';
+export interface ProductionOrdersTable { id: Generated<string>; number: string; variant_id: string; qty_planned: number; status: Generated<ProductionStatusDb>; due_on: string | null; notes: string | null; started_at: Timestamp | null; completed_at: Timestamp | null; cancel_note: string | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export interface ProductionInputsTable { id: Generated<string>; production_order_id: string; material_id: string; qty_planned: string | null; qty_consumed: Generated<string>; }
+export interface QcResultsTable { id: Generated<string>; production_order_id: string; qty_passed: number; qty_rejected: number; reject_reason: string | null; note: string | null; inspected_by: string | null; inspected_at: Generated<Timestamp>; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -321,6 +325,9 @@ export interface Database {
   goods_receipts: GoodsReceiptsTable;
   goods_receipt_lines: GoodsReceiptLinesTable;
   material_movements: MaterialMovementsTable;
+  production_orders: ProductionOrdersTable;
+  production_inputs: ProductionInputsTable;
+  qc_results: QcResultsTable;
   review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;

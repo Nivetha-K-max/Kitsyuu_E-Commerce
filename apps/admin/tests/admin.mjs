@@ -90,7 +90,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -134,6 +134,13 @@ try {
   await until(`!document.querySelector('#receive-form')`, 10000);
   ok('M13 order placed and fully received; stock follows', (await q(`select status from purchase_orders order by created_at desc limit 1`))[0].status === 'received'
     && (await q(`select stock_qty::int n from materials where code = 'E2E-TWILL'`))[0].n === 25);
+  // ---------- M14: plan and start a production order ----------
+  await visit('/production', '!!document.querySelector("#create-production-form")');
+  await fill('#create-production-form input[name=qty]', '3'); await submit('#create-production-form');
+  await until(`/^/production/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
+  await submit('#production-start-form');
+  await visit(await ev('location.pathname'), '!!document.querySelector("#qc-form")');
+  ok('M14 production order planned and started; the quality check form is offered', (await exists('#qc-form')) && /in progress/i.test(await text('main')));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------

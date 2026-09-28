@@ -70,3 +70,8 @@ export {
   listVendors, saveVendor, setVendorActive, listMaterials, saveMaterial, adjustMaterialStock, materialLedger, materialMovements,
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, setPoLine, removePoLine, setPurchaseOrderStatus, receiveGoods, PO_TRANSITIONS, type PoStatus,
 } from './procurement.ts';
+// ---------- M14: production and quality control ----------
+export {
+  listProductionOrders, getProductionOrder, createProductionOrder, setProductionInput, consumeMaterial, setProductionStatus, recordQualityCheck,
+  listProducibleVariants, PRODUCTION_TRANSITIONS, type ProductionStatus,
+} from './production.ts';

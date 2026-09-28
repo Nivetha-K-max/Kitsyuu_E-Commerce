@@ -554,3 +554,33 @@ export const receiveGoodsInput = z.object({
   note: optText(500),
 });
 export type VendorInputT = z.infer<typeof vendorInput>;
+
+// ---------- M14: production and quality control ----------
+const wholeQty = (msg: string) => z.coerce.number({ message: msg }).int(msg).min(0, msg).max(100000);
+export const createProductionOrderInput = z.object({
+  variantId: uuid,
+  qty: z.coerce.number({ message: 'Enter how many pieces.' }).int('Enter whole pieces.').min(1, 'Enter how many pieces.').max(100000),
+  dueOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
+  notes: z.string().trim().max(1000).optional().transform(v => v || null),
+});
+export const productionInputInput = z.object({
+  productionOrderId: uuid, materialId: uuid,
+  qtyPlanned: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{1,10}(\.\d{1,3})?$/, 'Enter a number, up to 3 decimals.').transform(Number).nullable()),
+});
+export const consumeMaterialInput = z.object({
+  productionOrderId: uuid, materialId: uuid,
+  qty: z.string().trim().regex(/^\d{1,10}(\.\d{1,3})?$/, 'Enter a number, up to 3 decimals.').transform(Number).refine(n => n > 0, 'Enter a quantity above zero.'),
+});
+export const productionStatusInput = z.object({
+  productionOrderId: uuid,
+  status: z.enum(['in_progress', 'cancelled']),
+  expectedStatus: z.enum(['planned', 'in_progress', 'completed', 'cancelled']),
+  note: z.string().trim().max(300).optional().transform(v => v || null),
+});
+export const qualityCheckInput = z.object({
+  productionOrderId: uuid,
+  passed: wholeQty('Enter the pieces that passed (0 or more).'),
+  rejected: wholeQty('Enter the rejected pieces (0 or more).'),
+  rejectReason: z.string().trim().max(300).optional().transform(v => v || null),
+  note: z.string().trim().max(500).optional().transform(v => v || null),
+});
