@@ -75,3 +75,5 @@ export {
   listProductionOrders, getProductionOrder, createProductionOrder, setProductionInput, consumeMaterial, setProductionStatus, recordQualityCheck,
   listProducibleVariants, PRODUCTION_TRANSITIONS, type ProductionStatus,
 } from './production.ts';
+// ---------- M15: stock counts and stock value ----------
+export { listStockCounts, openStockCount, getStockCount, recordCounts, postStockCount, cancelStockCount, setVariantCost, stockValue } from './stock-count.ts';

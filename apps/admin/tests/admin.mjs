@@ -90,7 +90,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -141,6 +141,14 @@ try {
   await submit('#production-start-form');
   await visit(await ev('location.pathname'), '!!document.querySelector("#qc-form")');
   ok('M14 production order planned and started; the quality check form is offered', (await exists('#qc-form')) && /in progress/i.test(await text('main')));
+  // ---------- M15: open a stock count; stock value page ----------
+  await visit('/stock-counts', '!!document.querySelector("#open-count-form")');
+  await submit('#open-count-form');
+  await until(`/^/stock-counts/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
+  ok('M15 stock count opened with every size to count', (await ev(`document.querySelectorAll('[data-count-lines] input[name^="counted:"]').length`)) > 100);
+  await ev('window.confirm = () => true'); await submit('#cancel-count-form');
+  await visit('/stock-value', '!!document.querySelector("[data-value-garments]")');
+  ok('M15 stock value page: pieces and materials, costs "not set" until entered', /not set/.test(await text('[data-value-garments]')) && (await exists('[data-value-materials]')));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------
@@ -163,7 +171,7 @@ try {
   ok('support user signs in', await until(`location.pathname==='/dashboard'`));
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit.
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Orders|Customers|Reviews', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Stock counts|Orders|Customers|Reviews', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

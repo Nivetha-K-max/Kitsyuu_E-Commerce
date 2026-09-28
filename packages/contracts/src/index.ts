@@ -584,3 +584,10 @@ export const qualityCheckInput = z.object({
   rejectReason: z.string().trim().max(300).optional().transform(v => v || null),
   note: z.string().trim().max(500).optional().transform(v => v || null),
 });
+
+// ---------- M15: stock counts and stock value ----------
+export const openStockCountInput = z.object({ note: z.string().trim().max(300).optional().transform(v => v || null) });
+export const stockCountIdInput = z.object({ stockCountId: uuid });
+export const variantCostInput = z.object({ variantId: uuid, unitCost: z.string().trim().optional() })
+  .transform(({ variantId, unitCost }) => ({ variantId, unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
+  .refine(v => v.unitCostPaise === null || (Number.isInteger(v.unitCostPaise) && v.unitCostPaise >= 0 && v.unitCostPaise <= 100_000_000), { message: 'Enter the cost in rupees.', path: ['unitCost'] });

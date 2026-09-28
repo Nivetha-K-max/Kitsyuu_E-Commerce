@@ -42,6 +42,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M12 | Reviews and ratings: verified purchases only ("paid" or "delivered" chosen in Settings; closed until then), stars, text and up to 3 photos, staff approval before anything is public, ratings filter and sort in the shop | Branch `m9-integration` (local); migration `20260929002300` local only |
 | M13 | Vendors, materials and purchasing: material stock with its own ledger, purchase orders (draft → ordered → partially received / received, or cancelled), deliveries in parts, purchase prices visible only with `costs.read` | Branch `m9-integration` (local); migration `20260929002400` local only |
 | M14 | Production and quality control: production orders per size, materials used drawn from material stock, completion by quality check (passed pieces into stock through the ledger, rejected recorded with a reason). Manufacturing stages are not modelled (not decided) | Branch `m9-integration` (local); migration `20260929002500` local only |
+| M15 | Stock counts (snapshot, count, post only the differences through the ledger) and stock value (entered unit costs for pieces, last purchase price for materials; no costing method is assumed) | Branch `m9-integration` (local); migration `20260929002600` local only |
 
 ## Features
 

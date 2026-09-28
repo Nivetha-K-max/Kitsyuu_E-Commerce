@@ -145,6 +145,10 @@ export type ProductionStatusDb = 'planned' | 'in_progress' | 'completed' | 'canc
 export interface ProductionOrdersTable { id: Generated<string>; number: string; variant_id: string; qty_planned: number; status: Generated<ProductionStatusDb>; due_on: string | null; notes: string | null; started_at: Timestamp | null; completed_at: Timestamp | null; cancel_note: string | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface ProductionInputsTable { id: Generated<string>; production_order_id: string; material_id: string; qty_planned: string | null; qty_consumed: Generated<string>; }
 export interface QcResultsTable { id: Generated<string>; production_order_id: string; qty_passed: number; qty_rejected: number; reject_reason: string | null; note: string | null; inspected_by: string | null; inspected_at: Generated<Timestamp>; }
+export type StockCountStatus = 'open' | 'posted' | 'cancelled';
+export interface StockCountsTable { id: Generated<string>; number: string; status: Generated<StockCountStatus>; note: string | null; created_by: string | null; created_at: Generated<Timestamp>; posted_by: string | null; posted_at: Timestamp | null; }
+export interface StockCountLinesTable { id: Generated<string>; stock_count_id: string; variant_id: string; expected_qty: number; counted_qty: number | null; }
+export interface VariantCostsTable { variant_id: string; unit_cost_paise: number; updated_by: string | null; updated_at: Generated<Timestamp>; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -328,6 +332,9 @@ export interface Database {
   production_orders: ProductionOrdersTable;
   production_inputs: ProductionInputsTable;
   qc_results: QcResultsTable;
+  stock_counts: StockCountsTable;
+  stock_count_lines: StockCountLinesTable;
+  variant_costs: VariantCostsTable;
   review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;

@@ -9,6 +9,8 @@ export const NAV: NavItem[] = [
   { href: '/collections', label: 'Collections', permission: 'categories.read', group: 'Catalogue' },
   { href: '/attributes', label: 'Attributes', permission: 'categories.read', group: 'Catalogue' },
   { href: '/inventory', label: 'Inventory', permission: 'inventory.read', group: 'Catalogue' },
+  { href: '/stock-counts', label: 'Stock counts', permission: 'inventory.read', group: 'Catalogue' },
+  { href: '/stock-value', label: 'Stock value', permission: 'costs.read', group: 'Catalogue' },
   { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Commerce' },
   { href: '/customers', label: 'Customers', permission: 'customers.read', group: 'Commerce' },
   { href: '/payments', label: 'Payments', permission: 'billing.read', group: 'Commerce' },
