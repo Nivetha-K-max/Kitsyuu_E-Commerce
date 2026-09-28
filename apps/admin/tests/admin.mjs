@@ -90,7 +90,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Reviews|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -113,6 +113,27 @@ try {
   // ---------- M12: review moderation queue ----------
   await visit('/reviews', '!!document.querySelector("[data-review-tabs]")');
   ok('M12 reviews: moderation queue opens with its tabs (empty)', (await exists('[data-review-tabs]')) && (await exists('[data-empty=reviews]')));
+  // ---------- M13: vendor → material → purchase order → delivery ----------
+  await visit('/vendors', '!!document.querySelector("#create-vendor-form")');
+  await fill('#create-vendor-form input[name=name]', 'E2E Mills'); await submit('#create-vendor-form');
+  await visit('/materials', '!!document.querySelector("#create-material-form")');
+  await fill('#create-material-form input[name=code]', 'E2E-TWILL'); await fill('#create-material-form input[name=name]', 'Twill');
+  await fill('#create-material-form input[name=unit]', 'm'); await submit('#create-material-form');
+  ok('M13 vendor and material created', /E2E-TWILL/.test(await text('[data-materials-table]')));
+  await visit('/purchase-orders', '!!document.querySelector("#create-po-form")');
+  await submit('#create-po-form');
+  await until(`/^/purchase-orders/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
+  await fill('#po-line-form input[name=qty]', '25'); await submit('#po-line-form');
+  await visit(await ev('location.pathname'), '!!document.querySelector("#po-place-form")');
+  await ev(`window.confirm = () => true`);
+  await submit('#po-place-form');
+  await visit(await ev('location.pathname'), '!!document.querySelector("#receive-form")');
+  await ev(`(()=>{const i=document.querySelector('#receive-form input[name^="received:"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'25');i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await submit('#receive-form');
+  // Once fully received the delivery form is no longer offered, so the result is checked in the database and on the page.
+  await until(`!document.querySelector('#receive-form')`, 10000);
+  ok('M13 order placed and fully received; stock follows', (await q(`select status from purchase_orders order by created_at desc limit 1`))[0].status === 'received'
+    && (await q(`select stock_qty::int n from materials where code = 'E2E-TWILL'`))[0].n === 25);
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------

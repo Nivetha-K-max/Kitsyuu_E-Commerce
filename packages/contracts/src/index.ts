@@ -499,3 +499,58 @@ export const moderateReviewInput = z.object({
 });
 export type SubmitReviewInput = z.infer<typeof submitReviewInput>;
 export type ModerateReviewInput = z.infer<typeof moderateReviewInput>;
+
+// ---------- M13: vendors, materials, purchasing ----------
+const optText = (max: number) => z.string().trim().max(max).optional().transform(v => v || null);
+/** A quantity of material, up to 3 decimals (numeric(14,3) in the database). */
+const materialQty = z.string().trim().regex(/^-?\d{1,10}(\.\d{1,3})?$/, 'Enter a number, up to 3 decimals.').transform(Number);
+export const vendorInput = z.object({
+  vendorId: uuid.optional().or(z.literal('').transform(() => undefined)),
+  name: z.string().trim().min(1, 'Enter a name.').max(120),
+  contact: optText(120),
+  email: z.string().trim().toLowerCase().max(254).optional().transform(v => v || null).pipe(z.email('Enter a valid email.').nullable()),
+  phone: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^[+0-9 ()-]{6,20}$/, 'Digits, spaces and + ( ) - only.').nullable()),
+  gstin: z.string().trim().toUpperCase().optional().transform(v => v || null).pipe(z.string().regex(/^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{3}$/, 'A GSTIN has 15 characters.').nullable()),
+  address: optText(400),
+  notes: optText(1000),
+});
+export const setVendorActiveInput = z.object({ vendorId: uuid, active: z.enum(['true', 'false']).transform(v => v === 'true') });
+export const materialInput = z.object({
+  materialId: uuid.optional().or(z.literal('').transform(() => undefined)),
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{1,39}$/, 'Use 2–40 capital letters, digits or hyphens.').optional(),
+  name: z.string().trim().min(1, 'Enter a name.').max(120),
+  unit: z.string().trim().min(1, 'Enter the unit (m, kg, pcs…).').max(20),
+  reorderLevel: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{1,10}(\.\d{1,3})?$/, 'Enter a number, up to 3 decimals.').transform(Number).nullable()),
+  notes: optText(1000),
+});
+export const adjustMaterialInput = z.object({
+  materialId: uuid,
+  reason: z.enum(['correction', 'damage']),
+  delta: materialQty.refine(n => n !== 0, 'Enter a change other than zero.'),
+  note: z.string().trim().min(1, 'Give a short reason.').max(300),
+});
+export const createPurchaseOrderInput = z.object({
+  vendorId: uuid,
+  expectedOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
+  notes: optText(1000),
+});
+export const poLineInput = z.object({
+  purchaseOrderId: uuid,
+  materialId: uuid,
+  qty: materialQty.refine(n => n > 0, 'Enter a quantity above zero.'),
+  unitCost: z.string().trim().optional(),
+}).transform(({ unitCost, ...rest }) => ({ ...rest, unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
+  .refine(v => v.unitCostPaise === null || (Number.isInteger(v.unitCostPaise) && v.unitCostPaise >= 0), { message: 'Enter the unit cost in rupees.', path: ['unitCost'] });
+export const removePoLineInput = z.object({ purchaseOrderId: uuid, lineId: uuid });
+export const poStatusInput = z.object({
+  purchaseOrderId: uuid,
+  status: z.enum(['ordered', 'cancelled']),
+  expectedStatus: z.enum(['draft', 'ordered', 'partially_received', 'received', 'cancelled']),
+  note: optText(300),
+});
+export const receiveGoodsInput = z.object({
+  purchaseOrderId: uuid,
+  lines: z.array(z.object({ lineId: uuid, qty: materialQty.refine(n => n > 0, 'Quantities must be above zero.') })).max(200),
+  note: optText(500),
+});
+export type VendorInputT = z.infer<typeof vendorInput>;

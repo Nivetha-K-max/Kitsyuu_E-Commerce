@@ -65,3 +65,8 @@ export {
   reviewEligibility, customerReviewState, submitReview, processReviewPhoto, approvedReviews, ratingSummary, reviewPhoto, listReviews, moderateReview,
   REVIEW_ELIGIBILITY_KEY, REVIEW_MAX_PHOTOS, type ReviewEligibility,
 } from './reviews.ts';
+// ---------- M13: vendors, materials, purchasing ----------
+export {
+  listVendors, saveVendor, setVendorActive, listMaterials, saveMaterial, adjustMaterialStock, materialLedger, materialMovements,
+  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, setPoLine, removePoLine, setPurchaseOrderStatus, receiveGoods, PO_TRANSITIONS, type PoStatus,
+} from './procurement.ts';

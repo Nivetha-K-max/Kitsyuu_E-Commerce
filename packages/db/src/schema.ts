@@ -133,6 +133,14 @@ export interface ReviewsTable {
   created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
 }
 export interface ReviewPhotosTable { id: Generated<string>; review_id: string; position: number; content_type: Generated<string>; width: number; height: number; bytes: Buffer; created_at: Generated<Timestamp>; }
+export interface VendorsTable { id: Generated<string>; name: string; contact: string | null; email: string | null; phone: string | null; gstin: string | null; address: string | null; notes: string | null; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export interface MaterialsTable { id: Generated<string>; code: string; name: string; unit: string; stock_qty: Generated<string>; reorder_level: string | null; notes: string | null; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export type PoStatusDb = 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+export interface PurchaseOrdersTable { id: Generated<string>; po_number: string; vendor_id: string; status: Generated<PoStatusDb>; expected_on: string | null; notes: string | null; ordered_at: Timestamp | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export interface PurchaseOrderLinesTable { id: Generated<string>; purchase_order_id: string; material_id: string; qty_ordered: string; qty_received: Generated<string>; unit_cost_paise: number | null; position: Generated<number>; }
+export interface GoodsReceiptsTable { id: Generated<string>; purchase_order_id: string; received_at: Generated<Timestamp>; received_by: string | null; note: string | null; }
+export interface GoodsReceiptLinesTable { id: Generated<string>; goods_receipt_id: string; purchase_order_line_id: string; qty: string; }
+export interface MaterialMovementsTable { id: Generated<string>; material_id: string; delta: string; balance_after: string; reason: string; goods_receipt_id: string | null; staff_id: string | null; note: string | null; created_at: Generated<Timestamp>; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -306,6 +314,13 @@ export interface Database {
   collection_products: CollectionProductsTable;
   product_relations: ProductRelationsTable;
   reviews: ReviewsTable;
+  vendors: VendorsTable;
+  materials: MaterialsTable;
+  purchase_orders: PurchaseOrdersTable;
+  purchase_order_lines: PurchaseOrderLinesTable;
+  goods_receipts: GoodsReceiptsTable;
+  goods_receipt_lines: GoodsReceiptLinesTable;
+  material_movements: MaterialMovementsTable;
   review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;

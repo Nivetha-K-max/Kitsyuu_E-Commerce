@@ -40,6 +40,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M10 | Commerce go-live configuration: delivery charge chosen in Settings ("Not set up" until then), company details, HSN code per product, printable packing slip. Tax/GST invoices wait for the tax decision | Branch `m9-integration` (local); migration `20260929002100` local only |
 | M11 | Catalogue completion: Collections admin (hidden until shown, ordered store menu), "Complete the look" links, bulk product status, SEO title/description per product | Branch `m9-integration` (local); migration `20260929002200` local only |
 | M12 | Reviews and ratings: verified purchases only ("paid" or "delivered" chosen in Settings; closed until then), stars, text and up to 3 photos, staff approval before anything is public, ratings filter and sort in the shop | Branch `m9-integration` (local); migration `20260929002300` local only |
+| M13 | Vendors, materials and purchasing: material stock with its own ledger, purchase orders (draft → ordered → partially received / received, or cancelled), deliveries in parts, purchase prices visible only with `costs.read` | Branch `m9-integration` (local); migration `20260929002400` local only |
 
 ## Features
 
