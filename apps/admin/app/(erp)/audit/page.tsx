@@ -22,7 +22,9 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
   const show = (v: unknown) => (v === null || v === undefined ? '' : JSON.stringify(v, null, 1));
   return (
     <>
-      <PageHead section="System" title="Audit log" eyebrow="Every important admin action, append-only. Times are IST." />
+      <PageHead section="System" title="Audit log" eyebrow="Every important admin action, append-only. Times are IST.">
+        <Link className="btn ghost sm" href="/audit/sign-ins" data-link="sign-ins">Sign-in history</Link>
+      </PageHead>
       <form className="actions filters" method="get" data-audit-filters>
         <label className="sr-only" htmlFor="f-action">Action</label>
         <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''}>

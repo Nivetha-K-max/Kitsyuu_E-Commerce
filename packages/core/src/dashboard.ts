@@ -2,6 +2,7 @@
 import { sql, type Db } from '@kitsyuu/db';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { recentAudit } from './audit.ts';
+import { listPaymentExceptions } from './payments-admin.ts';
 
 const n = sql<number>`count(*)::int`;
 
@@ -20,13 +21,30 @@ export async function getDashboard(db: Db, actor: StaffPrincipal) {
       sql<number>`coalesce(sum(orders_count), 0)::int`.as('paid_orders')]).executeTakeFirstOrThrow(),
     db.selectFrom('v_sales_daily').select(sql<number>`coalesce(sum(revenue_paise), 0)::bigint`.as('revenue'))
       .where('sales_date', '=', sql<Date>`(now() at time zone 'Asia/Kolkata')::date`).executeTakeFirstOrThrow(),
-    db.selectFrom('customers').select([n.as('total'), sql<number>`(count(*) filter (where status = 'active'))::int`.as('active')]).executeTakeFirstOrThrow(),
+    db.selectFrom('customers').select([n.as('total'), sql<number>`(count(*) filter (where status = 'active'))::int`.as('active'),
+      sql<number>`(count(*) filter (where status = 'disabled'))::int`.as('disabled')]).executeTakeFirstOrThrow(),
     db.selectFrom('staff_users').select([sql<number>`(count(*) filter (where status = 'active'))::int`.as('active'),
       sql<number>`(count(*) filter (where status = 'invited'))::int`.as('invited')]).executeTakeFirstOrThrow(),
   ]);
   const lowStockCount = (await db.selectFrom('v_low_stock').select(n.as('n')).executeTakeFirstOrThrow()).n;
+  // M8 fulfilment: paid and processing orders still to ship (with packing progress), shipped and delivered.
+  const fulfilment = await db.selectFrom('orders as o').leftJoin('shipments as sh', 'sh.order_id', 'o.id').select([
+    sql<number>`(count(*) filter (where o.status in ('paid', 'processing')))::int`.as('awaiting'),
+    sql<number>`(count(*) filter (where o.status = 'paid'))::int`.as('paid'),
+    sql<number>`(count(*) filter (where o.status = 'processing' and coalesce(sh.packing_state, 'not_started') = 'not_started'))::int`.as('not_started'),
+    sql<number>`(count(*) filter (where o.status = 'processing' and sh.packing_state = 'packing'))::int`.as('packing'),
+    sql<number>`(count(*) filter (where o.status = 'processing' and sh.packing_state = 'packed'))::int`.as('packed'),
+    sql<number>`(count(*) filter (where o.status = 'shipped'))::int`.as('shipped'),
+    sql<number>`(count(*) filter (where o.status = 'delivered'))::int`.as('delivered'),
+    sql<number>`(count(*) filter (where o.status = 'shipped' and sh.tracking_number is null))::int`.as('shipped_without_tracking'),
+  ]).executeTakeFirstOrThrow();
+  // M8 payments (billing.read): orders waiting for payment, and payment exceptions not yet handled.
+  const payments = can(actor, 'billing.read') ? {
+    pending: (await db.selectFrom('orders').select(n.as('n')).where('status', '=', 'pending_payment').executeTakeFirstOrThrow()).n,
+    exceptions: (await listPaymentExceptions(db)).filter(e => !e.manualRefund).length,
+  } : null;
   return {
-    products, variants, orders, customers, staff,
+    products, variants, orders, customers, staff, fulfilment, payments,
     revenue: { totalPaise: Number(sales.revenue), todayPaise: Number(today.revenue), paidOrders: sales.paid_orders },
     lowStock: { count: lowStockCount, rows: lowStock },
     recentAudit: can(actor, 'audit.read') ? await recentAudit(db, actor) : null,

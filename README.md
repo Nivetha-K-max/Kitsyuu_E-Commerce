@@ -35,8 +35,8 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M5 | Landing and store combined on one `/` homepage | Branch `m5-restore-landing` |
 | M6 | Customer accounts on the platform: signup, email verification, login, sessions, password reset, addresses, order history | Branch `m6-customer-auth`; database migrations live |
 | M7 | Core commerce: database cart and wishlist, server-side pricing, checkout, order creation with stock reservation, order workflow, provider-neutral payments | Branch `m7-commerce`; migration 1600 not yet applied |
-| M8 | ERP: customers, payments, fulfilment, reports, settings (no returns/refunds: all sales are final) | Next |
-| M9 | Production hardening: observability, performance, security review | Planned |
+| M8 | ERP operations: customers, payment operations and exceptions, fulfilment (manual courier), settings registry, order export, operations dashboard (no returns/refunds: all sales are final) | Committed on branch `m9-integration` (local, not pushed); migrations `20260929001800`–`001900` applied to local test databases only |
+| M9 | Production hardening: M8 integrated with the homepage/filters/attributes work; storefront security headers (CSP); checkout rate limit; `/api/health` on both apps; admin System page; sign-in history in the audit area | Branch `m9-integration` (local); migration `20260929002000` local only |
 
 ## Features
 
@@ -61,6 +61,12 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 ### Admin/ERP (`apps/admin`)
 - Staff accounts with invitations, roles, fine-grained permissions (no privilege escalation) and an append-only audit log.
 - Dashboard, products (create, edit, status, price), categories, sizes, images, New Arrivals, stock adjustments with reasons, and orders (list, filters, detail, status changes along the workflow).
+- **M8 operations (local only, not deployed):**
+  - **Customers**: list with search and filters, order counts, lifetime value and last order; detail with contact, addresses, orders, safe session and login activity, and audit. Disable (ends every session at once) and enable, and contact corrections, all audited with a reason. No secret is ever shown: the admin database role cannot read password or token hashes.
+  - **Payments**: payment attempts with filters, provider notifications (webhooks, without their content), and an exceptions queue (paid after cancel, amount mismatch, duplicate payment, paid without a payment record). The only action is recording that money received for a cancelled order was refunded by hand; nothing is sent to a provider.
+  - **Fulfilment** inside the order page: packing progress while processing, the courier (manual for now) and an optional tracking number when shipping, shipped and delivered times. The order status stays the one status.
+  - **Settings**: a typed registry. Business rules (10-day hold, pricing, tax, account security) are shown locked with the reason; only the low-stock level can be changed, and every change is audited.
+  - **Order export** (CSV of the filtered list, capped, audited) and **dashboard** figures for awaiting fulfilment, shipped, delivered, pending payments, payment exceptions and disabled customers.
 
 ### Platform
 - **Business logic in `packages/core`**, used by both apps. Validation and the order workflow live in `packages/contracts`.
@@ -174,7 +180,7 @@ Every suite runs against a **throwaway local database**, never against Supabase.
 
 | Command | Covers | Checks |
 |---|---|---|
-| `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, orders) and the admin browser tests | 6 core suites (90 tests) and 234 browser checks, with database safety checks before and after each file |
+| `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, M8 operations, orders) and the admin browser tests (including `tests/m8.mjs`) | 7 core suites and the browser checks, with database safety checks before and after each file |
 | `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 108 checks |
 | `npm run test:website` | Storefront: catalogue, product pages, cart, wishlist, search, sorting, guest checkout (needs `node server.cjs` on :3000 and the website on :3001) | 133 checks |
 
@@ -204,10 +210,10 @@ KITSYUU-Website2/
 ```
 
 ## Future improvements
-- **M8 ERP**: customer management, payments view and reconciliation, fulfilment, reports, and settings screens for the configurable business values.
+- **M8 ERP** (built locally, awaiting review): after approval, apply migrations 1800–1900 through the live-migration procedure. Still to come: reports, a reconciliation screen once a payment provider is live, a real courier integration behind `CarrierProvider`.
 - **Business decisions to plug in later**: shipping method and charges, real GST rates per product, discount rules (none at launch), and the payment provider going live (Razorpay, tested last).
 - **Email going live**: create the Resend account, verify the sending domain, set `MAILER=resend`, `RESEND_API_KEY` and `MAIL_FROM`.
-- **M9 hardening**: structured logging and request correlation, monitoring, performance budgets, rate limiting on checkout, and a scheduled job for unpaid-order expiry once a hold time is set.
+- **After M9**: structured logging with request correlation, external uptime monitoring against `/api/health`, performance budgets. (Checkout rate limiting and the daily unpaid-order expiry job already exist.)
 - **Official photography and confirmed product data** (see `PRODUCT-DATA.md`).
 - **Continuous integration** running the test suites on every branch.
 

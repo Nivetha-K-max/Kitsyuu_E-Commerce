@@ -208,6 +208,9 @@ td .badge{margin-bottom:0}
 .badge.invited,.badge.pending_payment,.badge.pending,.badge.processing,.badge.authorized,.badge.requested,.badge.draft,.badge.low_stock{background:var(--warning-soft);color:var(--warning);--dot:var(--warning)}
 .badge.shipped{background:var(--info-soft);color:var(--info);--dot:var(--info)}
 .badge.disabled,.badge.out_of_stock,.badge.cancelled,.badge.payment_failed,.badge.failed,.badge.refunded,.badge.partially_refunded,.badge.void{background:var(--danger-soft);color:var(--danger);--dot:var(--danger)}
+.badge.packing,.badge.ignored{background:var(--warning-soft);color:var(--warning);--dot:var(--warning)}
+.badge.packed,.badge.applied{background:var(--info-soft);color:var(--info);--dot:var(--info)}
+.badge.captured_after_cancel,.badge.amount_mismatch,.badge.duplicate_capture,.badge.paid_without_capture{background:var(--danger-soft);color:var(--danger);--dot:var(--danger);text-transform:none}
 .badge.role,.badge.system,.badge.featured{text-transform:none}
 .badge.role:before,.badge.system:before{display:none}
 .badge.featured{background:var(--primary-soft);color:var(--primary-text);--dot:var(--primary)}
@@ -467,3 +470,13 @@ ul.plain li:last-child{border-bottom:0}
 .attr-read{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0}
 .attr-read dt{color:var(--muted);font-size:12px}
 .attr-read dd{margin:2px 0 0}
+
+/* System page (M9): two-column cards with key/value lists */
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
+.kv{display:grid;gap:10px;margin:0}
+.kv>div{display:flex;justify-content:space-between;gap:16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.kv>div:last-child{border-bottom:0;padding-bottom:0}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;text-align:right;font-weight:500;overflow-wrap:anywhere}
+.kv dd[data-state=ok]{color:var(--success)}
+.kv dd[data-state=bad]{color:var(--danger)}

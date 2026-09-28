@@ -4,16 +4,24 @@ import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, uuid } from '@kitsyuu/contracts';
 import { getOrder } from '@kitsyuu/core';
+import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import OrderStatusForm from '@/components/OrderStatusForm';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, STATUS_LABEL } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { updateOrderStatusAction } from '../actions';
+import { setPackingStateAction, updateOrderStatusAction, updateShipmentTrackingAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Order' };
 type Params = Promise<{ id: string }>;
 const rupees = (p: number) => `₹${paiseToRupees(p)}`;
 const label = (s: string | null) => (s ? STATUS_LABEL[s] ?? s : '—');
+/** How a cancelled order stands with money (M8): no money, money received (exception), or money received and refunded by hand. */
+const CANCELLED_MONEY: Record<string, [string, string]> = {
+  cancelled_unpaid: ['Cancelled · unpaid', 'No money was received for this order.'],
+  cancelled_payment_exception: ['Cancelled · payment exception', 'Money was received after the order was cancelled. Record the manual refund on the Payments page.'],
+  cancelled_paid_refund_recorded: ['Cancelled · paid, manual refund recorded', 'Money was received after cancellation; a manual refund has been recorded.'],
+};
+const PACKING_OPTIONS = [{ value: 'not_started', label: 'Not started' }, { value: 'packing', label: 'Packing' }, { value: 'packed', label: 'Packed' }];
 
 export default async function OrderPage({ params }: { params: Params }) {
   const actor = await requireActor();
@@ -31,7 +39,11 @@ export default async function OrderPage({ params }: { params: Params }) {
       <PageHead section="Commerce" title={`Order ${o.orderNumber}`} eyebrow={`Placed ${formatDateTime(o.createdAt)} · ${o.currency}`} crumbs={crumbs}>
         <span className="head-status" data-order-status={o.status}><span className="head-status-label">Order</span><StatusBadge status={o.status} /></span>
         {o.paymentStatus && <span className="head-status" data-payment-status={o.paymentStatus}><span className="head-status-label">Payment</span><StatusBadge status={o.paymentStatus} /></span>}
+        {d.payment && d.payment.exceptions.some(e => !e.manualRefund) && <span className="head-status" data-payment-exception>
+          <span className="head-status-label">Exception</span><StatusBadge status={d.payment.exceptions.find(e => !e.manualRefund)!.kind} /></span>}
       </PageHead>
+      {d.payment?.cancelled && <p className={`msg ${d.payment.cancelled.kind === 'cancelled_payment_exception' ? 'error' : 'ok'}`} data-cancelled-money={d.payment.cancelled.kind}>
+        <b>{CANCELLED_MONEY[d.payment.cancelled.kind][0]}.</b> {CANCELLED_MONEY[d.payment.cancelled.kind][1]}</p>}
 
       <div className="grid two">
         <section className="card" aria-labelledby="items-h" data-section="items">
@@ -73,7 +85,7 @@ export default async function OrderPage({ params }: { params: Params }) {
           </dl>
           <div className="status-actions">
             {!can(actor, 'orders.update_status') ? <p className="note" data-readonly="status">Changing the status needs the orders.update_status permission.</p>
-              : <OrderStatusForm action={updateOrderStatusAction} orderId={o.id} orderNumber={o.orderNumber} current={o.status} currentLabel={label(o.status)} allowed={d.allowedTransitions} />}
+              : <OrderStatusForm action={updateOrderStatusAction} orderId={o.id} orderNumber={o.orderNumber} current={o.status} currentLabel={label(o.status)} allowed={d.allowedTransitions} carriers={d.carriers} />}
           </div>
           <h3 className="sub">Status history</h3>
           {d.history.length === 0 ? <p className="empty">No status changes recorded.</p> : (
@@ -99,7 +111,8 @@ export default async function OrderPage({ params }: { params: Params }) {
             <dt>Phone</dt><dd>{d.contact.phone ?? '—'}</dd>
             <dt>Ship to</dt><dd>{address.length ? address.map((l, i) => <div key={i}>{l}</div>) : '—'}</dd>
             <dt>Account</dt><dd data-customer-account>{d.customer === undefined ? <span className="note">needs customers.read</span>
-              : d.customer ? <>{d.customer.email} <StatusBadge status={d.customer.status} /></> : <span className="note">no account record</span>}</dd>
+              : d.customer ? <><Link href={`/customers/${d.customer.id}`} data-customer-link>{d.customer.email}</Link> <StatusBadge status={d.customer.status} /></>
+              : <span className="note">no account record</span>}</dd>
           </dl>
         </section>
         <section className="card" aria-labelledby="bill-h" data-section="billing">
@@ -123,12 +136,46 @@ export default async function OrderPage({ params }: { params: Params }) {
                     <span className="note"> · {i.prices_include_tax ? 'tax-inclusive' : 'tax added'} · tax {rupees(i.tax_paise)} · {formatDateTime(i.issued_at)}</span></li>))}
                 </ul>
               )}
-              {d.billing.refunds.length > 0 && (<><h3 className="sub">Refunds</h3>
+              {d.payment && d.payment.exceptions.length > 0 && (<><h3 className="sub">Payment exceptions</h3>
+                <ul className="plain" data-order-exceptions>{d.payment.exceptions.map((e, i) => (
+                  <li key={i}><StatusBadge status={e.kind} /> {e.providerPaymentId && <span className="mono">{e.providerPaymentId}</span>}
+                    <span className="note"> · {e.manualRefund ? 'manual refund recorded' : 'open'}</span></li>))}
+                </ul>
+                <p className="note"><Link href="/payments?view=exceptions">Open the exceptions queue</Link></p></>)}
+              {d.billing.refunds.length > 0 && (<><h3 className="sub">Manual refunds</h3>
                 <ul className="plain">{d.billing.refunds.map(r => <li key={r.id}>{rupees(r.amount_paise)} <StatusBadge status={r.status} /> <span className="note">{r.reason}</span></li>)}</ul></>)}
             </>
           )}
         </section>
       </div>
+
+      <section className="card" aria-labelledby="ful-h" data-section="fulfilment">
+        <h2 id="ful-h">Fulfilment</h2>
+        <dl className="facts" data-fulfilment>
+          <dt>Stage</dt><dd>{['paid', 'processing', 'shipped', 'delivered'].includes(o.status) ? <StatusBadge status={o.status} /> : <span className="note">Not in fulfilment ({label(o.status).toLowerCase()})</span>}</dd>
+          <dt>Packing</dt><dd data-packing-state>{d.shipment ? <StatusBadge status={d.shipment.packingState} /> : <span className="note">Not started</span>}</dd>
+          <dt>Courier</dt><dd data-courier>{d.shipment?.shippedAt ? d.shipment.carrierLabel : '—'}</dd>
+          <dt>Tracking</dt><dd data-tracking>{d.shipment?.trackingNumber
+            ? (d.shipment.trackingUrl ? <a href={d.shipment.trackingUrl} rel="noopener noreferrer" target="_blank" className="mono">{d.shipment.trackingNumber}</a> : <span className="mono">{d.shipment.trackingNumber}</span>)
+            : d.shipment?.shippedAt ? <span className="note">Tracking not provided</span> : '—'}</dd>
+          <dt>Shipped</dt><dd data-shipped-at>{formatDateTime(d.shipment?.shippedAt)}</dd>
+          <dt>Delivered</dt><dd data-delivered-at>{formatDateTime(d.shipment?.deliveredAt)}</dd>
+        </dl>
+        <p className="note">Couriers are booked by hand; no courier service is connected. Shipped and delivered are set with the order status above.</p>
+        {can(actor, 'orders.update_status') && o.status === 'processing' && (
+          <ActionForm action={setPackingStateAction} submitLabel="Save packing" pendingLabel="Saving…" id="packing-form" label="Packing progress" className="form inline">
+            <Hidden name="orderId" value={o.id} />
+            <Select name="packingState" label="Packing" options={PACKING_OPTIONS} defaultValue={d.shipment?.packingState ?? 'not_started'} />
+          </ActionForm>
+        )}
+        {can(actor, 'orders.update_status') && (o.status === 'shipped' || o.status === 'delivered') && (
+          <ActionForm action={updateShipmentTrackingAction} submitLabel="Save tracking" pendingLabel="Saving…" id="tracking-form" label="Courier and tracking" className="form inline">
+            <Hidden name="orderId" value={o.id} />
+            <Select name="carrierCode" label="Courier" options={d.carriers.map(c => ({ value: c.code, label: c.label }))} defaultValue={d.shipment?.carrierCode ?? d.carriers[0]?.code} />
+            <Field name="trackingNumber" label="Tracking number" defaultValue={d.shipment?.trackingNumber ?? ''} hint="Optional. Leave empty if the courier gave none." />
+          </ActionForm>
+        )}
+      </section>
 
       {d.stock && (
         <section className="card" aria-labelledby="stk-h" data-section="stock">

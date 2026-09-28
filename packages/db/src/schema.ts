@@ -250,9 +250,23 @@ export interface TaxRatesTable {
   id: Generated<string>; code: string; label: string; rate_bp: number; is_inclusive: boolean; is_active: boolean;
   valid_from: Date; valid_to: Date | null;
 }
+/** Refund records. There is no returns/refunds workflow (business decision); M8 uses a 'requested' row only to record
+    that money received for an already-cancelled order needs a manual refund (payment exception). */
 export interface RefundsTable {
-  id: string; payment_id: string; order_id: string; amount_paise: number; reason: string; status: 'requested' | 'pending' | 'processed' | 'failed';
-  provider_refund_id: string | null; processed_at: Timestamp | null; created_at: Timestamp;
+  id: Generated<string>; payment_id: string; order_id: string; amount_paise: number; reason: Generated<string>;
+  status: Generated<'requested' | 'pending' | 'processed' | 'failed'>; provider_refund_id: string | null; requested_by: string | null;
+  processed_at: Timestamp | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+// Fulfilment (M8). The order status is the status; a shipment holds the delivery details.
+export type PackingState = 'not_started' | 'packing' | 'packed';
+export interface ShipmentsTable {
+  id: Generated<string>; order_id: string; carrier_code: Generated<string>; tracking_number: string | null;
+  packing_state: Generated<PackingState>; shipped_at: Timestamp | null; delivered_at: Timestamp | null;
+  created_by: string | null; updated_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface CustomerSummaryView {
+  customer_id: string; email: string; full_name: string | null; status: CustomerStatus; created_at: Timestamp; last_login_at: Timestamp | null;
+  orders_count: number; paid_orders_count: number; lifetime_value_paise: number; last_order_at: Timestamp | null;
 }
 export interface InvoicesTable {
   id: string; invoice_number: string | null; status: 'draft' | 'issued' | 'void'; order_id: string | null; customer_id: string | null;
@@ -299,6 +313,8 @@ export interface Database {
   carts: CartsTable;
   cart_items: CartItemsTable;
   refunds: RefundsTable;
+  shipments: ShipmentsTable;
+  v_customer_summary: CustomerSummaryView;
   tax_rates: TaxRatesTable;
   wishlists: WishlistsTable;
   wishlist_items: WishlistItemsTable;

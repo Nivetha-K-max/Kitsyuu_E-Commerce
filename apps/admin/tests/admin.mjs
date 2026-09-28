@@ -89,7 +89,16 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Inventory|Orders|Staff|Roles|Audit', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Attributes|Inventory|Orders|Customers|Payments|Staff|Roles|Audit|Settings|System', nav);
+
+  // ---------- M9: System page, sign-in history, health check ----------
+  await visit('/system', '!!document.querySelector("[data-system-db]")');
+  ok('M9 System page: database up, configuration shown as modes only', /Up/.test(await text('[data-system-db]'))
+    && !/postgres(ql)?:\/\//i.test(await text('main')), await text('[data-system-db]'));
+  await visit('/audit/sign-ins', '!!document.querySelector("main")');
+  ok('M9 sign-in history page opens (filters + list or empty state)', await ev(`!!document.querySelector('[data-signin-filters]') && !!document.querySelector('[data-signins-table],[data-empty]')`));
+  const health = await ev(`fetch('/api/health').then(async r=>({s:r.status,j:await r.json()}))`);
+  ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------
   await visit('/staff/invite', '!!document.querySelector("input[name=email]")');
@@ -111,7 +120,7 @@ try {
   ok('support user signs in', await until(`location.pathname==='/dashboard'`));
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit.
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Orders', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Orders|Customers', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

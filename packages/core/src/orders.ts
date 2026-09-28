@@ -3,29 +3,28 @@
    row locked, appends to order_status_history, returns reserved/sold stock on cancellation (through adjust_stock), and
    writes the audit record. The audit record carries the history row id, which is how the history shows the staff member
    (order_status_history.changed_by refers to Supabase Auth users, not staff). */
-import { recordAudit, sql, type Db, type OrderStatus } from '@kitsyuu/db';
+import { recordAudit, sql, type Db, type OrderStatus, type SelectQueryBuilder } from '@kitsyuu/db';
 import { canTransition, ConflictError, DomainError, NotFoundError, NOTE_REQUIRED_FOR, ORDER_TRANSITIONS, type OrderListQuery, type UpdateOrderStatusInput } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { applyOrderTransition, closeUnpaidPayments } from './order-state.ts';
+import { getShipment, recordShipmentForTransition } from './fulfilment.ts';
+import { availableCarriers } from './fulfilment/carrier.ts';
+import { cancelledOrderPaymentState, listPaymentExceptions } from './payments-admin.ts';
 
 export const ORDER_PAGE_SIZE = 50;
 const OPEN_STATUSES: OrderStatus[] = ['pending_payment', 'paid', 'processing', 'shipped'];
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderListQuery) {
-  requirePermission(actor, 'orders.read');
-  let q = db.selectFrom('orders as o')
-    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at',
-      sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
-      sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
-      sql<number>`(select count(*)::int from public.order_items i where i.order_id = o.id)`.as('lines')]);
+/** The list filters, shared by the order list and the CSV export so both always select the same orders. */
+function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query: Omit<OrderListQuery, 'page'>): QB {
+  let r = q as SelectQueryBuilder<any, any, any>;
   if (query.q) {
     const like = `%${query.q.replace(/[\\%_]/g, m => '\\' + m)}%`;
     const term = query.q;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(term);
-    q = q.where(eb => eb.or([
+    r = r.where(eb => eb.or([
       eb('o.order_number', 'ilike', like),
       sql<boolean>`o.contact->>'email' ilike ${like}`, sql<boolean>`o.contact->>'name' ilike ${like}`, sql<boolean>`o.contact->>'phone' ilike ${like}`,
       sql<boolean>`exists (select 1 from public.order_items i where i.order_id = o.id and i.sku ilike ${like})`,
@@ -33,16 +32,51 @@ export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderList
       ...(isUuid ? [eb('o.id', '=', term.toLowerCase())] : []),
     ]));
   }
-  if (query.status === 'open') q = q.where('o.status', 'in', OPEN_STATUSES);
-  else if (query.status !== 'all') q = q.where('o.status', '=', query.status);
-  if (query.payment === 'none') q = q.where('o.payment_status', 'is', null);
-  else if (query.payment !== 'all') q = q.where('o.payment_status', '=', query.payment);
+  if (query.status === 'open') r = r.where('o.status', 'in', OPEN_STATUSES);
+  else if (query.status !== 'all') r = r.where('o.status', '=', query.status);
+  if (query.payment === 'none') r = r.where('o.payment_status', 'is', null);
+  else if (query.payment !== 'all') r = r.where('o.payment_status', '=', query.payment);
   // Dates are business days in India (Asia/Kolkata).
-  if (query.from) q = q.where('o.created_at', '>=', sql<Date>`(${query.from}::date)::timestamp at time zone 'Asia/Kolkata'`);
-  if (query.to) q = q.where('o.created_at', '<', sql<Date>`((${query.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'`);
+  if (query.from) r = r.where('o.created_at', '>=', sql<Date>`(${query.from}::date)::timestamp at time zone 'Asia/Kolkata'`);
+  if (query.to) r = r.where('o.created_at', '<', sql<Date>`((${query.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'`);
+  return r as QB;
+}
+
+export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderListQuery) {
+  requirePermission(actor, 'orders.read');
+  const q = filterOrders(db.selectFrom('orders as o')
+    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at',
+      sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
+      sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
+      sql<number>`(select count(*)::int from public.order_items i where i.order_id = o.id)`.as('lines')]), query);
   const rows = await q.orderBy('o.created_at', 'desc').orderBy('o.id', 'desc')
     .limit(ORDER_PAGE_SIZE + 1).offset((query.page - 1) * ORDER_PAGE_SIZE).execute();
   return { rows: rows.slice(0, ORDER_PAGE_SIZE), hasNext: rows.length > ORDER_PAGE_SIZE };
+}
+
+export const ORDER_EXPORT_MAX_ROWS = 5000;
+const csvCell = (v: unknown) => {
+  let t = v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;                         // never let a spreadsheet run a cell as a formula
+  return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+/** The filtered order list as CSV (one row per order; no addresses, payments or internal data). Capped and audited. */
+export async function exportOrders(db: Db, actor: StaffPrincipal, query: Omit<OrderListQuery, 'page'>, ctx: MutationContext) {
+  requirePermission(actor, 'orders.read');
+  const rows = await filterOrders(db.selectFrom('orders as o').leftJoin('shipments as sh', 'sh.order_id', 'o.id')
+    .select(['o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.paid_at', 'o.total_paise', 'o.currency',
+      sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
+      sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
+      'sh.carrier_code', 'sh.tracking_number', 'sh.shipped_at', 'sh.delivered_at']), query)
+    .orderBy('o.created_at', 'desc').orderBy('o.id', 'desc').limit(ORDER_EXPORT_MAX_ROWS + 1).execute();
+  const truncated = rows.length > ORDER_EXPORT_MAX_ROWS;
+  const head = ['Order', 'Placed', 'Status', 'Payment', 'Paid at', 'Total', 'Currency', 'Customer', 'Email', 'Units', 'Courier', 'Tracking', 'Shipped', 'Delivered'];
+  const lines = rows.slice(0, ORDER_EXPORT_MAX_ROWS).map(r => [r.order_number, r.created_at, r.status, r.payment_status ?? 'none', r.paid_at,
+    (Number(r.total_paise) / 100).toFixed(2), r.currency, r.contact_name, r.contact_email, r.units, r.carrier_code, r.tracking_number, r.shipped_at, r.delivered_at]);
+  await db.transaction().execute(tx => recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.export', entityType: 'orders', entityId: null,
+    metadata: { filters: query, rows: lines.length, truncated }, ...auditCtx(ctx) }));
+  return { csv: [head, ...lines].map(l => l.map(csvCell).join(',')).join('\r\n') + '\r\n', rows: lines.length, truncated };
 }
 
 export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
@@ -87,6 +121,11 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
         .select(['m.created_at', 'v.sku', 'm.delta', 'm.reason', 'm.balance_after', 'm.note', 's.email as staff_email'])
         .where('m.order_id', '=', orderId).orderBy('m.created_at').execute()
     : undefined;
+  const shipment = await getShipment(db, o.id);
+  const payment = can(actor, 'billing.read') ? {
+    cancelled: await cancelledOrderPaymentState(db, o.id, o.status),
+    exceptions: await listPaymentExceptions(db, { orderId: o.id }),
+  } : undefined;
   return {
     order: {
       id: o.id, orderNumber: o.order_number, status: o.status, paymentStatus: o.payment_status, currency: o.currency,
@@ -95,8 +134,9 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
     },
     contact: { name: text(contact.name), email: text(contact.email), phone: text(contact.phone) },
     shipping: { name: text(ship.full_name ?? ship.name), line1: text(ship.line1), line2: text(ship.line2), city: text(ship.city), state: text(ship.state), pin: text(ship.pin), country: text(ship.country) },
-    items, history, integrity, customer, billing, stock,
+    items, history, integrity, customer, billing, stock, shipment, payment,
     allowedTransitions: can(actor, 'orders.update_status') ? [...ORDER_TRANSITIONS[o.status]] : [],
+    carriers: availableCarriers().map(c => ({ code: c.code, label: c.label })),
   };
 }
 
@@ -127,9 +167,12 @@ export async function updateOrderStatus(db: Db, actor: StaffPrincipal, input: Up
     }
     const h = { id: (await applyOrderTransition(tx, o, input.toStatus, { actor: 'staff', note: input.note })).historyId };
     if (input.toStatus === 'cancelled') await closeUnpaidPayments(tx, o.id);
+    // Shipped / delivered: the shipment details are written in this same transaction (M8 fulfilment).
+    const shipment = await recordShipmentForTransition(tx, o.id, input.toStatus,
+      { carrierCode: input.carrierCode, trackingNumber: input.trackingNumber }, actor.staffId);
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.status_update', entityType: 'orders', entityId: o.id,
       before: { status: o.status }, after: { status: input.toStatus },
-      metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released }, ...auditCtx(ctx) });
+      metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released, ...(shipment ? { shipment } : {}) }, ...auditCtx(ctx) });
     return { orderNumber: o.order_number, from: o.status, to: input.toStatus, historyId: h.id, released };
   });
 }

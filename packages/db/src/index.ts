@@ -7,6 +7,7 @@ import type { Database } from './schema.ts';
 
 export type * from './schema.ts';
 export { sql };
+export type { SelectQueryBuilder } from 'kysely';
 export type Db = Kysely<Database>;
 export type Tx = Transaction<Database>;
 /** Anything that can run a query: the pool or an open transaction. */

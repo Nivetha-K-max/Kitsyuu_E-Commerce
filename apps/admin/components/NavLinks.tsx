@@ -5,7 +5,8 @@ import { Icon } from './icons';
 
 const ICON: Record<string, string> = {
   '/dashboard': 'dashboard', '/products': 'products', '/categories': 'categories', '/attributes': 'attributes', '/inventory': 'inventory',
-  '/orders': 'orders', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
+  '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
+  '/settings': 'settings', '/system': 'system',
 };
 
 /** Receives only the items the server already filtered by permission. */

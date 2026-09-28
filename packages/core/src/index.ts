@@ -8,7 +8,7 @@ export { listAudit, recentAudit, auditCount, AUDIT_PAGE_SIZE } from './audit.ts'
 export { getDashboard } from './dashboard.ts';
 export { listCategories, listProducts, getProduct, updateProduct, setProductStatus, updateProductPrice, type ProductListRow } from './products.ts';
 export { listStock, listAdjustmentReasons, adjustStock } from './inventory.ts';
-export { listOrders, getOrder, updateOrderStatus, ORDER_PAGE_SIZE } from './orders.ts';
+export { listOrders, getOrder, updateOrderStatus, exportOrders, ORDER_PAGE_SIZE, ORDER_EXPORT_MAX_ROWS } from './orders.ts';
 export { assertAdministrationRemains, assertHoldsAll, assertOutranksOrEqual } from './guards.ts';
 export { createProduct, setNewArrival, moveNewArrival, NEW_ARRIVALS } from './products.ts';
 export { addVariant, updateVariant, moveVariant } from './variants.ts';
@@ -43,3 +43,14 @@ export { orderConfirmationEmail } from './notifications.ts';
 export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus } from './payments/provider.ts';
 export { testPaymentProvider, type TestPaymentProvider } from './payments/test-provider.ts';
 export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';
+// ---------- M8: operations ----------
+export { listCustomers, getCustomer, setCustomerStatus, updateCustomerContact, CUSTOMER_PAGE_SIZE } from './customers.ts';
+export {
+  listPayments, listPaymentEvents, listPaymentExceptions, getPaymentExceptions, recordManualRefund, cancelledOrderPaymentState, reconcileOrderPayments,
+  PAYMENT_PAGE_SIZE, type PaymentException, type ReconciliationRow,
+} from './payments-admin.ts';
+export { listSettings, updateSetting, SETTINGS_REGISTRY, POLICY_NOTES, type SettingDef, type SettingRow, type SettingType } from './settings.ts';
+export { getShipment, setPackingState, updateShipmentTracking, type ShipmentView } from './fulfilment.ts';
+export { availableCarriers, carrierFor, manualCarrier, type CarrierProvider } from './fulfilment/carrier.ts';
+// ---------- M9: operations hardening ----------
+export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_PAGE_SIZE, CHECKOUT_RATE_KEY, type RuntimeInfo } from './system.ts';

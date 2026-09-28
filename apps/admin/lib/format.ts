@@ -12,4 +12,7 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Cancelled', payment_failed: 'Payment failed', refunded: 'Refunded',
   unpaid: 'Unpaid', pending: 'Pending', authorized: 'Authorised', failed: 'Failed', partially_refunded: 'Partly refunded',
   captured: 'Captured', created: 'Created', requested: 'Requested', processed: 'Processed', issued: 'Issued', void: 'Void', draft: 'Draft',
+  not_started: 'Not started', packing: 'Packing', packed: 'Packed',
+  captured_after_cancel: 'Paid after cancel', amount_mismatch: 'Amount mismatch', duplicate_capture: 'Duplicate payment',
+  paid_without_capture: 'Paid, no payment record', applied: 'Applied', ignored: 'Ignored',
 };

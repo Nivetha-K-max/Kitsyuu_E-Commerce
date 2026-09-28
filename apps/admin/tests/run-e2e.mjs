@@ -63,6 +63,8 @@ try {
     // one test correction of -9); the ledger check proves every one of them is in the ledger.
     const expect = f === 'commerce.test.mjs' ? {orders: 17, customers: 2, units: 1084}
       : f === 'orders.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 3}
+      // m8-operations.test.mjs (M8): 8 fixture orders, one unpaid order cancelled by staff (+2 back).
+      : f === 'm8-operations.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 2}
       : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105}
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
@@ -118,9 +120,17 @@ try {
     const m4Files = Object.fromEntries(Object.entries(m4Accounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const m4 = node(['apps/admin/tests/catalogue.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(m4Files), STORAGE_DIR: storageDir, OUT_DIR: OUT});
     if (!step('M4 catalogue browser tests', m4)) failed = true;
+
+    // ---------- M8: customers, payments, settings, fulfilment, export (after the order browser tests) ----------
+    const m8Accounts = {admin: ['m8.admin@test.local', 'admin'], manager: ['m8.manager@test.local', 'manager'],
+      support: ['m8.support@test.local', 'support'], inventory: ['m8.inventory@test.local', 'inventory_manager']};
+    const m8Files = Object.fromEntries(Object.entries(m8Accounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const m8 = node(['apps/admin/tests/m8.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(m8Files)});
+    if (!step('M8 operations browser tests', m8)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
+  // M8 browser tests move no stock (packing, shipping and delivery do not change stock; no order is cancelled).
   if (!(await dbCheck('after all browser tests', env, {orders: 8, customers: 2, units: 1100 - 11 + 3 + 6, products: 23, variants: 111, images: 23}))) failed = true;
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;

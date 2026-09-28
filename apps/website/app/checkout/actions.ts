@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { DomainError, orderNumberInput, paymentResultInput, placeOrderInput, type ActionState } from '@kitsyuu/contracts';
-import { cancelOrderByCustomer, currentPaymentSession, placeOrder, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
+import { cancelOrderByCustomer, checkoutRateLimit, currentPaymentSession, placeOrder, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { sendOrderConfirmation } from '@/lib/order-mail';
 import { commerceConfig, paymentProvider, testProvider } from '@/lib/commerce';
@@ -14,6 +14,8 @@ import { db, requestContext, requireCustomer } from '@/lib/server';
 export async function placeOrderAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireCustomer('/checkout');
   if (!paymentProvider()) return { ok: false, message: 'Online payment is not set up yet, so orders cannot be placed.' };
+  // M9: abuse limit in front of checkout (the M7 checkout itself is unchanged).
+  if (!(await checkoutRateLimit(db(), me.customerId)).allowed) return { ok: false, message: 'Too many orders were started from this account in the last hour. Please try again later.' };
   let orderNumber = '';
   const result = await handle(placeOrderInput, form, async input => {
     orderNumber = (await placeOrder(db(), me, input, await requestContext(), commerceConfig())).orderNumber;

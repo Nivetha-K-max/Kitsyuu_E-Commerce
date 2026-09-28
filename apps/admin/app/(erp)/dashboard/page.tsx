@@ -26,13 +26,15 @@ export default async function DashboardPage() {
     ['Low / out of stock', 'Low stock', formatNumber(d.lowStock.count), 'Sellable sizes at or below reorder level', 'alert'],
   ];
   const secondary: [string, string, string][] = [
-    ['Customers', formatNumber(d.customers.total), `${formatNumber(d.customers.active)} active`],
+    ['Customers', formatNumber(d.customers.total), `${formatNumber(d.customers.active)} active · ${formatNumber(d.customers.disabled)} disabled`],
     ['Sellable SKUs', formatNumber(d.variants.sellable), `${formatNumber(d.variants.units)} units`],
     ['Staff', formatNumber(d.staff.active), `${formatNumber(d.staff.invited)} invited`],
   ];
   const actions = [
     can(actor, 'products.write') && { href: '/products/new', label: 'Add a product', icon: 'plus' },
     can(actor, 'orders.read') && { href: '/orders?status=open', label: 'Review open orders', icon: 'orders' },
+    can(actor, 'orders.read') && d.fulfilment.awaiting > 0 && { href: '/orders?status=processing', label: 'Pack and ship orders', icon: 'orders' },
+    d.payments && d.payments.exceptions > 0 && { href: '/payments?view=exceptions', label: 'Review payment exceptions', icon: 'payments' },
     can(actor, 'inventory.read') && { href: '/inventory?status=attention', label: 'Check low stock', icon: 'inventory' },
     can(actor, 'staff.manage') && { href: '/staff/invite', label: 'Invite a staff member', icon: 'staff' },
   ].filter((x): x is { href: string; label: string; icon: string } => !!x);
@@ -52,6 +54,20 @@ export default async function DashboardPage() {
         {secondary.map(([key, value, sub]) => (
           <div className="kpi" key={key} data-kpi={key}><dt>{key}</dt><dd>{value}<small>{sub}</small></dd></div>
         ))}
+      </dl>
+
+      {/* M8: fulfilment and payment operations, from live order, shipment and payment rows. */}
+      <dl className="kpis minor" aria-label="Operations" data-kpis-ops>
+        <div className="kpi" data-kpi="Awaiting fulfilment"><dt>Awaiting fulfilment</dt>
+          <dd>{formatNumber(d.fulfilment.awaiting)}<small>{formatNumber(d.fulfilment.paid)} paid · {formatNumber(d.fulfilment.not_started + d.fulfilment.packing + d.fulfilment.packed)} processing ({formatNumber(d.fulfilment.packed)} packed)</small></dd></div>
+        <div className="kpi" data-kpi="Shipped"><dt>Shipped</dt>
+          <dd>{formatNumber(d.fulfilment.shipped)}<small>{d.fulfilment.shipped_without_tracking ? `${formatNumber(d.fulfilment.shipped_without_tracking)} without tracking` : 'In transit'}</small></dd></div>
+        <div className="kpi" data-kpi="Delivered"><dt>Delivered</dt><dd>{formatNumber(d.fulfilment.delivered)}<small>Orders completed</small></dd></div>
+        {d.payments && <>
+          <div className="kpi" data-kpi="Pending payments"><dt>Pending payments</dt><dd>{formatNumber(d.payments.pending)}<small>Orders awaiting payment</small></dd></div>
+          <div className="kpi" data-kpi="Payment exceptions" data-alert={d.payments.exceptions > 0 ? true : undefined}><dt>Payment exceptions</dt>
+            <dd>{formatNumber(d.payments.exceptions)}<small>{d.payments.exceptions ? <Link href="/payments?view=exceptions">Needs review</Link> : 'None open'}</small></dd></div>
+        </>}
       </dl>
 
       <div className="dash-grid">

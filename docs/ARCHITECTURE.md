@@ -6,7 +6,7 @@ KITSYUU is an e-commerce store plus an ERP / business-management back office, bu
 - shared **server-only packages** with the business logic;
 - one **PostgreSQL database** (Supabase, Seoul) with a separate database role for each application.
 
-This document describes the platform as of **M7 (core commerce)**. For the list of milestones, see the [README](../README.md#status).
+This document describes the platform as of **M7 (core commerce)**, plus **M8 (ERP operations), which exists only locally** on the `m8-operations` branch and is not deployed. For the list of milestones, see the [README](../README.md#status).
 
 ## Contents
 
@@ -17,6 +17,7 @@ This document describes the platform as of **M7 (core commerce)**. For the list 
 - [Authentication](#authentication)
 - [Commerce (M7)](#commerce-m7)
 - [Order workflow](#order-workflow)
+- [ERP operations (M8, local only)](#erp-operations-m8-local-only)
 - [Providers and configuration](#providers-and-configuration)
 - [Deployment](#deployment)
 - [Changing the database safely](#changing-the-database-safely)
@@ -181,6 +182,23 @@ stateDiagram-v2
 | customer | Cancel their own unpaid order. |
 
 There are no returns or refunds (all sales are final), so the workflow has no return or refund path.
+
+## ERP operations (M8, local only)
+
+Everything below is built and tested locally only (branch `m8-operations`, not committed, pushed or deployed). Services live in `packages/core`; the admin pages only call them. Every page and action checks its permission on the server, and every change is audited.
+
+| Module | Core | Permissions | What it does |
+|---|---|---|---|
+| Customers | `customers.ts` | `customers.read`, `customers.manage` | List (search, status, verified, with/without orders; order count, paid orders, lifetime value, last order from `v_customer_summary`) and detail (profile, addresses, orders, sessions and login attempts as times and states only, audit). Disable/enable with a reason: disabling ends every session through `revokeAllCustomerSessions`, and the M6 login already refuses disabled accounts. Contact correction (name, mobile); the email is the login and is not edited. |
+| Payments | `payments-admin.ts` | `billing.read`, `refunds.create` | Payment attempts, provider notifications (no payload shown), and the exceptions queue. Exceptions are derived from existing records by one SQL rule, never stored as new payment states. `recordManualRefund` records a `requested` row in `refunds` for money received on a cancelled order, once per payment; no provider is called. `reconcileOrderPayments` compares `PaymentProvider.listPayments()` with the records, read-only (core only; there is no provider to call in the admin yet). |
+| Fulfilment | `fulfilment.ts`, `fulfilment/carrier.ts` | `orders.update_status` | One `shipments` row per order. Packing state is edited only while processing. Marking shipped or delivered goes through `updateOrderStatus` → `applyOrderTransition`, and the shipment row is written in the same transaction. Courier: `manualCarrier` behind the `CarrierProvider` interface; a real carrier is another entry in the registry. Tracking is optional ("Tracking not provided"). |
+| Settings | `settings.ts` | `settings.read`, `settings.manage` | A typed registry (key, type, range, description, permission, editable or locked with a reason). Only `inventory.low_stock_threshold` is editable. The hold time, currency, time zone, tax, and account-security values are locked. No free-form editor; unknown keys are refused. |
+| Orders | `orders.ts` | `orders.read` | Customer link, fulfilment panel, cancelled-order money state (Cancelled · unpaid / Cancelled · payment exception / Cancelled · paid, manual refund recorded), CSV export of the filtered list (same filter builder as the list; capped at 5,000 rows; spreadsheet formulas neutralised; audited). |
+| Dashboard | `dashboard.ts` | `dashboard.read` (+ `billing.read` for payment figures) | Awaiting fulfilment (paid + processing, with packing progress), shipped (and without tracking), delivered, pending payments, open payment exceptions, customers active/disabled. |
+
+**Customer secrets and the admin role (migration 1800).** Migration 1100 gave `kitsyuu_admin` SELECT on every table. 1800 replaces that for `customers` and `customer_sessions` with column lists that leave out `password_hash` and `token_hash`, and limits the admin's `auth_tokens` policy to staff tokens. A bug or an injected query in the admin therefore cannot read customer password hashes, session tokens or email-link tokens.
+
+Left out on purpose: internal order notes and "resend confirmation email" (no approved design or email content yet), reports, a reconciliation screen (no live provider), courier APIs, and any returns or refunds workflow.
 
 ## Providers and configuration
 

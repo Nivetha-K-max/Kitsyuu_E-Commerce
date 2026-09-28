@@ -63,6 +63,13 @@ The live database is reachable only from networks that allow outbound 5432/6543 
 | `…1300` | M4 | Category active flag |
 | `…1400`–`…1500` | M6 | Customer accounts on the platform, addresses per customer, website audit; `kitsyuu_website` login |
 | `…1600` | M7 | Orders, cart and wishlist lines owned by platform customers; pricing, idempotency and payment-hold columns; provider-neutral payment events; `reserve_order_stock` / `release_order_stock` for the website role |
+| `…1700` | M7 | Unpaid-order hold time: `checkout.payment_window_minutes` = 14400 (10 days) |
+| `20260928001800` | Filters | Product attributes for the store filters: `attributes`, `attribute_values`, `product_attribute_values`; public read of active attributes only. **Applied live 2026-09-28** on its own (`db:apply -- --no-seed --only=…`) |
+| `20260929001800` | M8 (**local only**) | Security: the `kitsyuu_admin` role loses table-wide SELECT on `customers` and `customer_sessions` and gets column lists without `password_hash` / `token_hash` (plus UPDATE of `revoked_at` only, to end sessions); its `auth_tokens` policy is limited to staff tokens, so customers' one-time link tokens are invisible to it |
+| `20260929001900` | M8 (**local only**) | Fulfilment: `packing_state` enum and `shipments` (one per order: carrier code, optional tracking number, packing state, shipped/delivered times). No status column: the order status stays the status. RLS on, admin role only |
+| `20260929002000` | M9 (**local only**) | Operations: permission `system.read` (super_admin, admin), setting `security.checkout_orders_per_hour` = 10, index on `auth_attempts(attempted_at)` |
+
+> **M8 is local only.** Migrations 1800 and 1900 have been applied only to throwaway local test databases. They must go through the live-migration procedure above (preflight, rehearsal, snapshot, apply, verify) before any deployment. Do not add `grant select on all tables … to kitsyuu_admin` in later migrations: it would undo 1800.
 
 ## Conventions
 
@@ -76,5 +83,5 @@ The live database is reachable only from networks that allow outbound 5432/6543 
 - `audit_logs` is append-only: no role has UPDATE/DELETE/TRUNCATE, and a trigger blocks them for everyone.
 - App database roles `kitsyuu_admin` (login since M3, migration 1200) and `kitsyuu_website` (login since M6, migration 1500)
   get their passwords from `npm run db:app-role`, never from a migration. Each app keeps its URL only in its own environment.
-- Business values nobody has decided (shipping, discounts, tax rules, unpaid-order hold time) are not seeded: they stay
+- Business values nobody has decided (shipping, discounts, tax rules) are not seeded: they stay
   absent from `settings` until decided.

@@ -23,7 +23,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     .filter(([, v]) => v && v !== 'all') as [string, string][]), page: String(page) })}`;
   return (
     <>
-      <PageHead section="Commerce" title="Orders" eyebrow={`${filtered ? 'Filtered' : 'Newest first'}${query.page > 1 ? ` · page ${query.page}` : ''}`} />
+      <PageHead section="Commerce" title="Orders" eyebrow={`${filtered ? 'Filtered' : 'Newest first'}${query.page > 1 ? ` · page ${query.page}` : ''}`}>
+        {/* Plain link (not <Link>): the route answers with a CSV download. */}
+        <a className="btn ghost sm" data-export-orders download
+          href={`/orders/export?${new URLSearchParams(Object.entries({ q: query.q, status: query.status, payment: query.payment, from: query.from, to: query.to })
+            .filter(([, v]) => v && v !== 'all') as [string, string][])}`}>Export CSV</a>
+      </PageHead>
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
       <form className="actions filters" method="get" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /* Fast redirect for visitors without a session cookie. This is NOT the security boundary: every page and server
    action validates the session and permissions against the database (lib/server.ts). */
-const PUBLIC = ['/login', '/forgot-password', '/reset-password', '/accept-invite'];
+const PUBLIC = ['/login', '/forgot-password', '/reset-password', '/accept-invite', '/api/health'];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

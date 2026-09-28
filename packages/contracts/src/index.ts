@@ -186,6 +186,10 @@ export const updateOrderStatusInput = z.object({
   /** The status the person saw when they opened the order: the change is refused if it has changed since. */
   expectedStatus: z.enum(ORDER_STATUSES),
   note: z.string().trim().max(500, 'Keep the note under 500 characters.').transform(v => v || null),
+  /** M8 fulfilment details, used when the order becomes shipped (ignored otherwise). Tracking is optional. */
+  carrierCode: z.string().trim().regex(/^[a-z][a-z0-9_]{1,31}$/, 'Choose a courier.').default('manual'),
+  trackingNumber: z.string().trim().max(64, 'Keep the tracking number under 64 characters.')
+    .regex(/^[A-Za-z0-9][A-Za-z0-9 -/.]*$|^$/, 'Use letters, digits, spaces, hyphens, slashes or dots.').default('').transform(v => v || null),
 }).superRefine((v, ctx) => {
   if (!canTransition(v.expectedStatus, v.toStatus))
     ctx.addIssue({ code: 'custom', path: ['toStatus'], message: `An order cannot go from ${v.expectedStatus.replace(/_/g, ' ')} to ${v.toStatus.replace(/_/g, ' ')}.` });
@@ -391,3 +395,68 @@ export const paymentResultInput = z.object({
 export type CartLineInput = z.infer<typeof cartLineInput>;
 export type PlaceOrderInput = z.infer<typeof placeOrderInput>;
 export type PaymentResultInput = z.infer<typeof paymentResultInput>;
+
+// ======================= M8: admin operations =======================
+const page = z.coerce.number().int().min(1).max(10_000).default(1);
+const searchText = z.string().trim().max(80).optional().transform(v => v || undefined);
+const requiredNote = (what: string) => z.string().trim().min(3, `Give a reason; it is kept in the ${what}.`).max(500, 'Keep it under 500 characters.');
+
+export const customerListQuery = z.object({
+  q: searchText,
+  status: z.enum(['all', 'active', 'disabled']).default('all'),
+  verified: z.enum(['all', 'verified', 'unverified']).default('all'),
+  orders: z.enum(['all', 'with', 'without']).default('all'),
+  page,
+});
+export const customerIdInput = z.object({ customerId: uuid });
+export const setCustomerStatusInput = z.object({
+  customerId: uuid,
+  status: z.enum(['active', 'disabled'], { message: 'Choose a status.' }),
+  /** The status the staff member saw: the change is refused if it changed since. */
+  expectedStatus: z.enum(['active', 'disabled']),
+  note: requiredNote('audit log'),
+}).refine(v => v.status !== v.expectedStatus, { path: ['status'], message: 'The account already has this status.' });
+/** Contact details staff may correct. The email is the login identity and is not editable here. */
+export const updateCustomerContactInput = z.object({ customerId: uuid, fullName, phone: optionalMobile.default('') });
+
+export const PAYMENT_EXCEPTION_KINDS = ['captured_after_cancel', 'amount_mismatch', 'duplicate_capture', 'paid_without_capture'] as const;
+export type PaymentExceptionKind = typeof PAYMENT_EXCEPTION_KINDS[number];
+export const paymentListQuery = z.object({
+  q: searchText,
+  status: z.enum(['all', 'created', 'authorized', 'captured', 'failed', 'refunded', 'partially_refunded']).default('all'),
+  provider: z.string().trim().regex(/^(all|[a-z][a-z0-9_]{1,31})$/).default('all'),
+  // Exceptions of a payment row (orders marked paid without any capture are listed in the exceptions queue).
+  exception: z.enum(['all', 'any', 'captured_after_cancel', 'amount_mismatch', 'duplicate_capture']).default('all'),
+  page,
+});
+export const paymentEventListQuery = z.object({
+  q: searchText,
+  provider: z.string().trim().regex(/^(all|[a-z][a-z0-9_]{1,31})$/).default('all'),
+  outcome: z.string().trim().regex(/^(all|[a-z_]{1,40})$/).default('all'),
+  page,
+});
+/** Records that money received for an already-cancelled order must be refunded manually (payment exception only). */
+export const recordManualRefundInput = z.object({ paymentId: uuid, note: requiredNote('audit log') });
+
+export const settingUpdateInput = z.object({
+  key: z.string().trim().regex(/^[a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)+$/, 'Unknown setting.'),
+  value: z.string().trim().max(200),
+});
+
+export const PACKING_STATES = ['not_started', 'packing', 'packed'] as const;
+export const packingStateInput = z.object({ orderId: uuid, packingState: z.enum(PACKING_STATES, { message: 'Choose a packing state.' }) });
+export const shipmentTrackingInput = z.object({
+  orderId: uuid,
+  carrierCode: updateOrderStatusInput.shape.carrierCode,
+  trackingNumber: updateOrderStatusInput.shape.trackingNumber,
+});
+
+export type CustomerListQuery = z.infer<typeof customerListQuery>;
+export type SetCustomerStatusInput = z.infer<typeof setCustomerStatusInput>;
+export type UpdateCustomerContactInput = z.infer<typeof updateCustomerContactInput>;
+export type PaymentListQuery = z.infer<typeof paymentListQuery>;
+export type PaymentEventListQuery = z.infer<typeof paymentEventListQuery>;
+export type RecordManualRefundInput = z.infer<typeof recordManualRefundInput>;
+export type SettingUpdateInput = z.infer<typeof settingUpdateInput>;
+export type PackingStateInput = z.infer<typeof packingStateInput>;
+export type ShipmentTrackingInput = z.infer<typeof shipmentTrackingInput>;
