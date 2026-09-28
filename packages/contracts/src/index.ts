@@ -591,3 +591,12 @@ export const stockCountIdInput = z.object({ stockCountId: uuid });
 export const variantCostInput = z.object({ variantId: uuid, unitCost: z.string().trim().optional() })
   .transform(({ variantId, unitCost }) => ({ variantId, unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
   .refine(v => v.unitCostPaise === null || (Number.isInteger(v.unitCostPaise) && v.unitCostPaise >= 0 && v.unitCostPaise <= 100_000_000), { message: 'Enter the cost in rupees.', path: ['unitCost'] });
+
+// ---------- M17: store content and customer notes ----------
+export const announcementInput = z.object({
+  text: z.string().trim().min(1, 'Write the announcement.').max(140, 'Keep it under 140 characters.'),
+  href: z.string().trim().optional().transform(v => v || null)
+    .pipe(z.string().regex(/^(\/[^\s]*|https:\/\/[^\s]+)$/, 'The link must start with / (a store page) or https://.').nullable()),
+  publish: z.enum(['yes', 'no']).default('no').transform(v => v === 'yes'),
+});
+export const customerNoteInput = z.object({ customerId: uuid, body: z.string().trim().min(1, 'Write the note.').max(1000, 'Keep notes under 1000 characters.') });

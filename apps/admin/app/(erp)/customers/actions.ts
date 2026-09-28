@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { setCustomerStatusInput, updateCustomerContactInput, type ActionState } from '@kitsyuu/contracts';
-import { setCustomerStatus, updateCustomerContact } from '@kitsyuu/core';
+import { customerNoteInput, setCustomerStatusInput, updateCustomerContactInput, type ActionState } from '@kitsyuu/contracts';
+import { addCustomerNote, setCustomerStatus, updateCustomerContact } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -24,5 +24,13 @@ export async function updateCustomerContactAction(_: ActionState, form: FormData
     return { ok: true, message: res.changed ? 'Contact details saved.' : 'Nothing changed.' };
   });
   if (r.ok) revalidatePath('/customers', 'layout');
+  return r;
+}
+
+/** M17: an internal service note on a customer (customers.note). */
+export async function addCustomerNoteAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(customerNoteInput, form, async input => { await addCustomerNote(db(), actor, input, await requestContext()); return { ok: true, message: 'Note added.' }; });
+  if (r.ok) revalidatePath(`/customers/${String(form.get('customerId'))}`);
   return r;
 }

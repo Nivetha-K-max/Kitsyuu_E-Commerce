@@ -527,3 +527,10 @@ ul.plain li:last-child{border-bottom:0}
 .report-kpis dd{margin:4px 0 0;font-size:22px;font-weight:700}
 .report-body{display:grid;gap:16px}
 .field-inline{display:inline-flex;align-items:center;gap:8px}
+
+/* M17: service notes, basket, store content */
+.notes-list li{padding:10px 0;border-bottom:1px solid var(--border)}
+.notes-list li:last-child{border-bottom:0}
+.note-body{margin:0 0 4px;white-space:pre-line}
+.sub-h{margin:12px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.announce-preview{padding:10px 14px;border-radius:var(--radius-sm);background:#101011;color:#eae7e0;font-size:13px;letter-spacing:.04em}

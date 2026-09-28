@@ -149,6 +149,9 @@ export type StockCountStatus = 'open' | 'posted' | 'cancelled';
 export interface StockCountsTable { id: Generated<string>; number: string; status: Generated<StockCountStatus>; note: string | null; created_by: string | null; created_at: Generated<Timestamp>; posted_by: string | null; posted_at: Timestamp | null; }
 export interface StockCountLinesTable { id: Generated<string>; stock_count_id: string; variant_id: string; expected_qty: number; counted_qty: number | null; }
 export interface VariantCostsTable { variant_id: string; unit_cost_paise: number; updated_by: string | null; updated_at: Generated<Timestamp>; }
+export interface NotificationLogTable { id: Generated<string>; event: string; order_id: string | null; recipient: string; subject: string; status: 'sent' | 'failed'; error: string | null; created_at: Generated<Timestamp>; }
+export interface CustomerNotesTable { id: Generated<string>; customer_id: string; body: string; created_by: string | null; created_at: Generated<Timestamp>; }
+export interface SiteContentTable { id: Generated<string>; key: string; locale: Generated<string>; status: Generated<'draft' | 'published'>; content: Json; updated_by: string | null; published_at: Timestamp | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -335,6 +338,9 @@ export interface Database {
   stock_counts: StockCountsTable;
   stock_count_lines: StockCountLinesTable;
   variant_costs: VariantCostsTable;
+  notification_log: NotificationLogTable;
+  customer_notes: CustomerNotesTable;
+  site_content: SiteContentTable;
   review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;

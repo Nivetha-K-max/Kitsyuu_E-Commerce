@@ -3,12 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, uuid } from '@kitsyuu/contracts';
-import { getCustomer } from '@kitsyuu/core';
+import { customerBasket, getCustomer, listCustomerNotes } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { setCustomerStatusAction, updateCustomerContactAction } from '../actions';
+import { addCustomerNoteAction, setCustomerStatusAction, updateCustomerContactAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Customer' };
 type Params = Promise<{ id: string }>;
@@ -22,6 +22,7 @@ export default async function CustomerPage({ params }: { params: Params }) {
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const d = await getCustomer(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const [notes, basket] = await Promise.all([listCustomerNotes(db(), actor, id), customerBasket(db(), actor, id)]);
   const c = d.customer;
   const activeSessions = d.sessions.filter(s => s.active).length;
   const disabling = c.status === 'active';
@@ -121,6 +122,31 @@ export default async function CustomerPage({ params }: { params: Params }) {
                 <div>{[a.line1, a.line2, `${a.city}, ${a.state} ${a.pin}`, a.country].filter(Boolean).join(' · ')}</div></li>))}
             </ul>
           )}
+        </section>
+      </div>
+
+      <div className="grid two">
+        <section className="card" aria-labelledby="notes-h" data-section="notes">
+          <h2 id="notes-h">Service notes</h2>
+          <p className="note">Internal only; the customer never sees them.</p>
+          {notes.length ? <ul className="plain notes-list" data-notes>{notes.map(n => (
+            <li key={n.id}><p className="note-body">{n.body}</p><span className="note">{n.author ?? 'staff'} · {formatDateTime(n.created_at as Date)}</span></li>
+          ))}</ul> : <p className="empty" data-empty="notes">No notes yet.</p>}
+          {can(actor, 'customers.note') && (
+            <ActionForm action={addCustomerNoteAction} submitLabel="Add note" id="note-form" label="Add a note" resetOnSuccess>
+              <Hidden name="customerId" value={id} />
+              <TextArea name="body" label="Note" rows={3} required />
+            </ActionForm>
+          )}
+        </section>
+        <section className="card" aria-labelledby="basket-h" data-section="basket">
+          <h2 id="basket-h">Cart and wishlist now</h2>
+          <h3 className="sub-h">Cart</h3>
+          {basket.cart.length ? <ul className="plain" data-cart>{basket.cart.map(i => <li key={i.id}>{i.name} · size {i.size} × {i.qty} <span className="note mono">{i.sku}</span></li>)}</ul>
+            : <p className="empty">The cart is empty.</p>}
+          <h3 className="sub-h">Wishlist</h3>
+          {basket.wishlist.length ? <ul className="plain" data-wishlist>{basket.wishlist.map(i => <li key={i.id}>{i.name} <span className="note mono">{i.sku}</span></li>)}</ul>
+            : <p className="empty">The wishlist is empty.</p>}
         </section>
       </div>
 

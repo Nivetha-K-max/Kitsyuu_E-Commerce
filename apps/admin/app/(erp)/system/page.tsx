@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
-import { getSystemStatus } from '@kitsyuu/core';
+import { getSystemStatus, listNotificationLog } from '@kitsyuu/core';
 import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
@@ -22,6 +22,7 @@ export default async function SystemPage() {
       'Admin URL (ADMIN_APP_URL)': set('ADMIN_APP_URL'), 'Database connection': set('ADMIN_DATABASE_URL'),
     },
   });
+  const emails = await listNotificationLog(db(), actor, 20);
   const row = (k: string, v: React.ReactNode, state?: 'ok' | 'bad') => (
     <div key={k}><dt>{k}</dt><dd data-state={state}>{v}</dd></div>
   );
@@ -55,6 +56,13 @@ export default async function SystemPage() {
               `${s.signins24h[r]?.ok ?? 0} successful · ${s.signins24h[r]?.failed ?? 0} failed`, (s.signins24h[r]?.failed ?? 0) > 20 ? 'bad' : undefined))}
           </dl>
           {can(actor, 'audit.read') && <p className="note"><Link href="/audit/sign-ins">See every sign-in attempt</Link></p>}
+        </section>
+        <section className="card" aria-labelledby="sys-mail" data-section="emails">
+          <SectionTitle id="sys-mail">Customer emails</SectionTitle>
+          {emails.length ? <ul className="plain" data-email-log>{emails.map(e => (
+            <li key={e.id} data-status={e.status}><b>{e.status === 'sent' ? 'Sent' : 'Failed'}</b> · {e.event}{e.order_number ? ` · ${e.order_number}` : ''} · {formatDateTime(e.created_at as Date)}
+              {e.error && <div className="note">{e.error}</div>}</li>
+          ))}</ul> : <p className="note">No customer emails sent yet. Order emails are switched on under Settings → Customer emails.</p>}
         </section>
         <section className="card" aria-labelledby="sys-mon" data-section="monitoring">
           <SectionTitle id="sys-mon">Monitoring</SectionTitle>

@@ -572,3 +572,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-textarea,.st-file{width:100%;padding:12px 14px;background:#161617;border:1px solid #ffffff2e;border-radius:0;color:var(--paper);font:inherit}
 .st-textarea{min-height:140px;resize:vertical}
 .st-review-form .st-radio-group .st-radio span{color:#e0b64a;letter-spacing:3px}
+
+/* Announcement bar (M17): one line of text set in the admin, above the header */
+.st-announce{margin:0;padding:9px var(--st-gutter);background:var(--red);color:var(--paper);text-align:center;font:11px/1.4 var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-announce a{color:inherit;text-decoration:underline;text-underline-offset:3px}

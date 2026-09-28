@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { getCatalogue, toClientCatalogue } from '@/lib/catalogue';
+import { getAnnouncement } from '@/lib/content';
 import StoreProvider from '@/components/StoreProvider';
 import AuthProvider from '@/components/AuthProvider';
 import Header from '@/components/Header';
@@ -18,7 +19,7 @@ export const revalidate = 60;
 /* The KITSYUU stylesheets are served as-is from public/ in the same order as the static store:
    fonts.css → styles.css (shared tokens) → store.css (st- classes). */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const catalogue = toClientCatalogue(await getCatalogue());
+  const [catalogue, announcement] = await Promise.all([getCatalogue().then(toClientCatalogue), getAnnouncement()]);
   return (
     <html lang="en" className="st">
       <head>
@@ -31,6 +32,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AuthProvider>
         <StoreProvider catalogue={catalogue}>
           <a className="skip" href="#main">Skip to content</a>
+          {announcement && (
+            <p className="st-announce" data-announcement>{announcement.href
+              ? <a href={announcement.href}>{announcement.text} <span aria-hidden="true">→</span></a> : announcement.text}</p>
+          )}
           <Suspense fallback={<header className="st-header" />}><Header /></Suspense>
           <main id="main" tabIndex={-1}>{children}</main>
           <Footer catalogue={catalogue} />

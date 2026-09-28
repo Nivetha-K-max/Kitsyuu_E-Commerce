@@ -82,3 +82,8 @@ export {
   salesReport, productReport, inventoryReport, customerReport, purchasingReport, productionReport, exportReport, REPORTS, SOLD_STATUSES,
   type ReportKind, type ReportRange,
 } from './reports.ts';
+// ---------- M17: notifications, store content, customer service ----------
+export {
+  orderEmailEnabled, orderStatusEmail, notifyOrderStatus, listNotificationLog, getAnnouncementAdmin, saveAnnouncement, unpublishAnnouncement,
+  listCustomerNotes, addCustomerNote, customerBasket, ANNOUNCEMENT_KEY, type Announcement, type OrderEmailEvent,
+} from './engagement.ts';

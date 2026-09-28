@@ -5,7 +5,7 @@ import { Icon } from './icons';
 
 const ICON: Record<string, string> = {
   '/dashboard': 'dashboard', '/reports': 'reports', '/products': 'products', '/categories': 'categories', '/collections': 'collections', '/attributes': 'attributes', '/inventory': 'inventory', '/stock-counts': 'counts', '/stock-value': 'value',
-  '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/reviews': 'reviews', '/vendors': 'vendors', '/materials': 'materials', '/purchase-orders': 'purchase', '/production': 'production', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
+  '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/reviews': 'reviews', '/content': 'content', '/vendors': 'vendors', '/materials': 'materials', '/purchase-orders': 'purchase', '/production': 'production', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
   '/settings': 'settings', '/system': 'system',
 };
 

@@ -65,6 +65,11 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // M12: when a purchase counts as "bought" for reviews. Not decided yet, so it starts closed (no reviews can be written).
   def('reviews.eligibility', 'Who can review', 'Reviews', 'Customers can review an item once their order reaches this point. Reviews are always checked by staff before they appear.',
     { kind: 'choice', options: [{ value: 'off', label: 'Closed (no reviews yet)' }, { value: 'paid', label: 'After payment' }, { value: 'delivered', label: 'After delivery' }] }),
+  // M17: which customer emails are sent is the business's choice; each starts off.
+  def('notifications.order_shipped', 'Email when an order ships', 'Customer emails', 'Sends the customer an email (with the tracking number, if entered) when an order is marked shipped.',
+    { kind: 'choice', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] }),
+  def('notifications.order_cancelled', 'Email when the shop cancels an order', 'Customer emails', 'Sends the customer an email when staff cancel an order.',
+    { kind: 'choice', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] }),
   def('shipping.free_from_paise', 'Free delivery from', 'Shipping', 'Orders at or above this amount ship free. Leave empty for no free delivery.', { kind: 'money', optional: true }),
 ];
 const byKey = new Map(SETTINGS_REGISTRY.map(d => [d.key, d]));
