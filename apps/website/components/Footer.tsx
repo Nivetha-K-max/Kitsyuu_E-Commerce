@@ -23,7 +23,7 @@ export default function Footer({ catalogue }: { catalogue: Catalogue }) {
             <p>JAPANESE STREETWEAR.<br />INDIAN STREETS.</p>
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
-          <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/#story">The story</a></li><li><a href="/#edit">Style studies</a></li><li><a href="/#about">Our world</a></li></ul></nav>
+          <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/our-story">The story</a></li><li><a href="/our-story#edit">Style studies</a></li><li><a href="/our-story#about">Our world</a></li></ul></nav>
           <div><h2>Orders</h2><p className="st-footer-note" data-returns-policy>{RETURNS_POLICY}</p></div>
         </div>
         <div className="st-footer-bottom"><span>KITSYUU STORE</span><a href="#main">Back to top ↑</a></div>

@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 const head = (aside?: React.ReactNode) => (
   <>
-    <Crumbs list={[{ label: 'Store', href: '/#store' }, { label: 'Cart', href: '/cart' }, { label: 'Checkout' }]} />
+    <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Cart', href: '/cart' }, { label: 'Checkout' }]} />
     <header className="st-plp-head"><h1 id="st-page-title" tabIndex={-1}>Checkout</h1>{aside && <div className="st-plp-aside">{aside}</div>}</header>
   </>
 );

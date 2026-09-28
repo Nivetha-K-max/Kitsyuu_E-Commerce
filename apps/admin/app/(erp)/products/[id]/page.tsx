@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, productId as productIdSchema } from '@kitsyuu/contracts';
-import { getProduct, listAdjustmentReasons, listCategories } from '@kitsyuu/core';
+import { getProduct, getProductAttributes, listAdjustmentReasons, listAttributes, listCategories } from '@kitsyuu/core';
 import { ActionForm, Checkbox, DropzoneField, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { PriceForm, StockAdjustForm } from '@/components/CatalogueForms';
 import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { adjustStockAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
+import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
 import { addVariantAction, moveImageAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
 /** The initial-stock rows written by the catalogue seed carry an internal note; the reason ("Initial stock") says it all. */
@@ -40,10 +40,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     .catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const write = can(actor, 'products.write'), adjust = can(actor, 'inventory.adjust'), catWrite = can(actor, 'categories.write');
   const created = (await searchParams).notice === 'created';
-  const [categories, reasons] = await Promise.all([
+  const [categories, reasons, attributes, tagged] = await Promise.all([
     write ? listCategories(db(), actor) : Promise.resolve([]),
     adjust ? listAdjustmentReasons(db(), actor) : Promise.resolve([]),
+    listAttributes(db(), actor),
+    getProductAttributes(db(), actor, id),
   ]);
+  const hasTag = new Set(tagged);
   const sellable = variants?.filter(v => v.is_active) ?? [];
   const units = sellable.reduce((n, v) => n + v.stock_qty, 0);
   const attention = sellable.filter(v => v.stock_status !== 'in_stock').length;
@@ -146,6 +149,33 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               <p className="note form-foot">Fields marked * are required. Product ID, SKU and store URL are fixed identifiers and cannot be edited. Status and price are saved separately in the side panel.</p>
             </section>
           )}
+
+          <section className="card" aria-labelledby="attr-h" data-section="attributes">
+            <SectionTitle id="attr-h">Store filters</SectionTitle>
+            {!attributes.length ? (
+              <p className="note">No attributes yet. {catWrite
+                ? <>Add them (Fabric, Sleeve length, Occasion…) under <Link href="/attributes">Attributes</Link>, then tick them here.</>
+                : 'Staff with the categories.write permission can add them under Attributes.'}</p>
+            ) : write ? (
+              <ActionForm action={setProductAttributesAction} submitLabel="Save store filters" id="attributes-form" label="Store filters" className="form record-form">
+                <Hidden name="productId" value={p.id} />
+                {attributes.map(a => (
+                  <fieldset className="block attr-pick" key={a.id} data-attribute={a.id}>
+                    <legend>{a.label}{!a.isActive && <span className="note"> (hidden from the store)</span>}</legend>
+                    {a.values.length ? <div className="chip-checks">{a.values.map(v => (
+                      <label key={v.slug} className="chip-check">
+                        <input type="checkbox" name="values[]" value={`${a.id}:${v.slug}`} defaultChecked={hasTag.has(`${a.id}:${v.slug}`)} /><span>{v.label}</span>
+                      </label>
+                    ))}</div> : <p className="note">No values yet{catWrite && <> — add them under <Link href="/attributes">Attributes</Link></>}.</p>}
+                  </fieldset>
+                ))}
+              </ActionForm>
+            ) : (
+              <dl className="attr-read">{attributes.map(a => (
+                <div key={a.id}><dt>{a.label}</dt><dd>{a.values.filter(v => hasTag.has(`${a.id}:${v.slug}`)).map(v => v.label).join(', ') || '—'}</dd></div>
+              ))}</dl>
+            )}
+          </section>
 
           <section className="card" aria-labelledby="img-h" data-section="images">
             <div className="section-head">

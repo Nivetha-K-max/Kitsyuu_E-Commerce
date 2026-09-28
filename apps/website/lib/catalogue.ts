@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { publicSupabase } from './supabase/public';
-import type { Catalogue, Category, Collection, MediaImage, NavEntry, Product } from './types';
+import type { Attribute, Catalogue, Category, Collection, MediaImage, NavEntry, Product } from './types';
 
 /* Phase 4.3: the catalogue is read from Supabase (public key, RLS: active products only) and mapped onto the same
    Catalogue shape the storefront already renders, so no component changes. data/products.json stays in the repo only as
@@ -40,6 +40,7 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
     sb.from('collections').select('id, label, data_status, collection_products (product_id, position)')
   ]);
   fail('categories', cats.error); fail('products', prods.error); fail('collections', cols.error);
+  const attr = await readAttributes(sb);
 
   const publicUrl = (path: string) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const toImage = (i: Row['product_images'][number], name: string): MediaImage =>
@@ -59,7 +60,8 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
       featured: r.is_featured,
       styledWith: r.product_relations.filter(x => x.kind === 'styled_with').sort((a, b) => a.position - b.position).map(x => x.related_id),
       media: { status: primary ? (primary.quality === 'official' ? 'official' : 'prototype') : 'held', primary, placeholder: PLACEHOLDER, gallery: imgs.slice(1).map(i => toImage(i, r.name)) },
-      catalogueRef: r.catalogue_ref, material: r.material, care: r.care, origin: r.origin
+      catalogueRef: r.catalogue_ref, material: r.material, care: r.care, origin: r.origin,
+      attrs: attr.byProduct.get(r.id) ?? {}
     };
   });
 
@@ -76,8 +78,33 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
   ];
   if (!products.length) throw new Error('Catalogue unavailable: Supabase returned no active products.');
   /* Prices are prototype INR estimates; tax inclusion is unconfirmed (null keeps the existing "unconfirmed" wording). */
-  return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products };
+  return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products, attributes: attr.attributes };
 });
+
+/* Store-filter attributes (admin-managed; RLS returns only active ones). Optional: if the attribute tables are not in the
+   database yet (migration 1800 not applied), the store simply has no attribute filters; any other error fails as usual. */
+async function readAttributes(sb: ReturnType<typeof publicSupabase>): Promise<{ attributes: Attribute[]; byProduct: Map<string, Record<string, string[]>> }> {
+  const none = { attributes: [], byProduct: new Map() };
+  const [attrs, tags] = await Promise.all([
+    sb.from('attributes').select('id, label, sort_order, attribute_values (slug, label, sort_order)').order('sort_order').order('id'),
+    sb.from('product_attribute_values').select('product_id, attribute_id, value_slug')
+  ]);
+  const missing = (e: { code?: string } | null) => !!e && ['42P01', 'PGRST205', 'PGRST200'].includes(e.code ?? '');
+  if (missing(attrs.error) || missing(tags.error)) return none;
+  fail('attributes', attrs.error); fail('product attributes', tags.error);
+  type A = { id: string; label: string; attribute_values: { slug: string; label: string; sort_order: number }[] };
+  const attributes = (attrs.data as unknown as A[]).map(a => ({
+    id: a.id, label: a.label,
+    values: [...a.attribute_values].sort((x, y) => x.sort_order - y.sort_order || x.slug.localeCompare(y.slug)).map(v => ({ slug: v.slug, label: v.label }))
+  }));
+  const byProduct = new Map<string, Record<string, string[]>>();
+  for (const t of tags.data ?? []) {
+    const m = byProduct.get(t.product_id) ?? {};
+    (m[t.attribute_id] ??= []).push(t.value_slug);
+    byProduct.set(t.product_id, m);
+  }
+  return { attributes, byProduct };
+}
 
 /* Only the fields the storefront renders are sent to the browser. */
 export function toClientCatalogue(c: Catalogue): Catalogue {

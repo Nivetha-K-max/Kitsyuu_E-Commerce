@@ -32,9 +32,8 @@ function useActive(idx: Index): Active {
   return tool ? { tool } : {};
 }
 
-/* On the homepage the layout's header is not shown at the top: the page renders it (inline) where the store section
-   begins, below the brand landing page, so the two headers never overlap. */
-export default function Header({ inline = false }: { inline?: boolean } = {}) {
+/* The one site header, on every page (the homepage included). */
+export default function Header() {
   const store = useStore(), hydrated = useHydrated(), idx = store.idx;
   const cartCount = hydrated ? store.cartCount : 0, wishCount = hydrated ? store.wishIds.length : 0;
   /* Auth state is a UI hint only (the server decides access). Until it is known, the link says "Account". */
@@ -63,10 +62,9 @@ export default function Header({ inline = false }: { inline?: boolean } = {}) {
     mq.addEventListener('change', close); return () => mq.removeEventListener('change', close);
   }, []);
 
-  if (!inline && path === '/') return null;
   return (
     <header className="st-header" ref={header}>
-      {/* The homepage starts with the landing page's own script, so links to it are full page loads (<a>, not <Link>). */}
+      {/* A full page load (<a>), so leaving /our-story always unloads the landing's own script. */}
       <a className="st-brand" href={url.home} aria-label="KITSYUU home">
         <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} /></span>
         <span className="st-wordmark" aria-hidden="true">KITSYUU</span>
@@ -90,7 +88,7 @@ export default function Header({ inline = false }: { inline?: boolean } = {}) {
         <ul className="st-nav-extra">
           <li><Link href={url.wishlist} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
           <li><Link href={accountHref} {...cur('account')}>{accountLabel}</Link></li>
-          <li><a href="/#story">The KITSYUU story</a></li>
+          <li><a href="/our-story">Our story</a></li>
         </ul>
       </nav>
       <div className="st-tools">

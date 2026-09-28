@@ -5,6 +5,7 @@
      --dry-run             run every pending migration inside ONE transaction, then roll it all back (nothing is kept)
      --repeat              with --dry-run: run each pending migration twice, to prove it is safe to re-run
      --no-seed             do not run seed/catalogue.sql after the migrations
+     --only=a.sql,b.sql    with --dry-run or apply: only these pending migrations (others stay pending)
      --mark-applied=a,b    record already-applied files (e.g. ones run in the SQL Editor) without running them;
                            refused unless the file's objects are verified to exist in the database
    On IPv4-only networks set SUPABASE_DB_POOLER_HOST (see lib/connection.mjs); the direct host is IPv6-only. */
@@ -52,7 +53,11 @@ try {
     }
   }
 
-  const pending = files.filter(f => !done.has(f));
+  // --only=a.sql,b.sql limits a dry run / apply to those pending files (e.g. an independent migration ahead of others).
+  const only = args.find(x => x.startsWith('--only='))?.split('=')[1].split(',').map(x => x.trim()).filter(Boolean);
+  const unknown = (only ?? []).filter(o => !files.includes(o) || done.has(o));
+  if (unknown.length) throw new Error(`--only: not a pending migration: ${unknown.join(', ')}`);
+  const pending = files.filter(f => !done.has(f) && (!only || only.includes(f)));
   if (flag('--status')) {
     for (const f of files) console.log(`${done.has(f) ? 'applied' : 'PENDING'}  ${f}`);
   } else if (flag('--dry-run')) {

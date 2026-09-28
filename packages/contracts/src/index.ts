@@ -256,6 +256,27 @@ export const updateCategoryInput = z.object({
 export const setCategoryActiveInput = z.object({ categoryId, active: z.enum(['true', 'false']).transform(v => v === 'true'), expectedActive: z.enum(['true', 'false']).transform(v => v === 'true') });
 export const moveCategoryInput = z.object({ categoryId, direction });
 
+/* Product attributes (store filters). Ids/slugs are fixed once created: the store uses them in links (?fabric=cotton). */
+export const attributeId = z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9-]{1,39}$/, 'Use 2–40 lower-case letters, digits or hyphens, starting with a letter.');
+const attrLabel = z.string().trim().min(1, 'Enter a name.').max(60);
+export const createAttributeInput = z.object({ id: attributeId, label: attrLabel, description: z.string().trim().max(300).default('') });
+export const updateAttributeInput = z.object({ attributeId, label: attrLabel, description: z.string().trim().max(300).default(''), expectedLabel: z.string().max(60) });
+export const setAttributeActiveInput = z.object({ attributeId, active: z.enum(['true', 'false']).transform(v => v === 'true'), expectedActive: z.enum(['true', 'false']).transform(v => v === 'true') });
+export const moveAttributeInput = z.object({ attributeId, direction });
+export const addAttributeValueInput = z.object({ attributeId, label: attrLabel, slug: categorySlug.optional().or(z.literal('').transform(() => undefined)) });
+export const attributeValueRef = z.object({ attributeId, slug: categorySlug });
+export const renameAttributeValueInput = attributeValueRef.extend({ label: attrLabel });
+export const moveAttributeValueInput = attributeValueRef.extend({ direction });
+/** The product form sends one checkbox per value, named attr:<attributeId>:<slug>. */
+export const setProductAttributesInput = z.object({ productId, values: z.array(z.object({ attributeId, slug: categorySlug })).max(200) });
+
+export type CreateAttributeInput = z.infer<typeof createAttributeInput>;
+export type UpdateAttributeInput = z.infer<typeof updateAttributeInput>;
+export type SetAttributeActiveInput = z.infer<typeof setAttributeActiveInput>;
+export type AddAttributeValueInput = z.infer<typeof addAttributeValueInput>;
+export type RenameAttributeValueInput = z.infer<typeof renameAttributeValueInput>;
+export type SetProductAttributesInput = z.infer<typeof setProductAttributesInput>;
+
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const imageMetaInput = z.object({ productId, alt: z.string().trim().max(200).default('') });
 export const imageIdInput = z.object({ imageId: uuid });

@@ -37,7 +37,12 @@ export type Product = {
   material: string | null;
   care: string | null;
   origin: string | null;
+  /** Store-filter attribute values, by attribute id (e.g. { fabric: ['cotton'] }). Empty when none are set. */
+  attrs: Record<string, string[]>;
 };
+
+/** A product attribute the store can filter by (defined in the admin); only active attributes reach the store. */
+export type Attribute = { id: string; label: string; values: { slug: string; label: string }[] };
 
 export type Category = { id: string; label: string; parent: string | null };
 
@@ -51,6 +56,7 @@ export type Catalogue = {
   collections: Collection[];
   navigation: NavEntry[];
   products: Product[];
+  attributes: Attribute[];
 };
 
 /* A cart line as stored in localStorage (kitsyuu-cart-v1); same format as the static store. */

@@ -32,7 +32,7 @@ export default async function PayPage({ params }: { params: Promise<{ orderNumbe
   }
   return (
     <div className="st-wrap">
-      <Crumbs list={[{ label: 'Store', href: '/#store' }, { label: 'Checkout' }, { label: 'Payment' }]} />
+      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Checkout' }, { label: 'Payment' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title" tabIndex={-1}>Payment</h1>
         <div className="st-plp-aside"><p className="st-result-count">Order {o.orderNumber}</p>

@@ -1,5 +1,5 @@
 /* M5: brings the original KITSYUU landing page (dist/, the source of truth — never modified here) into the Next.js
-   homepage at build time. `/` shows the landing first and the existing store homepage after it (see app/page.tsx).
+   /our-story page at build time (see app/our-story/page.tsx; the homepage `/` is the store).
    Runs before `next build`, `next dev` and `tsc` (npm pre-scripts). Everything it writes is generated and git-ignored
    (see ../.gitignore), so the 99 MB frame sequence is not committed a second time.
 
@@ -7,7 +7,7 @@
    - lib/landing.generated.ts — the landing's <body> markup, rendered by components/Landing.tsx. Only technically
      required edits are made, each asserted so a changed dist/landing.html stops the build instead of drifting:
        · <main id="top"> becomes <div id="top"> (the page already has the store's <main>; one main landmark per page);
-       · one nav link to the store section on the same page: <a href="#store">Store</a>;
+       · one nav link to the store: <a href="/">Store</a> (the landing's own header is hidden on /our-story by store.css);
        · asset URLs become root-absolute (/assets/…), so they resolve on any URL.
    - public/: app.js, content.json, the sequence manifest, images and the 241 frames, unchanged.
    Files the store already ships in public/ (styles.css, fonts, logo, editorial image) are shared, not copied: they must
@@ -56,7 +56,7 @@ if (!body) fail('no <body> in dist/landing.html');
 const edits = [
   ['<main id="top">', '<div id="top">'],
   ['</main>', '</div>'],
-  ['<a href="#about">Our world</a></nav>', '<a href="#about">Our world</a><a href="#store">Store</a></nav>'],
+  ['<a href="#about">Our world</a></nav>', '<a href="#about">Our world</a><a href="/">Store</a></nav>'],
 ];
 let markup = body;
 for (const [from, to] of edits) {

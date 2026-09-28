@@ -2,8 +2,8 @@
 /* Product, price and stock mutations. The actor always comes from the session; core services check permissions,
    lock the row, and write the audit record in the same transaction as the change. */
 import { revalidatePath } from 'next/cache';
-import { adjustStockInput, paiseToRupees, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
-import { adjustStock, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
+import { adjustStockInput, paiseToRupees, setProductAttributesInput, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
+import { adjustStock, setProductAttributes, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -46,5 +46,17 @@ export async function adjustStockAction(_: ActionState, form: FormData): Promise
     return { ok: true, message: `${res.sku}: ${res.before} → ${res.after} (${res.delta > 0 ? '+' : ''}${res.delta}).` };
   });
   if (r.ok) refresh(String(form.get('productId') ?? ''));
+  return r;
+}
+
+/** The product's store-filter values: one checkbox per value, named values[] with "attributeId:slug". */
+export async function setProductAttributesAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const values = form.getAll('values[]').map(v => String(v).split(':')).map(([attributeId, slug]) => ({ attributeId, slug }));
+  const r = await handle(setProductAttributesInput, form, async input => {
+    const { changed } = await setProductAttributes(db(), actor, input, await requestContext());
+    return { ok: true, message: changed ? 'Store filters saved.' : 'No changes to save.' };
+  }, { values });
+  if (r.ok) refresh(String(form.get('productId')));
   return r;
 }

@@ -6,6 +6,7 @@ export const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', permission: 'dashboard.read', group: 'Overview' },
   { href: '/products', label: 'Products', permission: 'products.read', group: 'Catalogue' },
   { href: '/categories', label: 'Categories', permission: 'categories.read', group: 'Catalogue' },
+  { href: '/attributes', label: 'Attributes', permission: 'categories.read', group: 'Catalogue' },
   { href: '/inventory', label: 'Inventory', permission: 'inventory.read', group: 'Catalogue' },
   { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Commerce' },
   { href: '/staff', label: 'Staff', permission: 'staff.read', group: 'System' },

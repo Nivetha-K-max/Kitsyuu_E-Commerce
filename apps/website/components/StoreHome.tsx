@@ -11,6 +11,12 @@ export default async function StoreHome() {
   const outer = idx.inCategory('outerwear').filter(p => !imageOf(p).held).slice(0, 2);
   return (
     <>
+      <section className="st-section" aria-labelledby="st-na-title"><div className="st-wrap">
+        <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(na.products.length, 'piece') : ''}</span></div>
+        <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>
+        {na && <ProductGrid list={na.products} pathOf={idx.categoryPath} opts={{ isNew: true }} />}
+      </div></section>
+
       {/* Turntable integration point: set data-turntable to the KTS-OUT-001 sequence manifest (see lib/turntable.ts). Empty = hero.webp only. */}
       <section className="st-hero" aria-labelledby="st-hero-title" data-turntable="" data-turntable-product="ky-proto-015">
         <img className="st-hero-img" src="/assets/hero.webp" alt="" width={1024} height={1024} fetchPriority="high" />
@@ -18,7 +24,7 @@ export default async function StoreHome() {
         <div className="st-hero-shade"></div>
         <div className="st-hero-copy st-wrap">
           <p className="eyebrow"><span></span>KITSYUU STORE / JAPAN → INDIA</p>
-          <h1 id="st-hero-title">Shop the<br /><em>rotation.</em></h1>
+          <h2 id="st-hero-title">Shop the<br /><em>rotation.</em></h2>
           <p>Japanese streetwear, brought to India. Oversized shapes, washed layers and hardware details, piece by piece.</p>
           <div className="st-hero-actions">
             <Link className="button" href={url.shop()}>Shop all products</Link>
@@ -27,12 +33,6 @@ export default async function StoreHome() {
         </div>
         <HeroTurntable />
       </section>
-
-      <section className="st-section" aria-labelledby="st-na-title"><div className="st-wrap">
-        <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(na.products.length, 'piece') : ''}</span></div>
-        <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>
-        {na && <ProductGrid list={na.products} pathOf={idx.categoryPath} opts={{ isNew: true }} />}
-      </div></section>
 
       <section className="st-section" aria-labelledby="st-cat-title"><div className="st-wrap">
         <div className="section-label"><span>02 — SHOP BY CATEGORY</span><span>TOPS / BOTTOMS / OUTERWEAR</span></div>

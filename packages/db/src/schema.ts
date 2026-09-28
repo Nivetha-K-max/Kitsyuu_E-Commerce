@@ -126,6 +126,9 @@ export type ProductStatus = 'active' | 'draft' | 'archived';
 export interface CategoriesTable { id: string; label: string; parent_id: string | null; sort_order: number; is_active: Generated<boolean>; description: Generated<string>; created_at: Generated<Timestamp>; }
 export interface CollectionsTable { id: string; label: string; data_status: string; note: string | null; }
 export interface CollectionProductsTable { collection_id: string; product_id: string; position: number; }
+export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
+export interface ProductAttributeValuesTable { product_id: string; attribute_id: string; value_slug: string; created_at: Generated<Timestamp>; }
 export interface ProductsTable {
   id: Generated<string>;                     // database default: 'kts-' + 8 random hex characters
   sku: string;
@@ -276,6 +279,9 @@ export interface Database {
   categories: CategoriesTable;
   collections: CollectionsTable;
   collection_products: CollectionProductsTable;
+  attributes: AttributesTable;
+  attribute_values: AttributeValuesTable;
+  product_attribute_values: ProductAttributeValuesTable;
   products: ProductsTable;
   product_variants: ProductVariantsTable;
   product_images: ProductImagesTable;

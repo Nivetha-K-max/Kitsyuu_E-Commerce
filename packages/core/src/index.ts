@@ -12,6 +12,10 @@ export { listOrders, getOrder, updateOrderStatus, ORDER_PAGE_SIZE } from './orde
 export { assertAdministrationRemains, assertHoldsAll, assertOutranksOrEqual } from './guards.ts';
 export { createProduct, setNewArrival, moveNewArrival, NEW_ARRIVALS } from './products.ts';
 export { addVariant, updateVariant, moveVariant } from './variants.ts';
+export {
+  listAttributes, createAttribute, updateAttribute, setAttributeActive, moveAttribute, addAttributeValue, renameAttributeValue, moveAttributeValue,
+  deleteAttributeValue, getProductAttributes, setProductAttributes, type AttributeRow,
+} from './attributes.ts';
 export { listCategoryTree, createCategory, updateCategory, setCategoryActive, moveCategory } from './categories.ts';
 export { uploadProductImage, setPrimaryImage, updateImageAlt, moveImage, removeImage, processImage, sniffImageType } from './images.ts';
 export { supabaseStorage, localStorage, type ObjectStorage } from './storage.ts';

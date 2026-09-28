@@ -1,20 +1,14 @@
-import { Suspense } from 'react';
-import Header from '@/components/Header';
-import Landing from '@/components/Landing';
+import BrandHero from '@/components/BrandHero';
 import StoreHome from '@/components/StoreHome';
 
-/* The KITSYUU homepage is one continuous page:
-   1. the original brand landing page (its own header, story, edit, world and closing sections);
-   2. the store homepage, starting at #store with the store header (the layout does not render it at the top on `/`);
-   3. the store footer (from the layout). */
+/* The KITSYUU homepage is the store, as on a typical online shop: the layout's one store header, the brand hero, then the
+   store homepage (new arrivals, the rotation banner, categories, featured pieces), then the layout's one footer.
+   The brand film and story (the original landing page) are on /our-story. */
 export default function Home() {
   return (
     <>
-      <Landing />
-      <section id="store" className="st-home" aria-label="KITSYUU store">
-        <Suspense fallback={<header className="st-header" />}><Header inline /></Suspense>
-        <StoreHome />
-      </section>
+      <BrandHero />
+      <StoreHome />
     </>
   );
 }

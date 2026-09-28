@@ -34,15 +34,15 @@ function fullPageExit(e: MouseEvent) {
   e.stopPropagation();
 }
 
-/* Scrolling on the homepage: page navigation is instant (store.css: `html:has(.kitsyuu-landing) { scroll-behavior: auto }`),
-   so the Store link (#store), Back/Forward and opening /#store are handled natively by the browser. Only the landing's
+/* Scrolling on /our-story: page navigation is instant (store.css: `html:has(.kitsyuu-landing) { scroll-behavior: auto }`),
+   so Back/Forward and opening /our-story#edit are handled natively by the browser. Only the landing's
    own in-page links keep their smooth story scroll, animated here explicitly. Like a native anchor they add a history
    entry and move the focus starting point to the section; with reduced motion they are instant (as in styles.css). */
 function smoothLandingLink(e: MouseEvent) {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const link = (e.target as Element | null)?.closest?.('a[href^="#"]');
   const hash = link?.getAttribute('href') ?? '';
-  if (hash.length < 2 || hash === '#store') return;           // the Store link stays a plain (instant) anchor
+  if (hash.length < 2) return;
   const target = document.getElementById(decodeURIComponent(hash.slice(1)));
   if (!target) return;
   e.preventDefault();

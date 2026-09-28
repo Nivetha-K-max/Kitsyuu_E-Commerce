@@ -325,12 +325,12 @@ try {
   const crumbs = await ev(`[...document.querySelectorAll('.st-crumbs li')].map(l=>l.innerText.trim())`);
   ok('[polish] a subcategory named like its category is shown once (product meta and breadcrumb)', (await text('.st-pdp-meta b')).toUpperCase() === 'TOPS'
     && !crumbs.some((c, i) => i > 0 && c.toUpperCase() === crumbs[i - 1].toUpperCase()), JSON.stringify({meta: await text('.st-pdp-meta b'), crumbs}));
-  await go('/', '!!document.querySelector("#store")');
+  await go('/', '!!document.querySelector(".st-brand-hero")');
   await until(`document.querySelector('.st-tool-account')?.dataset.auth === 'guest'`);
   const account = await ev(`(()=>{const l=document.querySelector('.st-tool-account .st-tool-label');return {text:l.innerText,lines:l.getClientRects().length,height:Math.round(l.getBoundingClientRect().height)}})()`);
   ok('[polish] "Log in" stays on one line in the 1440 px header', account.lines === 1 && account.height < 20, JSON.stringify(account));
   ok('[polish] no "concept image / not a catalogue item" captions in the store (the preserved landing keeps its own wording)', !/not a catalogue item/i.test(await ev('document.body.innerText'))
-    && !(await exists('#store .st-caption')));
+    && !(await exists('main .st-caption')));
   ok('[polish] the 1440 px header does not overflow', (await ev('document.documentElement.scrollWidth - innerWidth')) <= 0);
   await setCookie(signedIn);
 

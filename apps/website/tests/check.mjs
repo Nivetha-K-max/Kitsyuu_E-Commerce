@@ -19,24 +19,28 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   ok(`[${tag}] landing loads unchanged`, land.title.startsWith('Kitsyuu') && land.word === 'KITSYUU' && land.poster > 0 && !land.store && b.errors.length === 0, JSON.stringify(land) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
   await b.shot(`${tag}-landing.png`);
 
-  // M5: the homepage `/` is ONE page — the same landing first (plus one Store link to #store), then the store homepage.
+  // The homepage `/` is the store: ONE store header, the brand hero (landing poster + wordmark), the store sections, ONE footer.
   await b.goto(B + '/', READY);
-  const home0 = await b.eval(`(()=>{const L=document.querySelector('[data-landing]'),S=document.querySelector('#store');const heads=[...document.querySelectorAll('.st-header')];
-    return {title:document.title,nav:[...document.querySelectorAll('.kitsyuu-landing .nav nav a')].map(a=>a.textContent),store:[...document.querySelectorAll('.kitsyuu-landing .nav nav a')].filter(a=>a.getAttribute('href')==='#store'&&a.offsetParent!==null).length,
-      word:document.querySelector('.kitsyuu-landing .hero-wordmark')?.textContent,poster:document.querySelector('.kitsyuu-landing .stage-poster')?.naturalWidth,
-      order:!!(L&&S&&(L.compareDocumentPosition(S)&Node.DOCUMENT_POSITION_FOLLOWING)),storeHero:!!S?.querySelector('#st-hero-title'),storeHeader:heads.length===1&&!!S?.contains(heads[0]),
-      landingHeaderFirst:!!(document.querySelector('.kitsyuu-landing header.nav')&&heads[0]&&(document.querySelector('.kitsyuu-landing header.nav').compareDocumentPosition(heads[0])&Node.DOCUMENT_POSITION_FOLLOWING)),
-      mains:document.querySelectorAll('main').length}})()`);
-  ok(`[${tag}] / = landing first (unchanged + Store link to #store), then the store homepage with its header`, home0.word === land.word && home0.poster > 0 && JSON.stringify(home0.nav) === JSON.stringify([...land.nav, 'Store'])
-    && home0.store === 1 && home0.order && home0.storeHero && home0.storeHeader && home0.landingHeaderFirst && home0.mains === 1 && b.errors.length === 0, JSON.stringify(home0) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
-  // The landing's Store link jumps straight to #store (no animated scroll through the story): the homepage's page navigation is instant.
-  const jump = await b.eval(`(async()=>{scrollTo({top:0,behavior:'instant'});await new Promise(r=>setTimeout(r,300));const ys=[];
-    document.querySelector('.kitsyuu-landing .nav a[href="#store"]').click();
-    for(let i=0;i<20;i++){await new Promise(r=>requestAnimationFrame(r));ys.push(Math.round(scrollY));}
-    return {positions:[...new Set(ys)].length,top:Math.round(document.querySelector('#store').getBoundingClientRect().top),hash:location.hash,path:location.pathname,
-      header:Math.round(document.querySelector('#store .st-header').getBoundingClientRect().top),behavior:getComputedStyle(document.documentElement).scrollBehavior}})()`);
-  ok(`[${tag}] landing Store link jumps straight to #store (one position from the first frame, store header at the top)`, jump.positions === 1 && Math.abs(jump.top) <= 1 && Math.abs(jump.header) <= 1
-    && jump.hash === '#store' && jump.path === '/' && jump.behavior === 'auto' && b.errors.length === 0, JSON.stringify(jump));
+  const home0 = await b.eval(`(()=>{const heads=[...document.querySelectorAll('header')].filter(h=>getComputedStyle(h).display!=='none');
+    return {heads:heads.length,storeHeaderFirst:!!heads[0]?.matches('.st-header')&&Math.abs(heads[0].getBoundingClientRect().top)<=1,
+      landing:!!document.querySelector('.kitsyuu-landing'),footers:[...document.querySelectorAll('footer')].filter(f=>getComputedStyle(f).display!=='none').length,
+      h1:[...document.querySelectorAll('h1')].map(h=>h.textContent),poster:document.querySelector('.st-brand-hero-img')?.naturalWidth,
+      shop:!!document.querySelector('.st-brand-hero a[href="/shop"]'),story:!!document.querySelector('.st-brand-hero a[href="/our-story"]'),
+      heroFirst:document.querySelector('main')?.firstElementChild?.classList.contains('st-brand-hero'),storeHero:!!document.querySelector('#st-hero-title'),mains:document.querySelectorAll('main').length}})()`);
+  ok(`[${tag}] / = one store header, brand hero (poster + KITSYUU), store sections, one footer`, home0.heads === 1 && home0.storeHeaderFirst && !home0.landing && home0.footers === 1
+    && home0.h1.join() === land.word && home0.poster > 0 && home0.shop && home0.story && home0.heroFirst && home0.storeHero && home0.mains === 1 && b.errors.length === 0,
+    JSON.stringify(home0) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
+
+  // /our-story = the unchanged landing (film, style studies, our world) under the same one store header, above the one footer.
+  await b.goto(B + '/our-story', READY);
+  const story = await b.eval(`(()=>{const vis=el=>getComputedStyle(el).display!=='none';
+    return {nav:[...document.querySelectorAll('.kitsyuu-landing .nav nav a')].map(a=>a.textContent),word:document.querySelector('.kitsyuu-landing .hero-wordmark')?.textContent,
+      poster:document.querySelector('.kitsyuu-landing .stage-poster')?.naturalWidth,heads:[...document.querySelectorAll('header')].filter(vis).length,
+      storeHeader:vis(document.querySelector('.st-header')),footers:[...document.querySelectorAll('footer')].filter(vis).length,
+      sections:['story','edit','about'].every(id=>!!document.getElementById(id)),mains:document.querySelectorAll('main').length}})()`);
+  ok(`[${tag}] /our-story = the landing (unchanged content) with the one store header and footer`, story.word === land.word && story.poster > 0
+    && JSON.stringify(story.nav) === JSON.stringify([...land.nav, 'Store']) && story.heads === 1 && story.storeHeader && story.footers === 1 && story.sections && story.mains === 1
+    && b.errors.length === 0, JSON.stringify(story) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
 
   // Store home
   await b.goto(B + '/', READY);
