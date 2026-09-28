@@ -65,3 +65,24 @@ export async function listSignIns(db: Db, actor: StaffPrincipal, q: { page: numb
     hasNext: rows.length > SIGNIN_PAGE_SIZE,
   };
 }
+
+
+/** M18: things that need attention, derived only from rules and data that already exist (nothing is estimated). */
+export async function securityAlerts(db: Db, actor: StaffPrincipal) {
+  requirePermission(actor, 'system.read');
+  const s = await db.selectFrom('settings').select(['key', 'value']).where('key', 'in', ['auth.login_max_failures', 'auth.login_window_minutes']).execute();
+  const v = (k: string, d: number) => { const x = Number(s.find(r => r.key === k)?.value); return Number.isFinite(x) && x > 0 ? x : d; };
+  const max = v('auth.login_max_failures', 5), windowMin = v('auth.login_window_minutes', 15);
+  const locked = await db.selectFrom('auth_attempts').select(['realm', 'email', sql<number>`count(*)::int`.as('n')])
+    .where('succeeded', '=', false).where(sql<boolean>`failure_reason is distinct from 'unverified'`)
+    .where(sql<boolean>`attempted_at > now() - make_interval(mins => ${windowMin})`).groupBy(['realm', 'email'])
+    .having(sql<number>`count(*)`, '>=', max).execute();
+  const failedEmails = await db.selectFrom('notification_log').select(sql<number>`count(*)::int`.as('n'))
+    .where('status', '=', 'failed').where(sql<boolean>`created_at > now() - interval '24 hours'`).executeTakeFirstOrThrow();
+  const lowStock = await db.selectFrom('product_variants as v').innerJoin('products as p', 'p.id', 'v.product_id').select(sql<number>`count(*)::int`.as('n'))
+    .where('p.status', '=', 'active').where('v.is_active', '=', true).where(sql<boolean>`v.stock_qty = 0`).executeTakeFirstOrThrow();
+  const mfa = await db.selectFrom('staff_users as s').leftJoin('staff_mfa as m', 'm.staff_user_id', 's.id')
+    .select([sql<number>`count(*) filter (where s.status = 'active')::int`.as('active'), sql<number>`count(m.enabled_at) filter (where s.status = 'active')::int`.as('with_mfa')]).executeTakeFirstOrThrow();
+  return { lockedAccounts: locked.map(l => ({ realm: l.realm, email: l.email, failures: l.n })), windowMinutes: windowMin,
+    failedEmails24h: failedEmails.n, soldOutSizes: lowStock.n, staffActive: mfa.active, staffWithTwoFactor: mfa.with_mfa };
+}

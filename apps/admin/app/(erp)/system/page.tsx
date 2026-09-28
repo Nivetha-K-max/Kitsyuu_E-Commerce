@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
-import { getSystemStatus, listNotificationLog } from '@kitsyuu/core';
+import { getSystemStatus, listNotificationLog, securityAlerts } from '@kitsyuu/core';
 import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
@@ -22,13 +22,23 @@ export default async function SystemPage() {
       'Admin URL (ADMIN_APP_URL)': set('ADMIN_APP_URL'), 'Database connection': set('ADMIN_DATABASE_URL'),
     },
   });
-  const emails = await listNotificationLog(db(), actor, 20);
+  const [emails, alerts] = await Promise.all([listNotificationLog(db(), actor, 20), securityAlerts(db(), actor)]);
   const row = (k: string, v: React.ReactNode, state?: 'ok' | 'bad') => (
     <div key={k}><dt>{k}</dt><dd data-state={state}>{v}</dd></div>
   );
   return (
     <>
       <PageHead section="System" title="System" eyebrow="Health of the admin app and its database. Nothing here shows secrets." />
+      <section className="card" aria-labelledby="sys-alerts" data-section="alerts">
+        <SectionTitle id="sys-alerts">Needs attention</SectionTitle>
+        <ul className="plain alerts" data-alerts>
+          {alerts.lockedAccounts.length > 0 && <li data-alert="locked"><b>{alerts.lockedAccounts.length} account(s) locked</b> by the sign-in limit right now
+            ({alerts.lockedAccounts.map(l => `${l.realm === 'staff' ? 'staff' : 'customer'} ${l.email}`).join(', ')}). They unlock {alerts.windowMinutes} minutes after the last failure.</li>}
+          {alerts.failedEmails24h > 0 && <li data-alert="emails"><b>{alerts.failedEmails24h} customer email(s) failed</b> in the last 24 hours (see below).</li>}
+          {alerts.soldOutSizes > 0 && <li data-alert="sold-out"><b>{alerts.soldOutSizes} size(s) sold out</b> on active products. <Link href="/inventory">Inventory</Link></li>}
+          <li data-alert="mfa">{alerts.staffWithTwoFactor} of {alerts.staffActive} active staff use two-factor sign-in.</li>
+        </ul>
+      </section>
       <div className="grid-2">
         <section className="card" aria-labelledby="sys-db" data-section="database">
           <SectionTitle id="sys-db">Database</SectionTitle>

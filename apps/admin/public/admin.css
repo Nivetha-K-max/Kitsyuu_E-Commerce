@@ -534,3 +534,13 @@ ul.plain li:last-child{border-bottom:0}
 .note-body{margin:0 0 4px;white-space:pre-line}
 .sub-h{margin:12px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .announce-preview{padding:10px 14px;border-radius:var(--radius-sm);background:#101011;color:#eae7e0;font-size:13px;letter-spacing:.04em}
+
+/* M18: search, two-factor, alerts */
+.topbar-search .input{width:200px;min-height:34px;padding:6px 10px}
+@media(max-width:720px){.topbar-search{display:none}}
+.search-groups{display:grid;gap:14px}
+.search-hits li{padding:6px 0;border-bottom:1px solid var(--border)}
+.search-hits li:last-child{border-bottom:0}
+.mfa-secret{font-size:15px;letter-spacing:.08em;word-break:break-all;padding:8px 10px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm)}
+.codes{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin:10px 0 0;padding:0;list-style:none}
+.alerts li{padding:6px 0}

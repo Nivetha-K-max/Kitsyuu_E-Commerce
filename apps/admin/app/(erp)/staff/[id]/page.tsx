@@ -9,7 +9,7 @@ import RoleChecks from '@/components/RoleChecks';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { resendInviteAction, revokeSessionsAction, setStaffRolesAction, setStaffStatusAction, updateStaffAction } from '../actions';
+import { resendInviteAction, resetTwoFactorAction, revokeSessionsAction, setStaffRolesAction, setStaffStatusAction, updateStaffAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Staff member' };
 type Params = Promise<{ id: string }>;
@@ -77,6 +77,12 @@ export default async function StaffDetailPage({ params, searchParams }: { params
             <ActionForm action={revokeSessionsAction} submitLabel={self ? 'Sign out my other sessions' : 'Sign out everywhere'} variant="ghost" id="revoke">
               <Hidden name="staffId" value={staff.id} />
             </ActionForm>
+            {!self && (
+              <ActionForm action={resetTwoFactorAction} submitLabel="Remove two-factor sign-in" variant="ghost" id="reset-mfa"
+                confirmText="Remove this person's two-factor sign-in (for example after a lost phone)? They can set it up again.">
+                <Hidden name="staffId" value={staff.id} />
+              </ActionForm>
+            )}
             {!self && (
               <div className="danger-zone">
                 <ActionForm action={setStaffStatusAction} id="status"

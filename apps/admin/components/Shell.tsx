@@ -42,6 +42,10 @@ export default function Shell({ items, user, sidebar, children }: {
             {context.map((c, i) => <span key={c} aria-current={i === context.length - 1 ? 'location' : undefined}>{c}</span>)}
           </nav>
           <div className="topbar-tools">
+            <form className="topbar-search" action="/search" method="get" role="search" data-topbar-search>
+              <label className="sr-only" htmlFor="tb-q">Search the admin</label>
+              <input id="tb-q" name="q" className="input" placeholder="Search…" autoComplete="off" />
+            </form>
             <ThemeToggle compact />
             <Link href="/account" className="user-chip" title={user.email}>
               <span className="avatar" aria-hidden="true">{initials}</span>

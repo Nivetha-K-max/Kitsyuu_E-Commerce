@@ -14,7 +14,9 @@ export const oneTimeToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'This link i
 export const uuid = z.uuid();
 const fullName = z.string().trim().min(1, 'Enter a name.').max(120);
 
-export const loginInput = z.object({ email, password: z.string().min(1, 'Enter your password.').max(128) });
+export const loginInput = z.object({ email, password: z.string().min(1, 'Enter your password.').max(128),
+  /** M18: the authenticator code or a recovery code; only needed when two-factor sign-in is on for the account. */
+  code: z.string().trim().max(20).optional().transform(v => v || undefined) });
 
 const confirmMatches = { message: 'The two passwords do not match.', path: ['confirm'] };
 

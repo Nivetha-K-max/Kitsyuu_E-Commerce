@@ -152,6 +152,8 @@ export interface VariantCostsTable { variant_id: string; unit_cost_paise: number
 export interface NotificationLogTable { id: Generated<string>; event: string; order_id: string | null; recipient: string; subject: string; status: 'sent' | 'failed'; error: string | null; created_at: Generated<Timestamp>; }
 export interface CustomerNotesTable { id: Generated<string>; customer_id: string; body: string; created_by: string | null; created_at: Generated<Timestamp>; }
 export interface SiteContentTable { id: Generated<string>; key: string; locale: Generated<string>; status: Generated<'draft' | 'published'>; content: Json; updated_by: string | null; published_at: Timestamp | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
+export interface StaffMfaTable { staff_user_id: string; secret_enc: Buffer; enabled_at: Timestamp | null; last_used_step: string | null; created_at: Generated<Timestamp>; }
+export interface StaffMfaRecoveryCodesTable { id: Generated<string>; staff_user_id: string; code_hash: Buffer; used_at: Timestamp | null; }
 export interface ProductRelationsTable { product_id: string; related_id: string; kind: Generated<string>; position: Generated<number>; }
 export interface AttributesTable { id: string; label: string; description: Generated<string>; sort_order: Generated<number>; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface AttributeValuesTable { attribute_id: string; slug: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp>; }
@@ -341,6 +343,8 @@ export interface Database {
   notification_log: NotificationLogTable;
   customer_notes: CustomerNotesTable;
   site_content: SiteContentTable;
+  staff_mfa: StaffMfaTable;
+  staff_mfa_recovery_codes: StaffMfaRecoveryCodesTable;
   review_photos: ReviewPhotosTable;
   attributes: AttributesTable;
   attribute_values: AttributeValuesTable;

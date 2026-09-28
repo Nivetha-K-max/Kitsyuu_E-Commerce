@@ -3,8 +3,8 @@
    escalation and lockout rules and write the audit record in the same transaction. */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { inviteStaffInput, setStaffRolesInput, setStaffStatusInput, updateStaffInput, uuid, type ActionState } from '@kitsyuu/contracts';
-import { inviteStaff, resendInvite, revokeStaffSessions, setStaffRoles, setStaffStatus, updateStaff } from '@kitsyuu/core';
+import { inviteStaffInput, setStaffRolesInput, setStaffStatusInput, updateStaffInput, uuid, type ActionState, DomainError } from '@kitsyuu/contracts';
+import { inviteStaff, resendInvite, revokeStaffSessions, setStaffRoles, setStaffStatus, updateStaff, resetStaffTwoFactor } from '@kitsyuu/core';
 import { z } from 'zod';
 import { handle } from '@/lib/actions';
 import { db, inviteUrl, mailer, requestContext, requireActor } from '@/lib/server';
@@ -58,4 +58,19 @@ export async function revokeSessionsAction(_: ActionState, form: FormData): Prom
   const r = await handle(staffIdOnly, form, async input => { await revokeStaffSessions(db(), actor, input.staffId, await ctx()); return { ok: true, message: 'Signed out of every other session.' }; });
   if (r.ok) revalidatePath('/staff', 'layout');
   return r;
+}
+
+/** M18: removes another staff member's two-factor sign-in (lost phone) so they can set it up again. */
+export async function resetTwoFactorAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const staffId = String(form.get('staffId') ?? '');
+  if (!/^[0-9a-f-]{36}$/i.test(staffId)) return { ok: false, message: 'Unknown staff member.' };
+  try {
+    const r = await resetStaffTwoFactor(db(), actor, staffId, await requestContext());
+    revalidatePath(`/staff/${staffId}`);
+    return { ok: true, message: r.removed ? 'Two-factor sign-in removed. They sign in with their password and can set it up again.' : 'Two-factor sign-in was not on.' };
+  } catch (e) {
+    if (e instanceof DomainError) return { ok: false, message: e.message };
+    throw e;
+  }
 }

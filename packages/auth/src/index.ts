@@ -20,3 +20,6 @@ export {
   endCustomerSession, requestCustomerPasswordReset, resetCustomerPassword, changeCustomerPassword,
   type CustomerLoginResult, type LegacyPasswordCheck,
 } from './customer-auth.ts';
+// ---------- M18: staff two-factor sign-in ----------
+export { totpAt, verifyTotp, currentStep, base32Encode, base32Decode, mfaKey, encryptSecret, decryptSecret, otpauthUri, newRecoveryCodes } from './mfa.ts';
+export { staffMfaStatus, startStaffMfa, confirmStaffMfa, disableStaffMfa, removeStaffMfa, checkSecondFactor } from './staff-mfa.ts';

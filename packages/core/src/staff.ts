@@ -1,7 +1,7 @@
 /* Staff management. Every mutation: permission check → guards → change + audit record in ONE transaction. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { ConflictError, NotFoundError, type InviteStaffInput, type SetStaffRolesInput, type SetStaffStatusInput, type UpdateStaffInput } from '@kitsyuu/contracts';
-import { issueStaffInvite, requirePermission, revokeAllStaffSessions, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
+import { issueStaffInvite, removeStaffMfa, requirePermission, revokeAllStaffSessions, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
 import { assertAdministrationRemains, assertHoldsAll, assertOutranksOrEqual } from './guards.ts';
 
 export interface MutationContext extends RequestContext { inviteUrl?: (token: string) => string }
@@ -167,5 +167,17 @@ export async function revokeStaffSessions(db: Db, actor: StaffPrincipal, staffId
     const ended = await revokeAllStaffSessions(tx, staffId, staffId === actor.staffId ? actor.sessionId : undefined);
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'staff.sessions_revoke', entityType: 'staff_users', entityId: staffId,
       metadata: { sessions_ended: ended }, ...auditCtx(ctx) });
+  });
+}
+
+
+/** M18: removes another staff member's two-factor sign-in (e.g. a lost phone), so they can enrol again. */
+export async function resetStaffTwoFactor(db: Db, actor: StaffPrincipal, staffId: string, ctx: MutationContext) {
+  requirePermission(actor, 'staff.manage');
+  return db.transaction().execute(async tx => {
+    await assertOutranksOrEqual(tx, actor, staffId);
+    const removed = await removeStaffMfa(tx, staffId);
+    if (removed) await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'staff.mfa_reset', entityType: 'staff_users', entityId: staffId, ...auditCtx(ctx) });
+    return { removed };
   });
 }

@@ -75,6 +75,7 @@ The live database is reachable only from networks that allow outbound 5432/6543 
 | `20260929002500` | M14 (**local only**) | Production: `production_orders` (planned → in progress → completed / cancelled; numbers PR/yy-yy/nnnnn), `production_inputs` (materials planned/used), `qc_results` (passed/rejected, once per order); system reason `production_in`; permissions `production.read/manage`, `qc.record` |
 | `20260929002600` | M15 (**local only**) | Stock counts (`stock_counts`, `stock_count_lines`, one open at a time; system reason `count_adjust`), `variant_costs` (unit cost per size, admin only, never visible to the website role); permissions `inventory.count`, `costs.manage` |
 | `20260929002700` | M17 (**local only**) | `notification_log` (every customer email attempt), `customer_notes` (internal); the store may read PUBLISHED `site_content` with the public key (drafts stay private); permissions `content.manage`, `customers.note` |
+| `20260929002800` | M18 (**local only**) | Optional staff two-factor sign-in: `staff_mfa` (TOTP secret AES-256-GCM encrypted with the admin's `MFA_ENCRYPTION_KEY`, last used step against replay), `staff_mfa_recovery_codes` (SHA-256 hashes, one use each) |
 
 > **M8 is local only.** Migrations 1800 and 1900 have been applied only to throwaway local test databases. They must go through the live-migration procedure above (preflight, rehearsal, snapshot, apply, verify) before any deployment. Do not add `grant select on all tables … to kitsyuu_admin` in later migrations: it would undo 1800.
 

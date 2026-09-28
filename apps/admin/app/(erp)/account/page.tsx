@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { ActionForm, Field } from '@/components/forms';
+import { staffMfaStatus } from '@kitsyuu/auth';
+import TwoFactorPanel from '@/components/TwoFactorPanel';
 import { PageHead } from '@/components/ui';
-import { requireActor } from '@/lib/server';
+import { db, requireActor } from '@/lib/server';
 import { changePasswordAction } from './actions';
 
 export const metadata: Metadata = { title: 'My account' };
@@ -9,6 +11,7 @@ export const metadata: Metadata = { title: 'My account' };
 export default async function AccountPage() {
   const actor = await requireActor();
   const perms = [...actor.permissions].sort();
+  const mfa = await staffMfaStatus(db(), actor.staffId);
   return (
     <>
       <PageHead section="Account" title="My account" eyebrow={actor.email} />
@@ -20,6 +23,10 @@ export default async function AccountPage() {
             <Field name="password" label="New password" type="password" autoComplete="new-password" hint="At least 12 characters." />
             <Field name="confirm" label="Repeat new password" type="password" autoComplete="new-password" />
           </ActionForm>
+        </section>
+        <section className="card" data-section="two-factor">
+          <h2>Two-factor sign-in</h2>
+          <TwoFactorPanel status={mfa} />
         </section>
         <section className="card">
           <h2>What you can do</h2>

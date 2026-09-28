@@ -12,6 +12,9 @@ export async function loginAction(_: ActionState, form: FormData): Promise<Actio
     const r = await loginStaff(db(), input, await requestContext());
     if (!r.ok) return { ok: false, message: r.error === 'throttled'
       ? `Too many failed sign-in attempts. Try again in ${r.retryAfterMinutes} minutes.`
+      : r.error === 'mfa_required' ? 'Enter the 6-digit code from your authenticator app (or one of your recovery codes), then sign in again.'
+      : r.error === 'mfa_invalid' ? 'That code is not valid. Enter the current code from your authenticator app, or an unused recovery code.'
+      : r.error === 'mfa_unavailable' ? 'Two-factor sign-in is not set up on this server. Use a recovery code, or ask an administrator.'
       : 'Email or password is incorrect.' };
     await setSessionCookie(r.token, r.expiresAt);
     next = safeNext(form.get('next'));

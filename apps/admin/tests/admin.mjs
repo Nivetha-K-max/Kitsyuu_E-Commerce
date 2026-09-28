@@ -157,6 +157,14 @@ try {
   // ---------- M17: store content ----------
   await visit('/content', '!!document.querySelector("#announcement-form")');
   ok('M17 store content: announcement form, nothing published yet', (await exists('#announcement-form')) && (await exists('[data-no-announcement]')));
+  // ---------- M18: global search, two-factor panel, alerts ----------
+  const [firstSku] = await q(`select sku from products order by sku limit 1`);
+  await visit(`/search?q=${encodeURIComponent(firstSku.sku)}`, '!!document.querySelector("[data-global-search]")');
+  ok('M18 search finds a product by SKU; the top bar has a search box', (await exists('[data-group=products] a')) && (await exists('[data-topbar-search] input[name=q]')));
+  await visit('/account', '!!document.querySelector("[data-section=two-factor]")');
+  ok('M18 account: two-factor shown as unavailable without MFA_ENCRYPTION_KEY', await exists('[data-mfa=unavailable]'));
+  await visit('/system', '!!document.querySelector("[data-alerts]")');
+  ok('M18 system: needs-attention list with the two-factor count', /use two-factor sign-in/.test(await text('[data-alerts]')));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------

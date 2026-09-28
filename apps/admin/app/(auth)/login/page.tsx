@@ -29,6 +29,7 @@ export default async function LoginPage({ searchParams }: { searchParams: SP }) 
         <Hidden name="next" value={next} />
         <Field name="email" label="Email" type="email" autoComplete="username" required />
         <Field name="password" label="Password" type="password" autoComplete="current-password" required />
+        <Field name="code" label="Authentication code" autoComplete="one-time-code" hint="Only if two-factor sign-in is on for your account." />
       </ActionForm>
       <p className="auth-links"><Link href="/forgot-password">Forgot your password?</Link></p>
     </>

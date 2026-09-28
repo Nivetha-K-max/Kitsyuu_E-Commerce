@@ -87,3 +87,7 @@ export {
   orderEmailEnabled, orderStatusEmail, notifyOrderStatus, listNotificationLog, getAnnouncementAdmin, saveAnnouncement, unpublishAnnouncement,
   listCustomerNotes, addCustomerNote, customerBasket, ANNOUNCEMENT_KEY, type Announcement, type OrderEmailEvent,
 } from './engagement.ts';
+// ---------- M18: search, security ----------
+export { globalSearch, type SearchGroup, type SearchHit } from './search.ts';
+export { securityAlerts } from './system.ts';
+export { resetStaffTwoFactor } from './staff.ts';

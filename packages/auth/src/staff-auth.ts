@@ -8,14 +8,15 @@ import type { StaffPrincipal } from './rbac.ts';
 import { createStaffSession, revokeAllStaffSessions, revokeStaffSession, type RequestContext } from './sessions.ts';
 import { authSettings } from './settings.ts';
 import { loginThrottle, recordLoginAttempt } from './throttle.ts';
+import { checkSecondFactor } from './staff-mfa.ts';
 
 const ctxAudit = (ctx: RequestContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
 
 export type LoginResult =
   | { ok: true; token: string; expiresAt: Date; staffId: string }
-  | { ok: false; error: 'invalid' | 'throttled'; retryAfterMinutes?: number };
+  | { ok: false; error: 'invalid' | 'throttled' | 'mfa_required' | 'mfa_invalid' | 'mfa_unavailable'; retryAfterMinutes?: number };
 
-export async function loginStaff(db: Db, input: { email: string; password: string }, ctx: RequestContext): Promise<LoginResult> {
+export async function loginStaff(db: Db, input: { email: string; password: string; code?: string }, ctx: RequestContext): Promise<LoginResult> {
   const s = await authSettings(db);
   const ip = ctx.ip ?? null;
   const t = await loginThrottle(db, 'staff', input.email, ip, s);
@@ -28,6 +29,16 @@ export async function loginStaff(db: Db, input: { email: string; password: strin
     return { ok: false, error: 'invalid' };
   }
   return db.transaction().execute(async tx => {
+    // M18: second factor, asked only after a correct password and only when the person has it switched on.
+    // A missing code is not a failed attempt; a wrong code is (so guessing codes hits the same sign-in limit).
+    const second = await checkSecondFactor(tx, staff.id, input.code);
+    if (second === 'required') return { ok: false as const, error: 'mfa_required' as const };
+    if (second === 'unavailable') return { ok: false as const, error: 'mfa_unavailable' as const };
+    if (second === 'bad') {
+      await recordLoginAttempt(tx, { realm: 'staff', email: input.email, ip, succeeded: false, reason: 'bad_mfa_code' });
+      return { ok: false as const, error: 'mfa_invalid' as const };
+    }
+    if (second === 'recovery_used') await recordAudit(tx, { actorType: 'staff', staffId: staff.id, action: 'auth.mfa_recovery_used', entityType: 'staff_users', entityId: staff.id, ...ctxAudit(ctx) });
     await recordLoginAttempt(tx, { realm: 'staff', email: input.email, ip, succeeded: true });
     await tx.updateTable('staff_users').set({ last_login_at: sql<Date>`now()` }).where('id', '=', staff.id).execute();
     const session = await createStaffSession(tx, staff.id, ctx, s);
