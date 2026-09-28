@@ -77,3 +77,8 @@ export {
 } from './production.ts';
 // ---------- M15: stock counts and stock value ----------
 export { listStockCounts, openStockCount, getStockCount, recordCounts, postStockCount, cancelStockCount, setVariantCost, stockValue } from './stock-count.ts';
+// ---------- M16: reports ----------
+export {
+  salesReport, productReport, inventoryReport, customerReport, purchasingReport, productionReport, exportReport, REPORTS, SOLD_STATUSES,
+  type ReportKind, type ReportRange,
+} from './reports.ts';

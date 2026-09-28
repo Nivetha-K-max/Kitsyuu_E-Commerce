@@ -69,7 +69,8 @@ try {
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2}
       : f === 'm12-reviews.test.mjs' ? {customers: 2, orders: 4}                   // M12: review fixtures (no stock moved)
       : f === 'm14-production.test.mjs' ? {units: 1108}                            // M14: 8 passed pieces added through the ledger
-      : f === 'm15-stock.test.mjs' ? {units: 1100, everySizeTen: false} : {};      // M15: count differences (+2 / −1) and a write-off (−1)
+      : f === 'm15-stock.test.mjs' ? {units: 1100, everySizeTen: false}           // M15: count differences (+2 / −1) and a write-off (−1)
+      : f === 'm16-reports.test.mjs' ? {customers: 2, orders: 4} : {};             // M16: report fixtures (no stock moved)
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 

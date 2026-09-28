@@ -12,6 +12,7 @@ const PATHS: Record<string, ReactNode> = {
   production: <><path d="M3 21V9l6 4V9l6 4V5h6v16z" /></>,
   counts: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
   value: <><path d="M6 4h12M6 9h12M13 20L6 9h3a4 4 0 0 0 0-5" /></>,
+  reports: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
   attributes: <><path d="M4 6h10M4 12h16M4 18h7" /><circle cx="17" cy="6" r="2" /><circle cx="14" cy="18" r="2" /></>,
   categories: <><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
   inventory: <><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5" /><path d="M3 17l9 5 9-5" /></>,

@@ -519,3 +519,11 @@ ul.plain li:last-child{border-bottom:0}
 .review-photos{display:flex;flex-wrap:wrap;gap:8px}
 .review-photos img{width:120px;height:120px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--border)}
 .tabs{margin-bottom:14px}
+
+/* Reports (M16) */
+.report-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 16px}
+.report-kpis>div{padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.report-kpis dt{color:var(--muted);font-size:12px}
+.report-kpis dd{margin:4px 0 0;font-size:22px;font-weight:700}
+.report-body{display:grid;gap:16px}
+.field-inline{display:inline-flex;align-items:center;gap:8px}

@@ -90,7 +90,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -149,6 +149,11 @@ try {
   await ev('window.confirm = () => true'); await submit('#cancel-count-form');
   await visit('/stock-value', '!!document.querySelector("[data-value-garments]")');
   ok('M15 stock value page: pieces and materials, costs "not set" until entered', /not set/.test(await text('[data-value-garments]')) && (await exists('[data-value-materials]')));
+  // ---------- M16: reports and CSV export ----------
+  await visit('/reports', '!!document.querySelector("[data-report-tabs]")');
+  ok('M16 reports: sales tab with totals (no orders yet → empty state)', (await exists('[data-report-totals]')) && /No paid orders/.test(await text('main')));
+  const csv = await ev(`fetch(document.querySelector('[data-export]').href).then(async r=>({s:r.status,t:r.headers.get('content-type'),b:await r.text()}))`);
+  ok('M16 reports: CSV download', csv.s === 200 && /text\/csv/.test(csv.t) && csv.b.includes('date,orders,units,revenue_inr'), JSON.stringify({s: csv.s, t: csv.t}));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------

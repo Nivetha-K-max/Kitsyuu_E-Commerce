@@ -43,6 +43,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M13 | Vendors, materials and purchasing: material stock with its own ledger, purchase orders (draft → ordered → partially received / received, or cancelled), deliveries in parts, purchase prices visible only with `costs.read` | Branch `m9-integration` (local); migration `20260929002400` local only |
 | M14 | Production and quality control: production orders per size, materials used drawn from material stock, completion by quality check (passed pieces into stock through the ledger, rejected recorded with a reason). Manufacturing stages are not modelled (not decided) | Branch `m9-integration` (local); migration `20260929002500` local only |
 | M15 | Stock counts (snapshot, count, post only the differences through the ledger) and stock value (entered unit costs for pieces, last purchase price for materials; no costing method is assumed) | Branch `m9-integration` (local); migration `20260929002600` local only |
+| M16 | Reports: sales (paid orders only, IST business days, average order), best sellers and categories, stock and movements, new/returning customers, purchasing spend (with `costs.read`), production pass rate; CSV export of each (formula-safe, audited). No database change | Branch `m9-integration` (local) |
 
 ## Features
 

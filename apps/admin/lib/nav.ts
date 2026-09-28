@@ -4,6 +4,7 @@ export interface NavItem { href: string; label: string; permission: string; grou
 
 export const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', permission: 'dashboard.read', group: 'Overview' },
+  { href: '/reports', label: 'Reports', permission: 'reports.read', group: 'Overview' },
   { href: '/products', label: 'Products', permission: 'products.read', group: 'Catalogue' },
   { href: '/categories', label: 'Categories', permission: 'categories.read', group: 'Catalogue' },
   { href: '/collections', label: 'Collections', permission: 'categories.read', group: 'Catalogue' },
