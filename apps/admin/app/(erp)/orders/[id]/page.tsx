@@ -41,6 +41,7 @@ export default async function OrderPage({ params }: { params: Params }) {
         {o.paymentStatus && <span className="head-status" data-payment-status={o.paymentStatus}><span className="head-status-label">Payment</span><StatusBadge status={o.paymentStatus} /></span>}
         {d.payment && d.payment.exceptions.some(e => !e.manualRefund) && <span className="head-status" data-payment-exception>
           <span className="head-status-label">Exception</span><StatusBadge status={d.payment.exceptions.find(e => !e.manualRefund)!.kind} /></span>}
+        <Link className="btn ghost sm" href={`/orders/${o.id}/packing-slip`} data-link="packing-slip">Packing slip</Link>
       </PageHead>
       {d.payment?.cancelled && <p className={`msg ${d.payment.cancelled.kind === 'cancelled_payment_exception' ? 'error' : 'ok'}`} data-cancelled-money={d.payment.cancelled.kind}>
         <b>{CANCELLED_MONEY[d.payment.cancelled.kind][0]}.</b> {CANCELLED_MONEY[d.payment.cancelled.kind][1]}</p>}

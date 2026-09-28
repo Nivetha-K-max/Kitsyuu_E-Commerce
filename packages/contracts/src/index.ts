@@ -97,6 +97,8 @@ export const updateProductInput = z.object({
   material: optionalText(300),
   care: optionalText(300),
   origin: optionalText(120),
+  /** M10: 4, 6 or 8 digits; empty clears it. Omitted (older forms) leaves it unchanged. */
+  hsnCode: z.string().trim().regex(/^([0-9]{4}([0-9]{2}([0-9]{2})?)?)?$/, 'Enter 4, 6 or 8 digits.').transform(v => v || null).optional(),
   features: z.string().max(4000).transform(v => v.split(/\r?\n/).map(s => s.trim()).filter(Boolean))
     .pipe(z.array(z.string().max(160, 'Keep each feature under 160 characters.')).max(20, 'At most 20 features.')),
   isFeatured: z.enum(['on', 'off']).default('off').transform(v => v === 'on'),
@@ -440,7 +442,7 @@ export const recordManualRefundInput = z.object({ paymentId: uuid, note: require
 
 export const settingUpdateInput = z.object({
   key: z.string().trim().regex(/^[a-z][a-z0-9_]*(.[a-z][a-z0-9_]*)+$/, 'Unknown setting.'),
-  value: z.string().trim().max(200),
+  value: z.string().max(500),
 });
 
 export const PACKING_STATES = ['not_started', 'packing', 'packed'] as const;

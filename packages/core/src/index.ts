@@ -49,8 +49,9 @@ export {
   listPayments, listPaymentEvents, listPaymentExceptions, getPaymentExceptions, recordManualRefund, cancelledOrderPaymentState, reconcileOrderPayments,
   PAYMENT_PAGE_SIZE, type PaymentException, type ReconciliationRow,
 } from './payments-admin.ts';
-export { listSettings, updateSetting, SETTINGS_REGISTRY, POLICY_NOTES, type SettingDef, type SettingRow, type SettingType } from './settings.ts';
+export { listSettings, updateSetting, companyDetails, SETTINGS_REGISTRY, POLICY_NOTES, type SettingDef, type SettingRow, type SettingType, type CompanyDetails } from './settings.ts';
 export { getShipment, setPackingState, updateShipmentTracking, type ShipmentView } from './fulfilment.ts';
 export { availableCarriers, carrierFor, manualCarrier, type CarrierProvider } from './fulfilment/carrier.ts';
 // ---------- M9: operations hardening ----------
 export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_PAGE_SIZE, CHECKOUT_RATE_KEY, type RuntimeInfo } from './system.ts';
+export { settingsShipping, readShippingSettings, quoteFromSettings, SHIPPING_KEYS, type ShippingSettings } from './shipping.ts';

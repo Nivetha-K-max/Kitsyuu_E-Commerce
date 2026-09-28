@@ -19,3 +19,8 @@ insert into public.settings (key, value, description, is_public) values
 on conflict (key) do nothing;
 
 create index if not exists auth_attempts_attempted_at_idx on public.auth_attempts (attempted_at desc);
+
+-- The website role reads this one security setting (checkout rate limit); every other private setting stays hidden.
+drop policy if exists "app website: security settings" on public.settings;
+create policy "app website: security settings" on public.settings for select to kitsyuu_website
+  using (key = 'security.checkout_orders_per_hour');

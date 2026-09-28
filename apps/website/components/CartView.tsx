@@ -31,7 +31,7 @@ export function Totals({ cart, subtotal, count }: { cart: StoreCart | null; subt
     <dl>
       <dt>Subtotal <small>({plural(t.units, 'item')})</small></dt><dd>{formatMoney(t.subtotal)}</dd>
       {t.discount > 0 && <><dt>Discount</dt><dd>−{formatMoney(t.discount)}</dd></>}
-      <dt>Shipping</dt><dd data-shipping>{t.shippingLabel ? formatMoney(t.shipping) : 'Not set up yet'}</dd>
+      <dt>Shipping</dt><dd data-shipping>{!t.shippingLabel ? 'Not set up yet' : t.shipping > 0 ? formatMoney(t.shipping) : t.shippingLabel}</dd>
       {!t.pricesIncludeTax && <><dt>Tax</dt><dd>{formatMoney(t.tax)}</dd></>}
       <dt className="st-total">Total</dt><dd className="st-total" data-total>{formatMoney(t.total)}</dd>
     </dl>

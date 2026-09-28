@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Fragment } from 'react';
 import { can } from '@kitsyuu/auth';
 import { listSettings, type SettingRow } from '@kitsyuu/core';
-import { ActionForm, Field, Hidden } from '@/components/forms';
+import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
@@ -14,6 +14,8 @@ function show(s: SettingRow): string {
   if (s.value === null || s.value === undefined) return 'Not set';
   if (s.type.kind === 'boolean') return s.value ? 'Yes' : 'No';
   if (s.type.kind === 'integer') return `${s.value}${s.type.unit ? ` ${s.type.unit}` : ''}`;
+  if (s.type.kind === 'money' && typeof s.value === 'number') return `₹${(s.value / 100).toLocaleString('en-IN', { minimumFractionDigits: s.value % 100 ? 2 : 0 })}`;
+  if (s.type.kind === 'choice') { const t = s.type; return t.options.find(o => o.value === s.value)?.label ?? String(s.value); }
   if (s.type.kind === 'object' && typeof s.value === 'object')
     return Object.entries(s.value as Record<string, unknown>).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ');
   return String(s.value);
@@ -37,11 +39,10 @@ export default async function SettingsPage() {
               <tr key={s.key} data-setting={s.key} data-editable={s.editable ? 'yes' : 'no'}>
                 <td><b>{s.label}</b><div className="note">{s.description}</div><div className="note mono">{s.key}</div></td>
                 <td data-setting-value>{show(s)}{s.updatedBy && <div className="note">changed by {s.updatedBy} · {formatDateTime(s.updatedAt)}</div>}</td>
-                <td>{s.canEdit && s.type.kind === 'integer' ? (
+                <td>{s.canEdit && ['integer', 'text', 'choice', 'money'].includes(s.type.kind) ? (
                   <ActionForm action={updateSettingAction} submitLabel="Save" pendingLabel="Saving…" label={`Change ${s.label}`} className="form inline">
                     <Hidden name="key" value={s.key} />
-                    <Field name="value" label={`${s.label}${s.type.unit ? ` (${s.type.unit})` : ''}`} type="number" defaultValue={String(s.value ?? '')}
-                      hint={`${s.type.min}–${s.type.max}`} />
+                    <SettingInput s={s} />
                   </ActionForm>
                 ) : s.editable ? <span className="note">Changing it needs the settings.manage permission.</span>
                   : <span className="note" data-locked>Locked. {s.lockedReason}</span>}</td>
@@ -63,4 +64,15 @@ export default async function SettingsPage() {
       )}
     </>
   );
+}
+
+/** The form field for one editable setting, by type. Validation happens on the server (core/settings.ts). */
+function SettingInput({ s }: { s: SettingRow }) {
+  const t = s.type;
+  if (t.kind === 'integer') return <Field name="value" label={`${s.label}${t.unit ? ` (${t.unit})` : ''}`} type="number" defaultValue={String(s.value ?? '')} hint={`${t.min}–${t.max}`} />;
+  if (t.kind === 'choice') return <Select name="value" label={s.label} defaultValue={String(s.value ?? t.options[0].value)} options={t.options.map(o => ({ value: o.value, label: o.label }))} />;
+  if (t.kind === 'money') return <Field name="value" label={`${s.label} (₹)`} defaultValue={typeof s.value === 'number' ? String(s.value / 100) : ''} hint={t.optional ? 'Leave empty to clear.' : undefined} />;
+  if (t.kind === 'text' && t.multiline) return <TextArea name="value" label={s.label} defaultValue={String(s.value ?? '')} rows={3} hint={t.optional ? 'Leave empty to clear.' : undefined} />;
+  if (t.kind === 'text') return <Field name="value" label={s.label} defaultValue={String(s.value ?? '')} hint={[t.patternHint, t.optional ? 'Leave empty to clear.' : ''].filter(Boolean).join(' · ') || undefined} />;
+  return null;
 }

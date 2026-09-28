@@ -480,3 +480,25 @@ ul.plain li:last-child{border-bottom:0}
 .kv dd{margin:0;text-align:right;font-weight:500;overflow-wrap:anywhere}
 .kv dd[data-state=ok]{color:var(--success)}
 .kv dd[data-state=bad]{color:var(--danger)}
+
+/* Packing slip (M10): readable on screen, clean on paper (only the slip prints) */
+.slip{max-width:820px;display:grid;gap:22px}
+.slip-head{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;padding-bottom:16px;border-bottom:2px solid var(--text)}
+.slip-brand{margin:0;font-size:20px;font-weight:700;letter-spacing:.02em}
+.slip-addr{margin:4px 0 0;white-space:pre-line;color:var(--muted)}
+.slip-meta{display:grid;gap:4px;margin:0;text-align:right}
+.slip-meta div{display:flex;justify-content:flex-end;gap:10px}
+.slip-meta dt{color:var(--muted)}
+.slip-meta dd{margin:0;font-weight:600}
+.slip-to h2{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.slip-items{width:100%;border-collapse:collapse}
+.slip-items th,.slip-items td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
+.slip-items .num{text-align:right}
+.slip-check{text-align:center!important;width:70px}
+.slip-foot{padding-top:12px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+@media print{
+  .side,.topbar,.no-print,nextjs-portal{display:none!important}
+  .shell,.content,.main{display:block!important;padding:0!important;margin:0!important;background:#fff!important}
+  .slip{max-width:none;box-shadow:none!important;border:0!important;color:#000}
+  body{background:#fff!important}
+}

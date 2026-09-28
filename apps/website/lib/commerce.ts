@@ -6,11 +6,13 @@ import 'server-only';
      (logged as an error, payment off) unless PAYMENTS_ALLOW_TEST_PROVIDER=on, which only automated tests of a production
      build may set; that case logs a loud warning.
    - PAYMENT_PROVIDER=razorpay → the Razorpay adapter (needs its credentials; a provider that cannot start is logged and off).
-   - Shipping and discounts: none are configured yet (core defaults: no charge, no rules). A shipping provider or discount
+   - Shipping: the delivery charge chosen in admin Settings (M10; "Not set up yet" and no charge until then).
+   - Discounts: none at launch (core default: no rules). A shipping provider or discount
      rules are added here when they are decided.
    See apps/website/.env.example. */
 import type { StoreCart } from './types';
-import { defaultCommerceConfig, razorpayProvider, testPaymentProvider, type CommerceConfig, type PaymentProvider, type PricedCart, type TestPaymentProvider } from '@kitsyuu/core';
+import { db } from './server';
+import { defaultCommerceConfig, razorpayProvider, settingsShipping, testPaymentProvider, type CommerceConfig, type PaymentProvider, type PricedCart, type TestPaymentProvider } from '@kitsyuu/core';
 
 const g = globalThis as unknown as { __kitsyuuPayment?: PaymentProvider | null };
 
@@ -53,7 +55,8 @@ export const testProvider = (): TestPaymentProvider | null => {
 /** Providers by code, for work on orders that may have been started with any of them (expiry). */
 export const paymentProviders = (): Record<string, PaymentProvider> => { const p = paymentProvider(); return p ? { [p.code]: p } : {}; };
 
-export function commerceConfig(): CommerceConfig { return defaultCommerceConfig; }
+/** Delivery charge from admin Settings (M10; "Not set up" until the business chooses one). No discounts at launch. */
+export function commerceConfig(): CommerceConfig { return { ...defaultCommerceConfig, shipping: settingsShipping(() => db()) }; }
 
 /** The cart as the browser receives it: display values only (never ids of other rows, never stock counts beyond "available"). */
 export function clientCart(c: PricedCart, problemText: (l: PricedCart['lines'][number]) => string): StoreCart {

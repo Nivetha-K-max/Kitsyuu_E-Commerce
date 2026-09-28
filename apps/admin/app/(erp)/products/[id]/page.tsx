@@ -142,6 +142,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                     <Field name="material" label="Material" defaultValue={p.material ?? ''} />
                     <Field name="care" label="Care" defaultValue={p.care ?? ''} />
                     <Field name="origin" label="Origin" defaultValue={p.origin ?? ''} />
+                    <Field name="hsnCode" label="HSN code" defaultValue={p.hsn_code ?? ''} hint="4, 6 or 8 digits. Used on GST invoices once tax rules are set." />
                   </div>
                   <TextArea name="features" label="Features (one per line)" defaultValue={p.features.join('\n')} rows={4} />
                 </fieldset>

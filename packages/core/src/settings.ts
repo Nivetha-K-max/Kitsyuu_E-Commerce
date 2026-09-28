@@ -10,7 +10,10 @@ import type { MutationContext } from './staff.ts';
 
 export type SettingType =
   | { kind: 'integer'; min: number; max: number; unit?: string }
-  | { kind: 'text' }
+  | { kind: 'text'; maxLength?: number; pattern?: string; patternHint?: string; multiline?: boolean; optional?: boolean }
+  | { kind: 'choice'; options: readonly { value: string; label: string }[] }
+  /** Rupees in the form, stored as integer paise. Optional money settings may be cleared (stored as null). */
+  | { kind: 'money'; optional?: boolean }
   | { kind: 'boolean' }
   | { kind: 'object' };
 export interface SettingDef {
@@ -47,6 +50,19 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('auth.login_window_minutes', 'Failed-login window', 'Account security', 'Window for counting failed logins.', { kind: 'integer', min: 1, max: 1440, unit: 'minutes' }, SECURITY),
   def('security.checkout_orders_per_hour', 'Orders per customer per hour', 'Account security', 'Maximum orders one customer may create in an hour (checkout abuse limit).', { kind: 'integer', min: 1, max: 100, unit: 'orders' }, SECURITY),
   def('auth.token_ttl_minutes', 'One-time link lifetimes', 'Account security', 'How long email-verification, password-reset and staff-invitation links work.', { kind: 'object' }, SECURITY),
+  // M10: details the business enters (nothing is pre-filled). Used on packing slips and, once tax rules are decided, invoices.
+  def('company.legal_name', 'Legal name', 'Company', 'Registered business name, as printed on packing slips and invoices.', { kind: 'text', maxLength: 120, optional: true }),
+  def('company.address', 'Registered address', 'Company', 'Full postal address (one line per row).', { kind: 'text', maxLength: 400, multiline: true, optional: true }),
+  def('company.gstin', 'GSTIN', 'Company', 'GST identification number, if registered.',
+    { kind: 'text', maxLength: 15, pattern: '^[0-9]{2}[A-Z0-9]{10}[0-9A-Z]{3}$', patternHint: '15 characters, e.g. 29ABCDE1234F1Z5', optional: true }),
+  def('company.support_email', 'Customer support email', 'Company', 'Shown to customers on packing slips.',
+    { kind: 'text', maxLength: 254, pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$', patternHint: 'an email address', optional: true }),
+  def('company.phone', 'Phone', 'Company', 'Customer support phone number.', { kind: 'text', maxLength: 20, pattern: '^[+0-9 ()-]{6,20}$', patternHint: 'digits, spaces, + ( ) -', optional: true }),
+  // M10: shipping is chosen by the business. Until a method is set, nothing is charged and the store says "Not set up yet".
+  def('shipping.method', 'Delivery charge', 'Shipping', 'How delivery is charged at checkout. "Not set up" charges nothing and tells customers so.',
+    { kind: 'choice', options: [{ value: 'none', label: 'Not set up (no charge)' }, { value: 'flat', label: 'Flat rate per order' }] }),
+  def('shipping.flat_rate_paise', 'Flat delivery charge', 'Shipping', 'Charged once per order when the flat rate is chosen.', { kind: 'money' }),
+  def('shipping.free_from_paise', 'Free delivery from', 'Shipping', 'Orders at or above this amount ship free. Leave empty for no free delivery.', { kind: 'money', optional: true }),
 ];
 const byKey = new Map(SETTINGS_REGISTRY.map(d => [d.key, d]));
 
@@ -54,7 +70,7 @@ const byKey = new Map(SETTINGS_REGISTRY.map(d => [d.key, d]));
 export const POLICY_NOTES = [
   { label: 'Returns and refunds', value: 'None. All sales are final.', source: 'Business decision (2026-09-27); shown to customers in the store footer and at checkout.' },
   { label: 'Payment provider', value: 'Configured per deployment (off by default).', source: 'Website environment (PAYMENT_PROVIDER). Not set from the admin.' },
-  { label: 'Shipping charges', value: 'Not set up yet (nothing is charged).', source: 'Shipping rules are not decided yet.' },
+  { label: 'Shipping charges', value: 'Set under Shipping above.', source: 'Chosen by the business; until then nothing is charged and the store says "Not set up yet".' },
   { label: 'Discounts', value: 'None at launch.', source: 'Business decision (2026-09-27).' },
 ] as const;
 
@@ -77,13 +93,31 @@ export async function listSettings(db: Db, actor: StaffPrincipal) {
 }
 
 function parseValue(d: SettingDef, raw: string): unknown {
+  const t = d.type;
+  if (t.kind === 'text') {
+    const v = t.multiline ? raw.replace(/\r\n/g, '\n').trim() : raw.trim();
+    if (!v) { if (t.optional) return null; throw new DomainError('invalid', 'Enter a value.'); }
+    if (t.maxLength && v.length > t.maxLength) throw new DomainError('invalid', `Keep it under ${t.maxLength} characters.`);
+    if (t.pattern && !new RegExp(t.pattern).test(v)) throw new DomainError('invalid', `Use the right format${t.patternHint ? `: ${t.patternHint}` : ''}.`);
+    return v;
+  }
+  if (t.kind === 'choice') {
+    if (!t.options.some(o => o.value === raw)) throw new DomainError('invalid', 'Choose one of the options.');
+    return raw;
+  }
+  if (t.kind === 'money') {
+    const v = raw.trim().replace(/[₹,\s]/g, '');
+    if (!v) { if (t.optional) return null; throw new DomainError('invalid', 'Enter an amount.'); }
+    if (!/^\d{1,7}(\.\d{1,2})?$/.test(v)) throw new DomainError('invalid', 'Enter an amount in rupees, e.g. 99 or 99.50.');
+    return Math.round(Number(v) * 100);
+  }
   if (d.type.kind === 'integer') {
     if (!/^\d{1,9}$/.test(raw)) throw new DomainError('invalid', 'Enter a whole number.');
     const n = Number(raw);
     if (n < d.type.min || n > d.type.max) throw new DomainError('invalid', `Enter a number from ${d.type.min} to ${d.type.max}.`);
     return n;
   }
-  throw new DomainError('invalid', 'This setting cannot be changed here.');   // only integer settings are editable today
+  throw new DomainError('invalid', 'This setting cannot be changed here.');   // boolean / object settings are locked
 }
 
 export async function updateSetting(db: Db, actor: StaffPrincipal, input: SettingUpdateInput, ctx: MutationContext) {
@@ -101,4 +135,13 @@ export async function updateSetting(db: Db, actor: StaffPrincipal, input: Settin
       before: { value: before?.value ?? null }, after: { value }, metadata: { label: d.label }, ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
     return { key: d.key, value, changed: true };
   });
+}
+
+export type CompanyDetails = { legalName: string | null; address: string | null; gstin: string | null; supportEmail: string | null; phone: string | null };
+/** Company details entered under Settings → Company (M10). Internal read for documents such as packing slips; the caller
+    has already checked the permission for the document itself. Missing values are null (never invented). */
+export async function companyDetails(q: Pick<Db, 'selectFrom'>): Promise<CompanyDetails> {
+  const rows = await q.selectFrom('settings').select(['key', 'value']).where('key', 'like', 'company.%').execute();
+  const v = (k: string) => { const x = rows.find(r => r.key === k)?.value; return typeof x === 'string' && x ? x : null; };
+  return { legalName: v('company.legal_name'), address: v('company.address'), gstin: v('company.gstin'), supportEmail: v('company.support_email'), phone: v('company.phone') };
 }

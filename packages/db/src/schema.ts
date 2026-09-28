@@ -137,6 +137,7 @@ export interface ProductsTable {
   description: string;
   category_id: string;
   subcategory_id: string | null;
+  hsn_code: Generated<string | null>;
   price_paise: number;                       // integer paise; never a float
   colour_label: string | null;
   colour_swatch: string | null;

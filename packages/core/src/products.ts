@@ -52,7 +52,7 @@ export async function getProduct(db: Db, actor: StaffPrincipal, productId: strin
     .innerJoin('categories as c', 'c.id', 'p.category_id')
     .leftJoin('categories as sc', 'sc.id', 'p.subcategory_id')
     .select(['p.id', 'p.sku', 'p.slug', 'p.name', 'p.description', 'p.category_id', 'p.subcategory_id', 'c.label as category_label', 'sc.label as subcategory_label',
-      'p.price_paise', 'p.colour_label', 'p.colour_swatch', 'p.features', 'p.is_featured', 'p.status', 'p.data_status', 'p.material', 'p.care', 'p.origin', 'p.updated_at'])
+      'p.price_paise', 'p.colour_label', 'p.colour_swatch', 'p.features', 'p.is_featured', 'p.status', 'p.data_status', 'p.material', 'p.care', 'p.origin', 'p.hsn_code', 'p.updated_at'])
     .where('p.id', '=', productId).executeTakeFirst();
   if (!p) throw new NotFoundError('Product not found.');
   const images = await db.selectFrom('product_images').select(['id', 'storage_path', 'alt', 'width', 'height', 'is_primary', 'sort_order'])
@@ -165,13 +165,14 @@ export async function moveNewArrival(db: Db, actor: StaffPrincipal, input: { pro
 export async function updateProduct(db: Db, actor: StaffPrincipal, input: UpdateProductInput, ctx: MutationContext) {
   requirePermission(actor, 'products.write');
   return db.transaction().execute(async tx => {
-    const before = await tx.selectFrom('products').select(['name', 'description', 'category_id', 'subcategory_id', 'colour_label', 'material', 'care', 'origin', 'features', 'is_featured', 'status'])
+    const before = await tx.selectFrom('products').select(['name', 'description', 'category_id', 'subcategory_id', 'colour_label', 'material', 'care', 'origin', 'features', 'is_featured', 'status', 'hsn_code'])
       .where('id', '=', input.productId).forUpdate().executeTakeFirst();
     if (!before) throw new NotFoundError('Product not found.');
     await assertCategoryPair(tx, input.categoryId, input.subcategoryId, before.status === 'active');
     const after = {
       name: input.name, description: input.description, category_id: input.categoryId, subcategory_id: input.subcategoryId ?? null,
       colour_label: input.colourLabel, material: input.material, care: input.care, origin: input.origin, features: input.features, is_featured: input.isFeatured,
+      ...(input.hsnCode !== undefined && { hsn_code: input.hsnCode }),
     };
     const changed = (Object.keys(after) as (keyof typeof after)[]).filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
     if (!changed.length) return { changed: 0 };

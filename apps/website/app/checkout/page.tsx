@@ -86,7 +86,7 @@ export default async function CheckoutPage() {
           <dl>
             <dt>Subtotal</dt><dd data-subtotal>{rupees(t.subtotalPaise)}</dd>
             {t.discounts.map(d => <Fragment key={d.code}><dt>{d.label}</dt><dd>−{rupees(d.amountPaise)}</dd></Fragment>)}
-            <dt>Shipping</dt><dd data-shipping>{t.shipping.configured ? rupees(t.shippingPaise) : 'Not set up yet'}</dd>
+            <dt>Shipping</dt><dd data-shipping>{!t.shipping.configured ? 'Not set up yet' : t.shippingPaise > 0 ? rupees(t.shippingPaise) : t.shipping.label}</dd>
             <dt>Taxes</dt><dd>{t.pricesIncludeTax ? 'Included in the prices' : rupees(t.taxPaise)}</dd>
             <dt className="st-total">Total</dt><dd className="st-total" data-total>{rupees(t.totalPaise)}</dd>
           </dl>

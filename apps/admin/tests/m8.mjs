@@ -185,8 +185,9 @@ try {
   ok('settings: unpaid-order hold time locked, 14400 minutes', (await exists('[data-setting="checkout.payment_window_minutes"][data-editable=no] [data-locked]'))
     && /14400 minutes/.test(await text('[data-setting="checkout.payment_window_minutes"] [data-setting-value]')));
   ok('settings: tax and account security locked', (await exists('[data-setting="billing.prices_include_tax"] [data-locked]')) && (await exists('[data-setting="auth.login_max_failures"] [data-locked]')));
-  ok('settings: only one form (low-stock level); no free-form editor', (await ev(`document.querySelectorAll('[data-settings-table] form').length`)) === 1
-    && (await exists('[data-setting="inventory.low_stock_threshold"] form')) && !(await exists('main textarea')));
+  // M10 made company details and the delivery charge editable too; business rules (tax, hold time, security) stay locked.
+  const editable = await ev(`[...document.querySelectorAll('[data-settings-table] form')].map(f=>f.closest('[data-setting]').dataset.setting).sort().join()`);
+  ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable === ['company.address','company.gstin','company.legal_name','company.phone','company.support_email','inventory.low_stock_threshold','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method'].join(), editable);
   ok('settings: returns/refunds policy shown as none', /Returns and refunds[\s\S]*None/.test(await text('[data-policies]')));
   const L = '[data-setting="inventory.low_stock_threshold"] form';
   const [orig] = await q(`select value from settings where key = 'inventory.low_stock_threshold'`);
@@ -243,6 +244,16 @@ try {
   await fill('main input[name=email]', 'm8.admin@test.local'); await fill('main input[name=password]', PW);
   await submit('main form');
   ok('admin signs in again', await until(`location.pathname==='/dashboard'`));
+
+  // ================= M10: company details, delivery charge, packing slip =================
+  await visit('/settings');
+  ok('M10 settings: Company and Shipping groups are editable', (await exists('[data-setting="company.legal_name"] form')) && (await exists('[data-setting="shipping.method"] select')));
+  await fill('[data-setting="company.legal_name"] input[name=value]', 'KITSYUU E2E Pvt Ltd'); await submit('[data-setting="company.legal_name"] form');
+  await visit('/settings');
+  ok('M10 settings: company name saved and shown', /KITSYUU E2E Pvt Ltd/.test(await text('[data-setting="company.legal_name"] [data-setting-value]')));
+  await visit(`/orders/${o2}/packing-slip`, '!!document.querySelector("[data-packing-slip]")');
+  const slip = await text('[data-packing-slip]');
+  ok('M10 packing slip: company, order number and items, no prices', /KITSYUU E2E Pvt Ltd/.test(slip) && (await exists('[data-slip-items] tbody tr')) && !/₹/.test(slip), slip.slice(0, 120));
   await b.viewport(390, 844, true);
   for (const p of ['/customers', `/customers/${ravi.id}`, '/payments', '/payments?view=attempts', '/settings', `/orders/${o2}`, '/dashboard']) {
     await visit(p);

@@ -232,7 +232,9 @@ test('settings: typed registry, locked business rules, audited edits of safe set
   const low = all.find(i => i.key === 'inventory.low_stock_threshold');
   assert.deepEqual([low.editable, low.canEdit], [true, false], 'manager has settings.read only');
   assert.equal((await listSettings(db, admin)).groups.flatMap(g => g.items).find(i => i.key === 'inventory.low_stock_threshold').canEdit, true);
-  assert.deepEqual(all.filter(i => i.editable).map(i => i.key), ['inventory.low_stock_threshold'], 'one editable setting');
+  // M10 added company details and the delivery charge (entered by the business); every rule-bearing setting stays locked.
+  assert.deepEqual(all.filter(i => i.editable).map(i => i.key).sort(), ['company.address', 'company.gstin', 'company.legal_name', 'company.phone', 'company.support_email',
+    'inventory.low_stock_threshold', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method'], 'editable settings');
   assert.ok(s.policies.some(p => /returns/i.test(p.label) && /None/.test(p.value)));
   await assert.rejects(listSettings(db, support), ForbiddenError);
 
