@@ -502,3 +502,9 @@ ul.plain li:last-child{border-bottom:0}
   .slip{max-width:none;box-shadow:none!important;border:0!important;color:#000}
   body{background:#fff!important}
 }
+
+/* M11: bulk selection on the product list, side panels */
+.select-col{width:36px;text-align:center}
+.select-col input{width:18px;height:18px;cursor:pointer}
+.bulk-bar{margin-top:16px;display:grid;gap:8px}
+.side-panels{display:grid;gap:16px;align-content:start}

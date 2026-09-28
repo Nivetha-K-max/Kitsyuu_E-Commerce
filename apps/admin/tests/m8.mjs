@@ -61,6 +61,7 @@ try {
   ok('admin signs in', await signIn('admin', 'Admin M8'));
   const nav = await navText();
   ok('menu: Customers and Payments under Commerce, Settings under System', /Customers/.test(nav) && /Payments/.test(nav) && /Settings/.test(nav), nav);
+  await until(`!!document.querySelector('[data-kpi="Awaiting fulfilment"]')`, 20000);   // figures stream in after the page shell
   for (const k of ['Awaiting fulfilment', 'Shipped', 'Delivered', 'Pending payments', 'Payment exceptions'])
     ok(`dashboard shows "${k}"`, await exists(`[data-kpi="${k}"]`));
   ok('dashboard: awaiting fulfilment = 1 (KTS-TEST-0002 processing)', (await text('[data-kpi="Awaiting fulfilment"] dd')).startsWith('1'));

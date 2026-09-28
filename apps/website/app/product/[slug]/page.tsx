@@ -14,7 +14,7 @@ export async function generateStaticParams() {
 }
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const p = indexCatalogue(await getCatalogue()).bySlug(decodeURIComponent((await params).slug));
-  return p ? { title: p.name, description: p.description } : { title: 'Product not found' };
+  return p ? { title: p.seo.title ?? p.name, description: p.seo.description ?? p.description } : { title: 'Product not found' };
 }
 
 export default async function ProductPage({ params }: { params: Params }) {

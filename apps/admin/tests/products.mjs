@@ -60,7 +60,7 @@ try {
   // ================= super admin =================
   ok('super admin signs in', await signInWithInvite('root', 'Products Root'));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('menu has Products, Categories and Inventory under Catalogue', nav.includes('Products|Categories|Attributes|Inventory'), nav);
+  ok('menu has Products, Categories and Inventory under Catalogue', nav.includes('Products|Categories|Collections|Attributes|Inventory'), nav);
 
   // ---------- product list ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');

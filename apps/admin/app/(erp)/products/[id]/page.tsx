@@ -3,14 +3,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, productId as productIdSchema } from '@kitsyuu/contracts';
-import { getProduct, getProductAttributes, listAdjustmentReasons, listAttributes, listCategories } from '@kitsyuu/core';
+import { getProduct, getProductAttributes, listAdjustmentReasons, listAttributes, listCategories, listRelated } from '@kitsyuu/core';
 import { ActionForm, Checkbox, DropzoneField, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { PriceForm, StockAdjustForm } from '@/components/CatalogueForms';
 import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
-import { addVariantAction, moveImageAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
+import { addRelatedAction, addVariantAction, moveImageAction, moveRelatedAction, removeRelatedAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
 /** The initial-stock rows written by the catalogue seed carry an internal note; the reason ("Initial stock") says it all. */
 const SEED_NOTE = 'Prototype demo stock';
@@ -46,6 +46,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     listAttributes(db(), actor),
     getProductAttributes(db(), actor, id),
   ]);
+  const looks = await listRelated(db(), actor, id);
   const hasTag = new Set(tagged);
   const sellable = variants?.filter(v => v.is_active) ?? [];
   const units = sellable.reduce((n, v) => n + v.stock_qty, 0);
@@ -146,6 +147,11 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   </div>
                   <TextArea name="features" label="Features (one per line)" defaultValue={p.features.join('\n')} rows={4} />
                 </fieldset>
+                <fieldset className="block">
+                  <legend>Search engines</legend>
+                  <Field name="seoTitle" label="SEO title" defaultValue={p.seo_title ?? ''} hint="Up to 70 characters. Empty = the product name." />
+                  <TextArea name="seoDescription" label="SEO description" defaultValue={p.seo_description ?? ''} rows={2} hint="Up to 160 characters. Empty = the start of the description." />
+                </fieldset>
               </ActionForm>
               <p className="note form-foot">Fields marked * are required. Product ID, SKU and store URL are fixed identifiers and cannot be edited. Status and price are saved separately in the side panel.</p>
             </section>
@@ -175,6 +181,33 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               <dl className="attr-read">{attributes.map(a => (
                 <div key={a.id}><dt>{a.label}</dt><dd>{a.values.filter(v => hasTag.has(`${a.id}:${v.slug}`)).map(v => v.label).join(', ') || '—'}</dd></div>
               ))}</dl>
+            )}
+          </section>
+
+          <section className="card" aria-labelledby="look-h" data-section="related">
+            <SectionTitle id="look-h">Complete the look</SectionTitle>
+            <p className="note">Shown on the product page in the store, in this order (up to {looks.max}).</p>
+            {looks.related.length ? <div className="table-wrap"><table data-related-table>
+              <tbody>{looks.related.map((r, i) => (
+                <tr key={r.id} data-related={r.sku}>
+                  <td><Link href={`/products/${r.id}`}>{r.name}</Link><div className="note mono">{r.sku}</div></td>
+                  <td><StatusBadge status={r.status} /></td>
+                  {write && <td><div className="actions row-actions">
+                    {i > 0 && <ActionForm action={moveRelatedAction} submitLabel="↑" variant="ghost" className="inline-form" id={`rel-up-${r.id}`} label={`Move ${r.name} up`}>
+                      <Hidden name="productId" value={p.id} /><Hidden name="relatedId" value={r.id} /><Hidden name="direction" value="up" /></ActionForm>}
+                    {i < looks.related.length - 1 && <ActionForm action={moveRelatedAction} submitLabel="↓" variant="ghost" className="inline-form" id={`rel-down-${r.id}`} label={`Move ${r.name} down`}>
+                      <Hidden name="productId" value={p.id} /><Hidden name="relatedId" value={r.id} /><Hidden name="direction" value="down" /></ActionForm>}
+                    <ActionForm action={removeRelatedAction} submitLabel="Remove" variant="danger" className="inline-form" id={`rel-rm-${r.id}`} label={`Remove ${r.name}`}>
+                      <Hidden name="productId" value={p.id} /><Hidden name="relatedId" value={r.id} /></ActionForm>
+                  </div></td>}
+                </tr>
+              ))}</tbody>
+            </table></div> : <p className="note" data-empty="related">No linked products.</p>}
+            {write && looks.related.length < looks.max && looks.candidates.length > 0 && (
+              <ActionForm action={addRelatedAction} submitLabel="Link product" className="form compact" id="add-related-form" label="Link a product" resetOnSuccess>
+                <Hidden name="productId" value={p.id} />
+                <Select name="relatedId" label="Product" options={looks.candidates.map(c => ({ value: c.id, label: `${c.sku} · ${c.name}` }))} />
+              </ActionForm>
             )}
           </section>
 

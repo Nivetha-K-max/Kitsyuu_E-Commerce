@@ -39,6 +39,8 @@ export type Product = {
   origin: string | null;
   /** Store-filter attribute values, by attribute id (e.g. { fabric: ['cotton'] }). Empty when none are set. */
   attrs: Record<string, string[]>;
+  /** Search-engine text set in the admin (M11); null = use the product name / description. */
+  seo: { title: string | null; description: string | null };
 };
 
 /** A product attribute the store can filter by (defined in the admin); only active attributes reach the store. */

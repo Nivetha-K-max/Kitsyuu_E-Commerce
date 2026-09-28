@@ -37,10 +37,10 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
         product_relations!product_relations_product_id_fkey (related_id, kind, position)`)
       .eq('status', 'active')
       .order('created_at').order('id'),
-    sb.from('collections').select('id, label, data_status, collection_products (product_id, position)')
+    sb.from('collections').select('*, collection_products (product_id, position)')
   ]);
   fail('categories', cats.error); fail('products', prods.error); fail('collections', cols.error);
-  const attr = await readAttributes(sb);
+  const [attr, seo] = await Promise.all([readAttributes(sb), readSeo(sb)]);
 
   const publicUrl = (path: string) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const toImage = (i: Row['product_images'][number], name: string): MediaImage =>
@@ -61,12 +61,15 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
       styledWith: r.product_relations.filter(x => x.kind === 'styled_with').sort((a, b) => a.position - b.position).map(x => x.related_id),
       media: { status: primary ? (primary.quality === 'official' ? 'official' : 'prototype') : 'held', primary, placeholder: PLACEHOLDER, gallery: imgs.slice(1).map(i => toImage(i, r.name)) },
       catalogueRef: r.catalogue_ref, material: r.material, care: r.care, origin: r.origin,
-      attrs: attr.byProduct.get(r.id) ?? {}
+      attrs: attr.byProduct.get(r.id) ?? {},
+      seo: seo.get(r.id) ?? { title: null, description: null }
     };
   });
 
   const categories: Category[] = (cats.data ?? []).map(c => ({ id: c.id, label: c.label, parent: c.parent_id }));
-  const collections: Collection[] = (cols.data ?? []).map(c => ({
+  // Menu order set in the admin (M11); rows from before migration 2200 have no sort_order and keep their order.
+  const colRows = [...(cols.data ?? [])].sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+  const collections: Collection[] = colRows.map(c => ({
     id: c.id, label: c.label, dataStatus: c.data_status,
     productIds: [...(c.collection_products as { product_id: string; position: number }[])].sort((a, b) => a.position - b.position).map(x => x.product_id)
   }));
@@ -80,6 +83,15 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
   /* Prices are prototype INR estimates; tax inclusion is unconfirmed (null keeps the existing "unconfirmed" wording). */
   return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products, attributes: attr.attributes };
 });
+
+/* SEO text per product (M11). Optional: before migration 2200 the columns do not exist and every product uses its
+   name and description. Any other error fails as usual. */
+async function readSeo(sb: ReturnType<typeof publicSupabase>): Promise<Map<string, { title: string | null; description: string | null }>> {
+  const r = await sb.from('products').select('id, seo_title, seo_description').eq('status', 'active');
+  if (r.error && ['42703', 'PGRST204'].includes(r.error.code ?? '')) return new Map();
+  fail('product SEO text', r.error);
+  return new Map((r.data ?? []).map(p => [p.id, { title: p.seo_title, description: p.seo_description }]));
+}
 
 /* Store-filter attributes (admin-managed; RLS returns only active ones). Optional: if the attribute tables are not in the
    database yet (migration 1800 not applied), the store simply has no attribute filters; any other error fails as usual. */

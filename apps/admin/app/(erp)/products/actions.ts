@@ -2,8 +2,8 @@
 /* Product, price and stock mutations. The actor always comes from the session; core services check permissions,
    lock the row, and write the audit record in the same transaction as the change. */
 import { revalidatePath } from 'next/cache';
-import { adjustStockInput, paiseToRupees, setProductAttributesInput, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
-import { adjustStock, setProductAttributes, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
+import { adjustStockInput, bulkProductStatusInput, paiseToRupees, setProductAttributesInput, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
+import { adjustStock, bulkSetProductStatus, setProductAttributes, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -58,5 +58,16 @@ export async function setProductAttributesAction(_: ActionState, form: FormData)
     return { ok: true, message: changed ? 'Store filters saved.' : 'No changes to save.' };
   }, { values });
   if (r.ok) refresh(String(form.get('productId')));
+  return r;
+}
+
+/** M11: status for many products at once (each checked and audited as on its own page). */
+export async function bulkStatusAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(bulkProductStatusInput, form, async input => {
+    const { done, failed } = await bulkSetProductStatus(db(), actor, input, await requestContext());
+    return { ok: failed.length === 0, message: `${done.length} product${done.length === 1 ? '' : 's'} updated.${failed.length ? ` Not changed: ${failed.map(f => `${f.productId} (${f.reason})`).join('; ')}` : ''}` };
+  });
+  refresh();
   return r;
 }

@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Icon } from './icons';
 
 const ICON: Record<string, string> = {
-  '/dashboard': 'dashboard', '/products': 'products', '/categories': 'categories', '/attributes': 'attributes', '/inventory': 'inventory',
+  '/dashboard': 'dashboard', '/products': 'products', '/categories': 'categories', '/collections': 'collections', '/attributes': 'attributes', '/inventory': 'inventory',
   '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
   '/settings': 'settings', '/system': 'system',
 };

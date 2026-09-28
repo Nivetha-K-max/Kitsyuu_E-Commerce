@@ -38,6 +38,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | M8 | ERP operations: customers, payment operations and exceptions, fulfilment (manual courier), settings registry, order export, operations dashboard (no returns/refunds: all sales are final) | Committed on branch `m9-integration` (local, not pushed); migrations `20260929001800`–`001900` applied to local test databases only |
 | M9 | Production hardening: M8 integrated with the homepage/filters/attributes work; storefront security headers (CSP); checkout rate limit; `/api/health` on both apps; admin System page; sign-in history in the audit area | Branch `m9-integration` (local); migration `20260929002000` local only |
 | M10 | Commerce go-live configuration: delivery charge chosen in Settings ("Not set up" until then), company details, HSN code per product, printable packing slip. Tax/GST invoices wait for the tax decision | Branch `m9-integration` (local); migration `20260929002100` local only |
+| M11 | Catalogue completion: Collections admin (hidden until shown, ordered store menu), "Complete the look" links, bulk product status, SEO title/description per product | Branch `m9-integration` (local); migration `20260929002200` local only |
 
 ## Features
 

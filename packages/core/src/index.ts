@@ -55,3 +55,8 @@ export { availableCarriers, carrierFor, manualCarrier, type CarrierProvider } fr
 // ---------- M9: operations hardening ----------
 export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_PAGE_SIZE, CHECKOUT_RATE_KEY, type RuntimeInfo } from './system.ts';
 export { settingsShipping, readShippingSettings, quoteFromSettings, SHIPPING_KEYS, type ShippingSettings } from './shipping.ts';
+// ---------- M11: merchandising ----------
+export {
+  listCollections, getCollection, createCollection, updateCollection, setCollectionActive, moveCollection, setCollectionMember, moveCollectionMember,
+  listRelated, setRelated, moveRelated, bulkSetProductStatus, MAX_RELATED,
+} from './merchandising.ts';

@@ -36,6 +36,7 @@ const formMessage = () => ev(`document.querySelector('main [data-form-message]')
 const fieldError = name => ev(`document.querySelector('main input[name=${name}]')?.closest('.field')?.querySelector('.field-error')?.innerText ?? ''`);
 const path_ = () => ev('location.pathname + location.search');
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
+const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const mails = () => fs.readFileSync(SERVER_LOG, 'utf8').match(/token=[A-Za-z0-9_-]{43}/g) ?? [];
 const lastMailLink = async prevCount => { for (let i = 0; i < 50; i++) { const m = mails(); if (m.length > prevCount) return m.at(-1).slice(6); await w(100); } return null; };
 const cookie = async () => (await b.send('Network.getAllCookies')).cookies.find(c => c.name === '__Host-kitsyuu_admin');
@@ -89,7 +90,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Attributes|Inventory|Orders|Customers|Payments|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Products|Categories|Collections|Attributes|Inventory|Orders|Customers|Payments|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -98,6 +99,17 @@ try {
   await visit('/audit/sign-ins', '!!document.querySelector("main")');
   ok('M9 sign-in history page opens (filters + list or empty state)', await ev(`!!document.querySelector('[data-signin-filters]') && !!document.querySelector('[data-signins-table],[data-empty]')`));
   const health = await ev(`fetch('/api/health').then(async r=>({s:r.status,j:await r.json()}))`);
+  // ---------- M11: collections, bulk status, product merchandising sections ----------
+  await visit('/collections', '!!document.querySelector("[data-collections-table]")');
+  ok('M11 collections: New Arrivals listed and in the store', /New Arrivals/.test(await text('[data-collections-table]')) && /in store/i.test(await text('[data-collection="new-arrivals"]')));
+  await fill('#create-collection-form input[name=label]', 'E2E Edit'); await fill('#create-collection-form input[name=id]', 'e2e-edit');
+  await submit('#create-collection-form');
+  await until(`location.pathname === '/collections/e2e-edit'`, 15000);
+  ok('M11 collections: a new collection opens hidden', /Hidden/.test(await text('[data-collection-status]')), await text('[data-collection-status]'));
+  await visit('/products', '!!document.querySelector("[data-products-table]")');
+  ok('M11 products: bulk status form and one checkbox per product', (await exists('#bulk-status-form')) && (await ev(`document.querySelectorAll('input[name="productIds[]"]').length`)) === (await ev(`document.querySelectorAll('[data-product-row]').length`)));
+  await visit(`/products/${(await q(`select id from products order by id limit 1`))[0].id}`, '!!document.querySelector("[data-section=related]")');
+  ok('M11 product page: Complete the look and SEO fields', (await exists('[data-section=related]')) && (await exists('input[name=seoTitle]')) && (await exists('textarea[name=seoDescription]')));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
   // ---------- invite a support user through the UI ----------

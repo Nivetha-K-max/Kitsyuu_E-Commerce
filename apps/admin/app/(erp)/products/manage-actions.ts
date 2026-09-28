@@ -5,10 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   addVariantInput, createProductInput, imageIdInput, imageMetaInput, moveImageInput, moveNewArrivalInput, moveVariantInput,
-  newArrivalInput, updateImageInput, updateVariantInput, type ActionState,
+  moveRelatedProductInput, newArrivalInput, relatedProductInput, updateImageInput, updateVariantInput, type ActionState,
 } from '@kitsyuu/contracts';
 import {
-  addVariant, createProduct, moveImage, moveNewArrival, moveVariant, removeImage, setNewArrival, setPrimaryImage, updateImageAlt,
+  addVariant, createProduct, moveImage, moveNewArrival, moveRelated, moveVariant, removeImage, setNewArrival, setPrimaryImage, setRelated, updateImageAlt,
   updateVariant, uploadProductImage,
 } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
@@ -109,5 +109,28 @@ export async function removeImageAction(_: ActionState, form: FormData): Promise
   const actor = await requireActor();
   const r = await handle(imageIdInput, form, async input => { await removeImage(db(), storage(), actor, input.imageId, await requestContext()); return { ok: true, message: 'Image removed.' }; });
   if (r.ok) refresh(pid(form));
+  return r;
+}
+
+// ---------- M11: "Complete the look" (styled-with products) ----------
+export async function addRelatedAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(relatedProductInput, form, async input => {
+    const res = await setRelated(db(), actor, { ...input, linked: true }, await requestContext());
+    return { ok: true, message: res.changed ? 'Linked.' : 'Already linked.' };
+  });
+  if (r.ok) revalidatePath(`/products/${String(form.get('productId'))}`);
+  return r;
+}
+export async function removeRelatedAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(relatedProductInput, form, async input => { await setRelated(db(), actor, { ...input, linked: false }, await requestContext()); return { ok: true, message: 'Removed.' }; });
+  if (r.ok) revalidatePath(`/products/${String(form.get('productId'))}`);
+  return r;
+}
+export async function moveRelatedAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(moveRelatedProductInput, form, async input => { await moveRelated(db(), actor, input, await requestContext()); return { ok: true }; });
+  if (r.ok) revalidatePath(`/products/${String(form.get('productId'))}`);
   return r;
 }

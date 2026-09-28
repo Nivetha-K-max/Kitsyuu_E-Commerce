@@ -4,9 +4,11 @@ import { can } from '@kitsyuu/auth';
 import { paiseToRupees, productListQuery, type ProductListQuery } from '@kitsyuu/contracts';
 import { listCategories, listProducts } from '@kitsyuu/core';
 import { Icon } from '@/components/icons';
+import { ActionForm, Select } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
+import { bulkStatusAction } from './actions';
 
 export const metadata: Metadata = { title: 'Products' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -52,11 +54,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
         </Empty>
       ) : (
         <div className="table-wrap"><table data-products-table>
-          <thead><tr><th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th><th className="num">Actions</th></tr></thead>
+          <thead><tr>{write && <th className="select-col"><span className="sr-only">Select</span></th>}<th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th><th className="num">Actions</th></tr></thead>
           <tbody>{products.map(p => {
             const img = productImageUrl(p.primaryImage);
             return (
               <tr key={p.id} data-product-row={p.id}>
+                {write && <td className="select-col"><input type="checkbox" name="productIds[]" value={p.id} form="bulk-status-form" aria-label={`Select ${p.name}`} /></td>}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <td className="thumb">{img ? <img src={img} alt="" width={44} height={56} loading="lazy" /> : <span className="note">—</span>}</td>
                 <td className="product-cell"><Link className="row-link" href={`/products/${p.id}`}>{p.name}</Link>
@@ -72,6 +75,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
             );
           })}</tbody>
         </table></div>
+      )}
+      {write && products.length > 0 && (
+        <section className="card bulk-bar" aria-labelledby="bulk-h" data-section="bulk-status">
+          <h2 id="bulk-h" className="sr-only">Change the status of the selected products</h2>
+          <ActionForm action={bulkStatusAction} submitLabel="Apply to selected" id="bulk-status-form" label="Bulk status" className="form inline"
+            confirmText="Change the status of the selected products?">
+            <Select name="status" label="Set status of the selected products" options={[{ value: 'active', label: 'Active (in the store)' }, { value: 'draft', label: 'Draft (hidden)' }, { value: 'archived', label: 'Archived (hidden)' }]} />
+          </ActionForm>
+          <p className="note">Each product is checked as if changed on its own page: one that cannot be shown (no size or image) is reported and left as it is.</p>
+        </section>
       )}
     </>
   );

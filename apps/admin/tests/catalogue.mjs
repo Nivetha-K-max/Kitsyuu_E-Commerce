@@ -66,7 +66,7 @@ try {
 
   // ================= super admin =================
   ok('super admin signs in', await signIn('root', 'M4 Root'));
-  ok('menu has Categories under Catalogue', /Products\|Categories\|Attributes\|Inventory/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
+  ok('menu has Categories under Catalogue', /Products\|Categories\|Collections\|Attributes\|Inventory/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
 
   // ---------- create product ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');
@@ -113,6 +113,8 @@ try {
   ok('upload: converted to WebP and set as primary', /Image uploaded \(1200×1600, WebP\) and set as the primary image/.test(await message('#upload-image-form')), await message('#upload-image-form'));
   const [img1] = await q(`select storage_path, is_primary, width from product_images where product_id = $1`, [P]);
   ok('upload: stored in the LOCAL storage folder under a random name', /^products\/kts-[0-9a-f]{8}-[0-9a-f]{16}\.webp$/.test(img1?.storage_path ?? '') && fs.existsSync(path.join(STORAGE_DIR, img1.storage_path)));
+  // Thumbnails load lazily and the Media section sits below the fold (M11 added sections above it): scroll to it first.
+  await ev(`document.querySelector('[data-section=images]')?.scrollIntoView()`);
   ok('uploaded image displays', await until(`[...document.querySelectorAll('[data-image] img')].some(i=>i.complete && i.naturalWidth>0 && i.src.includes('/media/'))`, 15000));
   await fill('#status-form [name=status]', 'active'); await submit('#status-form');
   ok('activation succeeds with a size and a primary image', /active and visible/.test(await message('#status-form')) && (await q(`select status from products where id=$1`, [P]))[0].status === 'active', await message('#status-form'));

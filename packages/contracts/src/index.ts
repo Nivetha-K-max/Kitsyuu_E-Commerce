@@ -98,6 +98,9 @@ export const updateProductInput = z.object({
   care: optionalText(300),
   origin: optionalText(120),
   /** M10: 4, 6 or 8 digits; empty clears it. Omitted (older forms) leaves it unchanged. */
+  /** M11: optional search-engine text; empty = the store default. Omitted (older forms) leaves it unchanged. */
+  seoTitle: z.string().trim().max(70, 'Keep the SEO title under 70 characters.').transform(v => v || null).optional(),
+  seoDescription: z.string().trim().max(160, 'Keep the SEO description under 160 characters.').transform(v => v || null).optional(),
   hsnCode: z.string().trim().regex(/^([0-9]{4}([0-9]{2}([0-9]{2})?)?)?$/, 'Enter 4, 6 or 8 digits.').transform(v => v || null).optional(),
   features: z.string().max(4000).transform(v => v.split(/\r?\n/).map(s => s.trim()).filter(Boolean))
     .pipe(z.array(z.string().max(160, 'Keep each feature under 160 characters.')).max(20, 'At most 20 features.')),
@@ -462,3 +465,20 @@ export type RecordManualRefundInput = z.infer<typeof recordManualRefundInput>;
 export type SettingUpdateInput = z.infer<typeof settingUpdateInput>;
 export type PackingStateInput = z.infer<typeof packingStateInput>;
 export type ShipmentTrackingInput = z.infer<typeof shipmentTrackingInput>;
+
+// ---------- M11: collections, "Complete the look", bulk product status ----------
+export const collectionId = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Use lower-case letters, digits and single hyphens.').min(2).max(40);
+export const createCollectionInput = z.object({ id: collectionId, label: z.string().trim().min(1, 'Enter a name.').max(60) });
+export const updateCollectionInput = z.object({ collectionId, label: z.string().trim().min(1, 'Enter a name.').max(60), expectedLabel: z.string().max(60) });
+export const setCollectionActiveInput = z.object({ collectionId, active: z.enum(['true', 'false']).transform(v => v === 'true'), expectedActive: z.enum(['true', 'false']).transform(v => v === 'true') });
+export const moveCollectionInput = z.object({ collectionId, direction: z.enum(['up', 'down']) });
+export const collectionMemberInput = z.object({ collectionId, productId });
+export const moveCollectionMemberInput = collectionMemberInput.extend({ direction: z.enum(['up', 'down']) });
+export const relatedProductInput = z.object({ productId, relatedId: productId });
+export const moveRelatedProductInput = relatedProductInput.extend({ direction: z.enum(['up', 'down']) });
+export const PRODUCT_STATUSES = ['active', 'draft', 'archived'] as const;
+export const bulkProductStatusInput = z.object({ productIds: z.array(productId).min(1, 'Select at least one product.').max(200), status: z.enum(PRODUCT_STATUSES) });
+export type CreateCollectionInput = z.infer<typeof createCollectionInput>;
+export type UpdateCollectionInput = z.infer<typeof updateCollectionInput>;
+export type SetCollectionActiveInput = z.infer<typeof setCollectionActiveInput>;
+export type BulkProductStatusInput = z.infer<typeof bulkProductStatusInput>;
