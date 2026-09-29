@@ -6,6 +6,7 @@ import { listStock } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Inventory' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -22,7 +23,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: SP
   return (
     <>
       <PageHead section="Catalogue" title="Inventory" eyebrow={`${formatNumber(totals.units)} units across ${formatNumber(totals.variants)} sizes`} />
-      <form className="actions filters" method="get" role="search" aria-label="Filter stock" data-stock-filters>
+      <FilterForm className="actions" role="search" aria-label="Filter stock" data-stock-filters>
         <label className="sr-only" htmlFor="s-q">Search</label>
         <input id="s-q" name="q" className="input" placeholder="Search product, SKU or ID" defaultValue={query.q ?? ''} />
         <label className="sr-only" htmlFor="s-status">Stock status</label>
@@ -32,7 +33,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: SP
         </select>
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/inventory">Clear</Link>}
-      </form>
+      </FilterForm>
       <p className="note lead-note">Stock is changed from each product page; every change goes through the stock ledger with a reason.</p>
       {rows.length === 0 ? (
         <Empty title={query.status === 'attention' ? 'Nothing needs attention' : 'No matching sizes'} kind="stock"

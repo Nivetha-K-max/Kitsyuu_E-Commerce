@@ -33,7 +33,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: S
           <thead><tr><th>Order</th><th>Piece</th><th className="num">Planned</th><th className="num">Passed / rejected</th><th>Status</th></tr></thead>
           <tbody>{orders.map(o => (
             <tr key={o.id} data-production={o.number}>
-              <td><Link href={`/production/${o.id}`} className="mono">{o.number}</Link><div className="note">{formatDateTime(o.created_at as Date)}{o.due_on ? ` · due ${String(o.due_on).slice(0, 10)}` : ''}</div></td>
+              <td><Link href={`/production/${o.id}`} className="row-link mono-strong">{o.number}</Link><div className="note">{formatDateTime(o.created_at as Date)}{o.due_on ? ` · due ${String(o.due_on).slice(0, 10)}` : ''}</div></td>
               <td>{o.product}<div className="note mono">{o.variant_sku} · {o.size}</div></td>
               <td className="num">{o.qty_planned}</td>
               <td className="num">{o.qty_passed === null ? '—' : `${o.qty_passed} / ${o.qty_rejected}`}</td>

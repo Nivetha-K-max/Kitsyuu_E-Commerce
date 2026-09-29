@@ -31,7 +31,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
           <thead><tr><th>Order</th><th>Vendor</th><th className="num">Lines</th><th>Expected</th><th>Status</th></tr></thead>
           <tbody>{orders.map(o => (
             <tr key={o.id} data-po={o.po_number}>
-              <td><Link href={`/purchase-orders/${o.id}`} className="mono">{o.po_number}</Link><div className="note">{formatDateTime(o.created_at as Date)}</div></td>
+              <td><Link href={`/purchase-orders/${o.id}`} className="row-link mono-strong">{o.po_number}</Link><div className="note">{formatDateTime(o.created_at as Date)}</div></td>
               <td>{o.vendor}</td><td className="num">{o.lines}</td>
               <td>{o.expected_on ? String(o.expected_on).slice(0, 10) : '—'}</td>
               <td><StatusBadge status={o.status} /></td>

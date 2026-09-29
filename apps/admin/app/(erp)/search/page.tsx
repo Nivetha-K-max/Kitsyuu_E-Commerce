@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { globalSearch } from '@kitsyuu/core';
 import { Empty, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Search' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -16,11 +17,11 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
   return (
     <>
       <PageHead section="Overview" title="Search" eyebrow="Products, orders, customers, vendors, purchase orders, materials and production." />
-      <form className="actions filters" method="get" role="search" data-global-search>
+      <FilterForm className="actions" role="search" data-global-search>
         <label className="sr-only" htmlFor="gs-q">Search</label>
         <input id="gs-q" name="q" className="input" placeholder="Name, SKU, order number, email…" defaultValue={term} autoFocus />
         <button className="btn" type="submit">Search</button>
-      </form>
+      </FilterForm>
       {term.trim().length < 2 ? <p className="note">Type at least 2 characters.</p>
         : groups.length === 0 ? <Empty title={`Nothing found for “${term}”`} kind="search" />
         : <div className="search-groups" data-search-results>{groups.map(g => (

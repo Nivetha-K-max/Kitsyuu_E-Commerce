@@ -1,18 +1,19 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
-import { paiseToRupees, productListQuery, type ProductListQuery } from '@kitsyuu/contracts';
+import { productListQuery, type ProductListQuery } from '@kitsyuu/contracts';
 import { listCategories, listProducts } from '@kitsyuu/core';
 import { Icon } from '@/components/icons';
-import { ActionForm, Select } from '@/components/forms';
-import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { Forbidden, PageHead } from '@/components/ui';
 import { formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { bulkStatusAction } from './actions';
+import { bulkStatusAction, setProductStatusAction } from './actions';
+import ProductsTable, { type ProductRowView } from './ProductsTable';
 
 export const metadata: Metadata = { title: 'Products' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const rupeeBound = (v: string | undefined) => (v && /^\d{1,7}$/.test(v) ? v : '');
 
 export default async function ProductsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
@@ -21,71 +22,25 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
   const parsed = productListQuery.safeParse({ q: one(sp.q), category: one(sp.category), status: one(sp.status) });
   const query: ProductListQuery = parsed.success ? parsed.data : { status: 'all', q: undefined, category: undefined };
   const [products, categories] = await Promise.all([listProducts(db(), actor, query), listCategories(db(), actor)]);
-  const parents = categories.filter(c => !c.parent_id);
-  const filtered = !!(query.q || query.category || query.status !== 'all');
   const write = can(actor, 'products.write');
+  const store = process.env.STORE_URL?.replace(/\/+$/, '') || null;
+  const rows: ProductRowView[] = products.map(p => ({
+    id: p.id, sku: p.sku, name: p.name, status: p.status, categoryLabel: p.categoryLabel, subcategoryLabel: p.subcategoryLabel,
+    pricePaise: p.pricePaise, isFeatured: p.isFeatured, imageUrl: productImageUrl(p.primaryImage), variants: p.variants,
+    sellableVariants: p.sellableVariants, stockUnits: p.stockUnits, attentionVariants: p.attentionVariants,
+    storeUrl: store ? `${store}/product/${encodeURIComponent(p.slug)}` : null,
+  }));
+  const filtered = !!(query.q || query.category || query.status !== 'all');
+  const units = products.reduce((s, p) => s + p.stockUnits, 0);
   return (
     <>
-      <PageHead title="Products" section="Catalogue" eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ' in the catalogue'}`}>
-        {write && <Link className="btn" href="/products/new" data-new-product><Icon name="plus" size={16} />New product</Link>}
+      <PageHead title="Products"
+        eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ` · ${formatNumber(units)} units in stock`}`}>
+        {write && <Link className="btn" href="/products/new" data-new-product><Icon name="plus" size={15} />New product</Link>}
       </PageHead>
-      <form className="actions filters" method="get" role="search" aria-label="Filter products" data-product-filters>
-        <label className="sr-only" htmlFor="p-q">Search</label>
-        <input id="p-q" name="q" className="input" placeholder="Search name, SKU or ID" defaultValue={query.q ?? ''} />
-        <label className="sr-only" htmlFor="p-cat">Category</label>
-        <select id="p-cat" name="category" className="input" defaultValue={query.category ?? ''}>
-          <option value="">All categories</option>
-          {parents.map(p => [
-            <option key={p.id} value={p.id}>{p.label}</option>,
-            ...categories.filter(c => c.parent_id === p.id).map(c => <option key={c.id} value={c.id}>{`— ${p.label} / ${c.label}`}</option>),
-          ])}
-        </select>
-        <label className="sr-only" htmlFor="p-status">Status</label>
-        <select id="p-status" name="status" className="input" defaultValue={query.status}>
-          <option value="all">Active and inactive</option><option value="active">Active only</option><option value="inactive">Inactive only</option>
-        </select>
-        <button className="btn ghost" type="submit">Apply</button>
-        {filtered && <Link className="btn link" href="/products">Clear</Link>}
-      </form>
-      {products.length === 0 ? (
-        <Empty title={filtered ? 'No matching products' : 'No products yet'} kind="products"
-          action={filtered ? <Link className="btn ghost" href="/products">Clear filters</Link> : write ? <Link className="btn" href="/products/new">New product</Link> : undefined}>
-          {filtered ? 'No products match these filters.' : 'Products you create appear here.'}
-        </Empty>
-      ) : (
-        <div className="table-wrap"><table data-products-table>
-          <thead><tr>{write && <th className="select-col"><span className="sr-only">Select</span></th>}<th className="thumb-col">Image</th><th>Product</th><th>SKU</th><th>Category</th><th className="num">Price</th><th className="num">Stock</th><th>Status</th><th className="num">Actions</th></tr></thead>
-          <tbody>{products.map(p => {
-            const img = productImageUrl(p.primaryImage);
-            return (
-              <tr key={p.id} data-product-row={p.id}>
-                {write && <td className="select-col"><input type="checkbox" name="productIds[]" value={p.id} form="bulk-status-form" aria-label={`Select ${p.name}`} /></td>}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <td className="thumb">{img ? <img src={img} alt="" width={44} height={56} loading="lazy" /> : <span className="note">—</span>}</td>
-                <td className="product-cell"><Link className="row-link" href={`/products/${p.id}`}>{p.name}</Link>
-                  <div className="meta-line"><span className="mono">{p.id}</span>{p.isFeatured && <span className="badge featured">featured</span>}</div></td>
-                <td className="mono nowrap">{p.sku}</td>
-                <td>{p.categoryLabel}{p.subcategoryLabel && <div className="note">{p.subcategoryLabel}</div>}</td>
-                <td className="num" data-price>₹{paiseToRupees(p.pricePaise)}</td>
-                <td className="num"><span className="qty">{formatNumber(p.stockUnits)}</span><div className="note">{p.sellableVariants}/{p.variants} sizes</div>
-                  {p.attentionVariants > 0 && <span className="badge low_stock" data-attention>{p.attentionVariants} low</span>}</td>
-                <td><StatusBadge status={p.status} /></td>
-                <td className="num"><Link className="btn ghost sm" href={`/products/${p.id}`} aria-label={`${write ? 'Edit' : 'View'} ${p.name}`}>{write ? 'Edit' : 'View'}</Link></td>
-              </tr>
-            );
-          })}</tbody>
-        </table></div>
-      )}
-      {write && products.length > 0 && (
-        <section className="card bulk-bar" aria-labelledby="bulk-h" data-section="bulk-status">
-          <h2 id="bulk-h" className="sr-only">Change the status of the selected products</h2>
-          <ActionForm action={bulkStatusAction} submitLabel="Apply to selected" id="bulk-status-form" label="Bulk status" className="form inline"
-            confirmText="Change the status of the selected products?">
-            <Select name="status" label="Set status of the selected products" options={[{ value: 'active', label: 'Active (in the store)' }, { value: 'draft', label: 'Draft (hidden)' }, { value: 'archived', label: 'Archived (hidden)' }]} />
-          </ActionForm>
-          <p className="note">Each product is checked as if changed on its own page: one that cannot be shown (no size or image) is reported and left as it is.</p>
-        </section>
-      )}
+      <ProductsTable rows={rows} categories={categories.map(c => ({ id: c.id, label: c.label, parent_id: c.parent_id }))}
+        filters={{ q: query.q ?? '', category: query.category ?? '', status: query.status, pmin: rupeeBound(one(sp.pmin)), pmax: rupeeBound(one(sp.pmax)) }}
+        canWrite={write} bulkAction={bulkStatusAction} statusAction={setProductStatusAction} />
     </>
   );
 }

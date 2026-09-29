@@ -8,6 +8,7 @@ import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { recordManualRefundAction } from './actions';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Payments' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -34,7 +35,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: SP 
   return (
     <>
       <PageHead section="Commerce" title="Payments" eyebrow="Payments are recorded by the verified checkout flow; this page only reads them. Refunds are never sent from here." />
-      <nav className="actions" aria-label="Payment views" data-payments-tabs>{VIEWS.map(([v, l]) => tab(v, l))}</nav>
+      <nav className="tabs actions" aria-label="Payment views" data-payments-tabs>{VIEWS.map(([v, l]) => tab(v, l))}</nav>
       {view === 'exceptions' ? <Exceptions rows={exceptions.rows} canRefund={can(actor, 'refunds.create')} canOrders={can(actor, 'orders.read')} />
         : view === 'attempts' ? await Attempts({ sp, actor })
         : await Events({ sp, actor })}
@@ -86,7 +87,7 @@ async function Attempts({ sp, actor }: { sp: Record<string, string | string[] | 
   return (
     <>
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
-      <form className="actions filters" method="get" role="search" aria-label="Filter payments" data-payment-filters>
+      <FilterForm className="actions" role="search" aria-label="Filter payments" data-payment-filters>
         <input type="hidden" name="view" value="attempts" />
         <label className="sr-only" htmlFor="p-q">Search</label>
         <input id="p-q" name="q" className="input" placeholder="Order no., payment reference or email" defaultValue={query.q ?? ''} />
@@ -106,7 +107,7 @@ async function Attempts({ sp, actor }: { sp: Record<string, string | string[] | 
         </select>
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/payments?view=attempts">Clear</Link>}
-      </form>
+      </FilterForm>
       {rows.length === 0 ? <Empty title={filtered ? 'No matching payments' : 'No payments yet'} kind="payments">
           {filtered ? 'No payment attempts match these filters.' : 'Payment attempts appear here once online payment is switched on.'}</Empty> : (
         <div className="table-wrap"><table data-payments-list>
@@ -145,13 +146,13 @@ async function Events({ sp, actor }: { sp: Record<string, string | string[] | un
   return (
     <>
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
-      <form className="actions filters" method="get" role="search" aria-label="Filter provider notifications" data-event-filters>
+      <FilterForm className="actions" role="search" aria-label="Filter provider notifications" data-event-filters>
         <input type="hidden" name="view" value="events" />
         <label className="sr-only" htmlFor="e-q">Search</label>
         <input id="e-q" name="q" className="input" placeholder="Event id, type or order no." defaultValue={query.q ?? ''} />
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/payments?view=events">Clear</Link>}
-      </form>
+      </FilterForm>
       <p className="note">Notifications (webhooks) the payment provider sent. Each is processed once; the message content is not shown.</p>
       {rows.length === 0 ? <Empty title={filtered ? 'No matching notifications' : 'No notifications yet'} kind="payment-events">
           {filtered ? 'No provider notifications match.' : 'Provider notifications appear here once online payment is switched on.'}</Empty> : (

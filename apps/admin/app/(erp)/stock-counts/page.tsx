@@ -25,7 +25,7 @@ export default async function StockCountsPage() {
           <thead><tr><th>Count</th><th className="num">Sizes counted</th><th>Status</th><th>Posted</th></tr></thead>
           <tbody>{counts.map(c => (
             <tr key={c.id} data-count={c.number}>
-              <td><Link href={`/stock-counts/${c.id}`} className="mono">{c.number}</Link><div className="note">{formatDateTime(c.created_at as Date)}{c.created_by ? ` · ${c.created_by}` : ''}{c.note ? ` · ${c.note}` : ''}</div></td>
+              <td><Link href={`/stock-counts/${c.id}`} className="row-link mono-strong">{c.number}</Link><div className="note">{formatDateTime(c.created_at as Date)}{c.created_by ? ` · ${c.created_by}` : ''}{c.note ? ` · ${c.note}` : ''}</div></td>
               <td className="num">{c.counted} / {c.lines}</td>
               <td><StatusBadge status={c.status} /></td>
               <td>{c.posted_at ? formatDateTime(c.posted_at as Date) : '—'}</td>

@@ -5,6 +5,7 @@
    action, its validation and its permission checks are the same either way. */
 import { createContext, startTransition, useActionState, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { ActionState } from '@kitsyuu/contracts';
+import { useConfirm } from './confirm';
 import { Icon } from './icons';
 
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
@@ -22,13 +23,14 @@ export function ActionForm({ action, children, submitLabel, pendingLabel, classN
 }) {
   const [state, dispatch, pending] = useActionState(action, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const ask = useConfirm();
   useEffect(() => { if (resetOnSuccess && state.ok) formRef.current?.reset(); }, [state, resetOnSuccess]);
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (pending || hideSubmit) return;
     const data = new FormData(e.currentTarget);
     const question = confirm ? confirm(data) : confirmText ?? null;
-    if (question && !window.confirm(question)) return;
+    if (question && !(await ask({ title: question, tone: variant === 'danger' ? 'danger' : 'default' }))) return;
     startTransition(() => dispatch(data));
   }
   return (

@@ -1,20 +1,20 @@
 /* Small server-rendered building blocks. */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { STATUS_LABEL } from '@/lib/format';
 import { Icon } from './icons';
+import { StatusPill } from './StatusPill';
 
-/** Page header: breadcrumb (section / parent pages), title, a one-line description, and the page's main actions. */
-export function PageHead({ title, eyebrow, crumbs, section, children }: {
+/** Page header: parent pages (detail pages only; the section is already in the top bar), title, a one-line
+    description, and the page's main actions on the right. Sticky under the top bar while scrolling. */
+export function PageHead({ title, eyebrow, crumbs, children }: {
   title: string; eyebrow?: string; crumbs?: { href: string; label: string }[]; section?: string; children?: ReactNode;
 }) {
   return (
     <header className="page-head">
       <div className="page-title">
-        {(section || crumbs) && (
+        {crumbs && crumbs.length > 0 && (
           <p className="crumbs">
-            {section && <span>{section}</span>}
-            {crumbs?.map((c, i) => <span key={c.href}>{(section || i > 0) && <span className="crumb-sep" aria-hidden="true">/</span>}<Link href={c.href}>{c.label}</Link></span>)}
+            {crumbs.map((c, i) => <span key={c.href}>{i > 0 && <span className="crumb-sep" aria-hidden="true">/</span>}<Link href={c.href}>{c.label}</Link></span>)}
           </p>
         )}
         <h1>{title}</h1>
@@ -53,6 +53,4 @@ export function Forbidden({ permission }: { permission: string }) {
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge ${status}`}>{STATUS_LABEL[status] ?? status.replace(/_/g, ' ')}</span>;
-}
+export const StatusBadge = StatusPill;

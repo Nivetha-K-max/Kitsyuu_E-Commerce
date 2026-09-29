@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { customerReport, inventoryReport, productionReport, productReport, purchasingReport, salesReport, type ReportKind } from '@kitsyuu/core';
+import { CategoryDonut, SalesBars } from '@/components/charts';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Reports' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -34,6 +36,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         <div><dt>Paid orders</dt><dd>{s.totals.orders}</dd></div><div><dt>Units sold</dt><dd>{s.totals.units}</dd></div>
         <div><dt>Revenue</dt><dd>{rupees(s.totals.revenue)}</dd></div><div><dt>Average order</dt><dd>{rupees(s.totals.averageOrderPaise)}</dd></div>
       </dl>
+      {s.rows.length > 0 && <section className="report-chart" aria-label="Sales by day"><SalesBars rows={s.rows} from={r.from} to={r.to} /></section>}
       {s.rows.length ? <div className="table-wrap"><table data-report="sales"><thead><tr><th>Day</th><th className="num">Orders</th><th className="num">Units</th><th className="num">Revenue</th></tr></thead>
         <tbody>{s.rows.map(x => <tr key={x.day}><td>{x.day}</td><td className="num">{x.orders}</td><td className="num">{x.units}</td><td className="num">{rupees(x.revenue)}</td></tr>)}</tbody></table></div>
         : <Empty title="No paid orders in this period" kind="report" />}
@@ -41,6 +44,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
   } else if (kind === 'products') {
     const s = await productReport(db(), actor, r);
     body = s.rows.length ? <>
+      <section className="report-chart" aria-label="Sales by category"><CategoryDonut data={s.byCategory} caption="period" /></section>
       <div className="table-wrap"><table data-report="categories"><thead><tr><th>Category</th><th className="num">Units</th><th className="num">Revenue</th></tr></thead>
         <tbody>{s.byCategory.map(x => <tr key={x.category}><td>{x.category}</td><td className="num">{x.units}</td><td className="num">{rupees(x.revenue)}</td></tr>)}</tbody></table></div>
       <div className="table-wrap"><table data-report="products"><thead><tr><th>Product</th><th>Category</th><th className="num">Units</th><th className="num">Revenue</th></tr></thead>
@@ -80,12 +84,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
       <nav className="tabs actions" aria-label="Reports" data-report-tabs>
         {tabs.filter(t => t.allowed).map(t => <Link key={t.key} className={`btn sm ${t.key === kind ? '' : 'ghost'}`} href={q(t.key)} aria-current={t.key === kind ? 'page' : undefined}>{t.label}</Link>)}
       </nav>
-      <form className="actions filters" method="get" data-report-range>
+      <FilterForm className="actions" data-report-range>
         <input type="hidden" name="report" value={kind} />
         <label className="field-inline">From <input className="input" type="date" name="from" defaultValue={r.from} /></label>
         <label className="field-inline">To <input className="input" type="date" name="to" defaultValue={r.to} /></label>
         <button className="btn ghost" type="submit">Show</button>
-      </form>
+      </FilterForm>
       <section className="card report-body" data-report-kind={kind}>{body}</section>
     </>
   );

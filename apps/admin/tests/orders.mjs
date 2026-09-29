@@ -37,7 +37,8 @@ const rows = () => ev(`[...document.querySelectorAll('[data-order-row]')].map(r=
 const allErrors = [];
 // Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
 const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
-const autoConfirm = () => ev(`window.__q=[];window.confirm=q=>{window.__q.push(q);return true};true`);
+/* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
+const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const confirms = () => ev('window.__q ?? []');
 const id = async num => (await q(`select id from orders where order_number = $1`, [num]))[0].id;
 const statusOf = async num => (await q(`select status from orders where order_number = $1`, [num]))[0].status;

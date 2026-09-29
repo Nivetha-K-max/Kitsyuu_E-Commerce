@@ -5,6 +5,7 @@ import { listSignIns } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Sign-in history' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -24,7 +25,7 @@ export default async function SignInsPage({ searchParams }: { searchParams: SP }
   return (
     <>
       <PageHead section="System" title="Sign-in history" crumbs={[{ href: '/audit', label: 'Audit log' }]} eyebrow="Staff and customer sign-in attempts, newest first. Times are IST." />
-      <form className="actions filters" method="get" data-signin-filters>
+      <FilterForm className="actions" data-signin-filters>
         <label className="sr-only" htmlFor="f-realm">Who</label>
         <select id="f-realm" name="realm" className="input" defaultValue={realm ?? ''}>
           <option value="">Staff and customers</option><option value="staff">Staff</option><option value="customer">Customers</option>
@@ -33,7 +34,7 @@ export default async function SignInsPage({ searchParams }: { searchParams: SP }
         <input id="f-email" name="email" className="input" type="email" placeholder="Email" defaultValue={email ?? ''} />
         <label className="check"><input type="checkbox" name="failed" value="1" defaultChecked={failedOnly} /> Failed only</label>
         <button className="btn ghost" type="submit">Filter</button>
-      </form>
+      </FilterForm>
       {rows.length ? (
         <div className="table-wrap"><table data-signins-table>
           <thead><tr><th>Time</th><th>Who</th><th>Email</th><th>Result</th><th>IP</th></tr></thead>

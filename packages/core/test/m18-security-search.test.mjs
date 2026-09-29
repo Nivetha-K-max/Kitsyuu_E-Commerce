@@ -11,7 +11,7 @@ import {
   validateStaffSession,
 } from '@kitsyuu/auth';
 import {ForbiddenError} from '@kitsyuu/contracts';
-import {globalSearch, resetStaffTwoFactor, securityAlerts} from '@kitsyuu/core';
+import {attentionSummary, globalSearch, resetStaffTwoFactor, securityAlerts} from '@kitsyuu/core';
 
 const {ADMIN_DATABASE_URL, KITSYUU_DB_URL} = process.env;
 if (!ADMIN_DATABASE_URL || !KITSYUU_DB_URL) throw new Error('Run with the test env (apps/admin/tests/.output/test.env)');
@@ -118,6 +118,19 @@ test('global search: only areas the person may open; alerts from existing rules'
   const a = await securityAlerts(db, root);
   assert.ok(a.lockedAccounts.some(l => l.email === 'nobody.m18@test.local'));
   assert.deepEqual([a.staffActive, a.staffWithTwoFactor], [3, 0]);
+});
+
+/* The top bar bell (admin redesign): read-only counts, each shown only with the permission of the page it links to. */
+test('attention summary: permission-scoped counts from existing rules; nothing zero is listed', async () => {
+  const keys = async who => (await attentionSummary(db, who)).map(i => i.key);
+  const all = await attentionSummary(db, root);
+  assert.ok(all.every(i => i.count > 0 && i.href.startsWith('/')), 'only non-zero items, each linking to an admin page');
+  assert.ok((await keys(root)).includes('locked'), 'the sign-in failures recorded above show as locked');
+  assert.ok(!(await keys(support)).includes('locked'), 'support cannot open the System page, so sees no sign-in count');
+  assert.ok(!(await keys(support)).includes('payment_exceptions'), 'support has no billing.read');
+  const [low] = await q('select count(*)::int n from v_low_stock');
+  const item = all.find(i => i.key === 'low_stock');
+  assert.equal(item?.count ?? 0, low.n, 'low stock matches v_low_stock');
 });
 
 test.after(async () => { await db.destroy(); await owner.destroy(); await pool.end(); });

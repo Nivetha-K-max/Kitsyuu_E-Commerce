@@ -6,6 +6,7 @@ import { listCustomers } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Customers' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -26,7 +27,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
       <PageHead section="Commerce" title="Customers"
         eyebrow={`${formatNumber(totals.total)} account${totals.total === 1 ? '' : 's'} · ${formatNumber(totals.disabled)} disabled${query.page > 1 ? ` · page ${query.page}` : ''}`} />
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
-      <form className="actions filters" method="get" role="search" aria-label="Filter customers" data-customer-filters>
+      <FilterForm className="actions" role="search" aria-label="Filter customers" data-customer-filters>
         <label className="sr-only" htmlFor="c-q">Search</label>
         <input id="c-q" name="q" className="input" placeholder="Email, name or phone" defaultValue={query.q ?? ''} />
         <label className="sr-only" htmlFor="c-status">Account status</label>
@@ -43,7 +44,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
         </select>
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/customers">Clear</Link>}
-      </form>
+      </FilterForm>
       {rows.length === 0 ? (
         <Empty title={filtered ? 'No matching customers' : 'No customers yet'} kind="customers"
           action={filtered ? <Link className="btn ghost" href="/customers">Clear filters</Link> : undefined}>

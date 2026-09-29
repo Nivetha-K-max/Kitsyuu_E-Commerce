@@ -14,7 +14,7 @@ export async function listCategories(db: Db, actor: StaffPrincipal) {
 }
 
 export interface ProductListRow {
-  id: string; sku: string; name: string; status: 'active' | 'draft' | 'archived'; categoryId: string; subcategoryId: string | null;
+  id: string; sku: string; slug: string; name: string; status: 'active' | 'draft' | 'archived'; categoryId: string; subcategoryId: string | null;
   categoryLabel: string; subcategoryLabel: string | null; pricePaise: number; isFeatured: boolean; primaryImage: string | null;
   variants: number; sellableVariants: number; stockUnits: number; attentionVariants: number;
 }
@@ -24,7 +24,7 @@ export async function listProducts(db: Db, actor: StaffPrincipal, query: Product
   let q = db.selectFrom('products as p')
     .innerJoin('categories as c', 'c.id', 'p.category_id')
     .leftJoin('categories as sc', 'sc.id', 'p.subcategory_id')
-    .select(['p.id', 'p.sku', 'p.name', 'p.status', 'p.category_id', 'p.subcategory_id', 'c.label as category_label', 'sc.label as subcategory_label', 'p.price_paise', 'p.is_featured',
+    .select(['p.id', 'p.sku', 'p.slug', 'p.name', 'p.status', 'p.category_id', 'p.subcategory_id', 'c.label as category_label', 'sc.label as subcategory_label', 'p.price_paise', 'p.is_featured',
       sql<string | null>`(select i.storage_path from public.product_images i where i.product_id = p.id order by i.is_primary desc, i.sort_order limit 1)`.as('primary_image'),
       sql<number>`(select count(*)::int from public.product_variants v where v.product_id = p.id)`.as('variants'),
       sql<number>`(select count(*)::int from public.product_variants v where v.product_id = p.id and v.is_active)`.as('sellable'),
@@ -40,7 +40,7 @@ export async function listProducts(db: Db, actor: StaffPrincipal, query: Product
   if (query.status === 'inactive') q = q.where('p.status', '!=', 'active');
   const rows = await q.orderBy('p.sku').execute();
   return rows.map(r => ({
-    id: r.id, sku: r.sku, name: r.name, status: r.status, categoryId: r.category_id, subcategoryId: r.subcategory_id,
+    id: r.id, sku: r.sku, slug: r.slug, name: r.name, status: r.status, categoryId: r.category_id, subcategoryId: r.subcategory_id,
     categoryLabel: r.category_label, subcategoryLabel: r.subcategory_label, pricePaise: r.price_paise, isFeatured: r.is_featured,
     primaryImage: r.primary_image, variants: r.variants, sellableVariants: r.sellable, stockUnits: r.units, attentionVariants: r.attention,
   }));

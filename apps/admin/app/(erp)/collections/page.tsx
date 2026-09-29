@@ -25,7 +25,7 @@ export default async function CollectionsPage() {
         <thead><tr><th>Collection</th><th className="num">Products</th><th>Status</th>{write && <th>Order</th>}</tr></thead>
         <tbody>{list.map((c, i) => (
           <tr key={c.id} data-collection={c.id} data-active={c.isActive ? 'yes' : 'no'}>
-            <td><Link href={`/collections/${c.id}`}>{c.label}</Link><div className="note mono">{c.id}</div></td>
+            <td><Link className="row-link" href={`/collections/${c.id}`}>{c.label}</Link><div className="note mono">{c.id}</div></td>
             <td className="num">{c.products}</td>
             <td><span className={`badge ${c.isActive ? 'active' : 'disabled'}`}>{c.isActive ? 'In store' : 'Hidden'}</span></td>
             {write && <td><div className="actions row-actions">

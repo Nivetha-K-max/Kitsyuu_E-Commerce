@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import '@fontsource-variable/inter';
 
 export const metadata: Metadata = {
   title: { default: 'KITSYUU Admin', template: '%s | KITSYUU Admin' },
@@ -6,14 +7,16 @@ export const metadata: Metadata = {
   icons: { icon: { url: '/assets/kitsyuu-icon.svg', type: 'image/svg+xml' } },
 };
 export const viewport: Viewport = {
-  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#f6f7f9' }, { media: '(prefers-color-scheme: dark)', color: '#111318' }],
+  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#f7f7f8' }, { media: '(prefers-color-scheme: dark)', color: '#09090b' }],
 };
 
 /* Applies the stored theme before the first paint (no flash). Default is light; "system" follows the OS setting.
-   Must stay in sync with components/ThemeToggle.tsx (same storage key and values). */
+   Must stay in sync with components/ThemeToggle.tsx (same storage key and values). Also restores a collapsed sidebar
+   (components/shortcuts.ts, same key). */
 const THEME_SCRIPT = `(function(){var d=document.documentElement,p='light';try{p=localStorage.getItem('kitsyuu-admin-theme')||'light'}catch(e){}
 if(p!=='dark'&&p!=='system')p='light';var dark=p==='dark'||(p==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);
-d.dataset.theme=dark?'dark':'light';d.dataset.themePref=p})();`;
+d.dataset.theme=dark?'dark':'light';d.dataset.themePref=p;
+try{if(localStorage.getItem('kitsyuu-admin-sidebar')==='collapsed')d.dataset.sidebar='collapsed'}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

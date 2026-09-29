@@ -39,7 +39,8 @@ const allErrors = [];
 // Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
 const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
 let confirmQuestions = [];
-const autoConfirm = () => ev(`window.__q=[];window.confirm=q=>{window.__q.push(q);return true};true`);
+/* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
+const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const confirmsSeen = async () => (confirmQuestions = await ev('window.__q ?? []'));
 
 async function signInWithInvite(key, name) {
@@ -67,7 +68,7 @@ try {
   ok('product list shows all 22 products', (await ev(`document.querySelectorAll('[data-product-row]').length`)) === 22);
   ok('list shows ID, SKU, category, price, stock and status', /ky-proto-001/.test(await ev(`document.querySelector('[data-product-row="${PID}"]').innerText`))
     && /₹\d/.test(await ev(`document.querySelector('[data-product-row="${PID}"] [data-price]').innerText`)));
-  ok('product thumbnails load from the existing image storage', await until(`[...document.querySelectorAll('td.thumb img')].length===22 && [...document.querySelectorAll('td.thumb img')].every(i=>i.complete && i.naturalWidth>0)`, 20000));
+  ok('product thumbnails load from the existing image storage', await until(`[...document.querySelectorAll('[data-product-row] .pthumb img')].length===22 && [...document.querySelectorAll('[data-product-row] .pthumb img')].every(i=>i.complete && i.naturalWidth>0)`, 20000));
   await visit('/products?q=jeans', '!!document.querySelector("[data-products-table],[data-empty]")');
   const jeans = await q(`select count(*)::int n from products where name ilike '%jeans%' or sku ilike '%jeans%'`);
   ok('search filters the list', (await ev(`document.querySelectorAll('[data-product-row]').length`)) === jeans[0].n && jeans[0].n > 0, String(jeans[0].n));

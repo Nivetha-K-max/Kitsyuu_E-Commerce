@@ -6,6 +6,7 @@ import { listOrders } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, STATUS_LABEL } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Orders' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -30,7 +31,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
             .filter(([, v]) => v && v !== 'all') as [string, string][])}`}>Export CSV</a>
       </PageHead>
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
-      <form className="actions filters" method="get" role="search" aria-label="Filter orders" data-order-filters>
+      <FilterForm className="actions" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>
         <input id="o-q" name="q" className="input" placeholder="Order no., email, name, phone or SKU" defaultValue={query.q ?? ''} />
         <label className="sr-only" htmlFor="o-status">Order status</label>
@@ -49,7 +50,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
         <input id="o-to" name="to" type="date" className="input" defaultValue={query.to ?? ''} aria-label="Placed on or before" />
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/orders">Clear</Link>}
-      </form>
+      </FilterForm>
       {rows.length === 0 ? (
         <Empty title={filtered ? 'No matching orders' : 'No orders yet'} kind="orders" action={filtered ? <Link className="btn ghost" href="/orders">Clear filters</Link> : undefined}>
           {filtered ? 'No orders match these filters.' : 'There are currently no orders to display. Orders appear here once checkout is live.'}

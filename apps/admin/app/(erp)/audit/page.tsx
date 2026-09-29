@@ -6,6 +6,7 @@ import { listAudit } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import FilterForm from '@/components/FilterForm';
 
 export const metadata: Metadata = { title: 'Audit log' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -25,7 +26,7 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
       <PageHead section="System" title="Audit log" eyebrow="Every important admin action, append-only. Times are IST.">
         <Link className="btn ghost sm" href="/audit/sign-ins" data-link="sign-ins">Sign-in history</Link>
       </PageHead>
-      <form className="actions filters" method="get" data-audit-filters>
+      <FilterForm className="actions" data-audit-filters>
         <label className="sr-only" htmlFor="f-action">Action</label>
         <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''}>
           <option value="">All actions</option>{actions.map(a => <option key={a} value={a}>{a}</option>)}
@@ -37,7 +38,7 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
         {query.staffId && <input type="hidden" name="staffId" value={query.staffId} />}
         <button className="btn ghost" type="submit">Filter</button>
         {(query.action || query.entityType || query.staffId) && <Link className="btn link" href="/audit">Clear</Link>}
-      </form>
+      </FilterForm>
       {rows.length === 0 ? <Empty title="No matching records" kind="audit">No matching audit records.</Empty> : (
         <div className="table-wrap"><table data-audit-table>
           <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>

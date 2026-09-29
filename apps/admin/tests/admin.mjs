@@ -37,6 +37,8 @@ const fieldError = name => ev(`document.querySelector('main input[name=${name}]'
 const path_ = () => ev('location.pathname + location.search');
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
+/* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
+const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const mails = () => fs.readFileSync(SERVER_LOG, 'utf8').match(/token=[A-Za-z0-9_-]{43}/g) ?? [];
 const lastMailLink = async prevCount => { for (let i = 0; i < 50; i++) { const m = mails(); if (m.length > prevCount) return m.at(-1).slice(6); await w(100); } return null; };
 const cookie = async () => (await b.send('Network.getAllCookies')).cookies.find(c => c.name === '__Host-kitsyuu_admin');
@@ -125,7 +127,7 @@ try {
   await until(`/^/purchase-orders/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
   await fill('#po-line-form input[name=qty]', '25'); await submit('#po-line-form');
   await visit(await ev('location.pathname'), '!!document.querySelector("#po-place-form")');
-  await ev(`window.confirm = () => true`);
+  await autoConfirm();
   await submit('#po-place-form');
   await visit(await ev('location.pathname'), '!!document.querySelector("#receive-form")');
   await ev(`(()=>{const i=document.querySelector('#receive-form input[name^="received:"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'25');i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
@@ -146,7 +148,7 @@ try {
   await submit('#open-count-form');
   await until(`/^/stock-counts/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
   ok('M15 stock count opened with every size to count', (await ev(`document.querySelectorAll('[data-count-lines] input[name^="counted:"]').length`)) > 100);
-  await ev('window.confirm = () => true'); await submit('#cancel-count-form');
+  await autoConfirm(); await submit('#cancel-count-form');
   await visit('/stock-value', '!!document.querySelector("[data-value-garments]")');
   ok('M15 stock value page: pieces and materials, costs "not set" until entered', /not set/.test(await text('[data-value-garments]')) && (await exists('[data-value-materials]')));
   // ---------- M16: reports and CSV export ----------
@@ -160,7 +162,11 @@ try {
   // ---------- M18: global search, two-factor panel, alerts ----------
   const [firstSku] = await q(`select sku from products order by sku limit 1`);
   await visit(`/search?q=${encodeURIComponent(firstSku.sku)}`, '!!document.querySelector("[data-global-search]")');
-  ok('M18 search finds a product by SKU; the top bar has a search box', (await exists('[data-group=products] a')) && (await exists('[data-topbar-search] input[name=q]')));
+  ok('M18 search finds a product by SKU; the top bar has a search box', (await exists('[data-group=products] a')) && (await exists('[data-command-trigger]')));
+  await ev(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true})),true`);
+  await until('!!document.querySelector("[data-command-palette] input")', 5000);
+  await fill('[data-command-palette] input', firstSku.sku);
+  ok('Ctrl K opens the command menu, which offers to search everything', await until('!!document.querySelector("[data-command-search]")', 5000));
   await visit('/account', '!!document.querySelector("[data-section=two-factor]")');
   ok('M18 account: two-factor shown as unavailable without MFA_ENCRYPTION_KEY', await exists('[data-mfa=unavailable]'));
   await visit('/system', '!!document.querySelector("[data-alerts]")');
@@ -197,6 +203,8 @@ try {
   ok('support without audit.read sees no activity feed', /Needs the audit\.read permission/.test(await text('main')));
 
   // ---------- sign out / sign in ----------
+  await ev(`document.querySelector('[data-user-menu]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse'})),true`);   // account menu
+  await until(`!!document.querySelector('[data-logout]')`, 5000);
   await ev(`document.querySelector('[data-logout]').click(),true`);
   ok('sign out → sign-in page with notice', await until(`location.pathname==='/login' && !!document.querySelector('[data-notice=signed_out]')`));
   await visit('/dashboard');
@@ -221,14 +229,14 @@ try {
   ok('role permissions saved', (await formMessage()) === 'Role saved.', await formMessage());
   const [tr] = await q(`select array_agg(rp.permission_code) p from roles r join role_permissions rp on rp.role_id=r.id where r.code='e2e_temp'`);
   ok('database holds exactly the chosen permission', JSON.stringify(tr.p) === '["reports.read"]', JSON.stringify(tr.p));
-  await ev('window.confirm=()=>true');
+  await autoConfirm();
   await submit('main section.card form');   // the Delete role form
   ok('delete role → back to roles', await until(`location.pathname==='/roles' && !document.querySelector('[data-role-row=e2e_temp]')`));
 
   // ---------- disable the support user ----------
   const [sup] = await q(`select id from staff_users where email='support.e2e@test.local'`);
   await visit(`/staff/${sup.id}`, '!!document.querySelector("#status")');
-  await ev('window.confirm=()=>true');
+  await autoConfirm();
   await submit('#status');
   ok('disable account', /Account disabled/.test(await ev(`document.querySelector('#status [data-form-message]')?.innerText ?? ''`)));
   const [live] = await q(`select count(*)::int n from staff_sessions where staff_user_id='${sup.id}' and revoked_at is null`);
