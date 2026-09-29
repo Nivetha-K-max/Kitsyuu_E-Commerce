@@ -90,18 +90,18 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   await go('shop?category=outerwear'); await settle(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]')?.getAttribute('aria-pressed')==='true'`);
   ok(`[${tag}] wishlist persists after refresh (heart still pressed)`, (await ev(`document.querySelector('[data-wish="${P['KTS-OUT-002'].id}"]').getAttribute('aria-pressed')`)) === 'true' && (await ev(counts)).wish === '2');
   await go('wishlist');
-  let wl = await ev(`[...document.querySelectorAll('.st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`);
+  let wl = await ev(`[...document.querySelectorAll('.st-card[data-sku]')].map(e=>e.dataset.sku)`);
   ok(`[${tag}] wishlist page shows saved products`, JSON.stringify(wl) === JSON.stringify(['KTS-TOP-006', 'KTS-OUT-002']), wl.join());
   await b.shot(`p2-${tag}-wishlist.png`);
   await click(`[data-wish="${hood.id}"]`); await w(80);
-  wl = await ev(`[...document.querySelectorAll('.st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`); c = await ev(counts);
+  wl = await ev(`[...document.querySelectorAll('.st-card[data-sku]')].map(e=>e.dataset.sku)`); c = await ev(counts);
   ok(`[${tag}] remove from wishlist page`, wl.join() === 'KTS-OUT-002' && c.wish === '1', wl.join());
   await click(`[data-wish="${P['KTS-OUT-002'].id}"]`); await w(80);
   ok(`[${tag}] wishlist empties to empty state`, (await ev(`document.querySelector('.st-empty-inline h2')?.textContent`)) === 'Your wishlist is empty.' && (await ev(counts)).wish === '0');
 
   // Search
   await go('search');
-  const q1 = async t => { await ev(`(()=>{const i=document.querySelector('#st-q');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(t)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`); await w(300); return ev(`[...document.querySelectorAll('#st-results .st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`); };
+  const q1 = async t => { await ev(`(()=>{const i=document.querySelector('#st-q');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(t)});i.dispatchEvent(new Event('input',{bubbles:true}))})()`); await w(300); return ev(`[...document.querySelectorAll('#st-results .st-card[data-sku]')].map(e=>e.dataset.sku)`); };
   const cases = [['hoodie', ['KTS-TOP-004', 'KTS-TOP-006']], ['KTS-BTM-004', ['KTS-BTM-004']], ['kts btm 004', ['KTS-BTM-004']], ['jeans', ['KTS-BTM-004', 'KTS-BTM-010']], ['outerwear', ['KTS-OUT-001', 'KTS-OUT-002']], ['shorts', ['KTS-BTM-002', 'KTS-BTM-007']], ['FLAME', ['KTS-TOP-006', 'KTS-BTM-006']], ['tops shirts', ['KTS-TOP-002', 'KTS-TOP-005', 'KTS-TOP-009', 'KTS-TOP-010']]];
   const sres = [];
   for (const [t, exp] of cases) { const got = await q1(t); sres.push(`${t}→${got.length}${JSON.stringify(got) === JSON.stringify(exp) ? '' : ' ✗ ' + got.join('/')}`); if (JSON.stringify(got) !== JSON.stringify(exp)) ok(`[${tag}] search "${t}"`, false, got.join()); }
@@ -113,7 +113,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
 
   // Category navigation + sorting
   await go('shop?category=bottoms');
-  const priceOf = `[...document.querySelectorAll('#st-results .st-card .st-tag:not(.st-tag-new)')].map(e=>e.textContent)`;
+  const priceOf = `[...document.querySelectorAll('#st-results .st-card[data-sku]')].map(e=>e.dataset.sku)`;
   const base = await ev(priceOf);
   await ev(`(()=>{const s=document.querySelector('#st-sort');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'price-asc');s.dispatchEvent(new Event('change',{bubbles:true}))})()`); await w(100);
   const asc = await ev(priceOf); const ascP = asc.map(s => P[s].price);

@@ -576,3 +576,150 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 /* Announcement bar (M17): one line of text set in the admin, above the header */
 .st-announce{margin:0;padding:9px var(--st-gutter);background:var(--red);color:var(--paper);text-align:center;font:11px/1.4 var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-announce a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+
+/* ============================ KITSYUU v2 — homepage image choreography ============================
+   components/Choreo.tsx writes --p (scroll progress) and data-step / .is-current / .is-past; everything here is
+   transform, opacity or clip-path. Image frames stay sharp rectangles (no border-radius anywhere). The pinned
+   sequences run only on wide screens with motion allowed (html.ch-on); otherwise the still layout below is used.
+   The brand hero (st-brand-hero) is not touched by any rule here. */
+:root{--ch-ease:cubic-bezier(.2,.7,.2,1);--ch-slow:1.15s}
+.ch-frame{position:relative;display:block;overflow:hidden;background:var(--st-stage)}
+.ch-frame img{display:block;width:100%;height:100%;object-fit:cover}
+.ch-count{display:block;font:11px var(--mono);letter-spacing:1.4px;color:var(--muted)}
+.ch-count b{color:var(--paper);font-weight:400}
+.ch-progress{display:none}
+
+/* reveals (cards fade and rise; framed photographs are uncovered from below) */
+.ch-on [data-reveal]:not(.ch-frame){opacity:0;transform:translateY(42px);transition:opacity .9s var(--ch-ease) var(--d,0ms),transform 1.1s var(--ch-ease) var(--d,0ms)}
+.ch-on [data-reveal].is-in:not(.ch-frame){opacity:1;transform:none}
+.ch-on .ch-frame[data-reveal]{clip-path:inset(100% 0 0 0);transition:clip-path var(--ch-slow) var(--ch-ease) var(--d,0ms)}
+.ch-on .ch-frame[data-reveal].is-in{clip-path:inset(0 0 0 0)}
+
+/* ---------- 01 New arrivals ---------- */
+.ch-na{padding-bottom:0}
+.ch-na-reel{padding-bottom:96px}
+.ch-na-list{display:flex;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;list-style:none;margin:0;padding:0 0 14px;scrollbar-width:thin}
+.ch-na-item{flex:0 0 min(80vw,440px);scroll-snap-align:start}
+.ch-na-info .ch-count{margin-bottom:6px}
+@media(min-width:901px){
+  /* Pinned reel. Travel = n × 95% of a screen; the stage stays sticky for all of it. Per picture i (from Choreo's --t):
+     --r = how far it has wiped in, --e = how far it has moved on, --v = how visible its text is. Scroll-driven only:
+     no timed transitions, so the state always matches the scroll position, forwards and backwards. */
+  .ch-on .ch-na-reel{height:calc(100svh + var(--n) * 95svh);padding-bottom:0}
+  .ch-on .ch-na-stage{position:sticky;top:var(--st-head);height:calc(100svh - var(--st-head));display:flex;flex-direction:column;justify-content:center;padding-top:16px;padding-bottom:40px}
+  .ch-on .ch-na-list{display:grid;overflow:visible;height:100%;max-height:780px;padding:0}
+  .ch-on .ch-na-item{grid-area:1/1;min-height:0;pointer-events:none;
+    --r:clamp(0, calc(var(--t, 0) - var(--i) + 1), 1);--e:clamp(0, calc(var(--t, 0) - var(--i)), 1);
+    --v:min(clamp(0, calc((var(--t, 0) - var(--i)) * 3 + 1), 1), clamp(0, calc((var(--i) - var(--t, 0)) * 3 + 1), 1))}
+  .ch-on .ch-na-item.is-current{pointer-events:auto}
+  .ch-on .ch-na-card{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:clamp(28px,4vw,80px);height:100%;align-items:end}
+  .ch-on .ch-na-media{order:2;aspect-ratio:auto;height:100%;clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0);will-change:clip-path}
+  .ch-on .ch-na-media img{max-width:58%;max-height:84%;transform:translateY(calc((1 - var(--r)) * 12% - var(--e) * 8%)) scale(calc(1.06 - var(--r) * .06 - var(--e) * .03));transition:none;will-change:transform}
+  .ch-on .ch-na-info{order:1;padding:0 0 8px;opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 22px))}
+  .ch-on .ch-na-info .ch-count{font-size:12px;margin-bottom:22px}
+  .ch-on .ch-na-info .ch-count b{font:600 clamp(56px,6vw,96px)/.9 var(--display);letter-spacing:0;display:block;margin-bottom:6px}
+  .ch-on .ch-na-info .st-card-name{font-size:clamp(34px,3.2vw,54px);line-height:.98}
+  .ch-on .ch-na-info .st-price{margin-top:14px;font-size:17px}
+  .ch-on .ch-na-card .st-wish{opacity:var(--v)}
+  .ch-on .ch-progress{display:block;position:absolute;left:var(--st-gutter);right:var(--st-gutter);bottom:18px;height:1px;background:var(--line)}
+  .ch-on .ch-progress:after{content:"";position:absolute;inset:0;background:var(--red);transform-origin:0 50%;transform:scaleX(var(--p,0))}
+}
+.ch-na-stage{position:relative}
+
+/* ---------- Shop the rotation ---------- */
+.ch-rot .st-hero-img{transform:scale(1.08) translateY(calc((var(--p,.5) - .5) * -7%));will-change:transform}
+.ch-rot-frames{position:absolute;inset:0;pointer-events:none}
+.ch-rot-frame{position:absolute;display:grid;place-items:center;aspect-ratio:4/5;box-shadow:0 0 0 1px #ffffff14}
+.ch-rot-frame img{width:auto;height:auto;max-width:78%;max-height:84%;object-fit:contain}
+.ch-rot-frame-1{right:clamp(16px,4vw,72px);top:11%;width:clamp(150px,14vw,240px);transform:translateY(calc((var(--p,.5) - .5) * -160px))}
+.ch-rot-frame-2{right:clamp(170px,19vw,360px);bottom:9%;width:clamp(118px,10vw,176px);transform:translateY(calc((var(--p,.5) - .5) * 220px));--d:.18s}
+.ch-rot .st-hero-copy{position:relative;z-index:1}
+@media(max-width:900px){.ch-rot-frames{display:none}}
+
+/* ---------- 02 Shop by category ---------- */
+.ch-cats{padding-bottom:0}
+.ch-cat-reel{padding-bottom:96px}
+.ch-cat-list{display:grid;gap:64px;list-style:none;margin:0;padding:0}
+.ch-cat-item{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(24px,4vw,72px);align-items:end}
+.ch-cat-text .ch-count{margin-bottom:18px}
+.ch-cat-link .st-cat-name{font-size:clamp(56px,7vw,120px);line-height:.9}
+.ch-cat-link:hover .st-cat-name{color:var(--red)}
+.ch-cat-visual{position:relative;display:block;aspect-ratio:16/11}
+.ch-cat-photo{position:absolute;inset:0 0 10% 12%}
+.ch-cat-photo img{transition:transform 1.6s var(--ch-ease)}
+.ch-cat-piece{position:absolute;left:0;bottom:0;width:32%;aspect-ratio:4/5;display:grid;place-items:center;box-shadow:0 0 0 1px var(--ink)}
+.ch-cat-piece img{width:auto;height:auto;max-width:78%;max-height:84%;object-fit:contain}
+.ch-cat-visual:hover .ch-cat-photo img{transform:scale(1.03)}
+@media(min-width:901px){
+  /* Pinned like New arrivals: travel = n × one screen; same --r / --e / --v per panel, scroll-driven only. */
+  .ch-on .ch-cat-reel{height:calc(100svh + var(--n) * 100svh);padding-bottom:0}
+  .ch-on .ch-cat-stage{position:sticky;top:var(--st-head);height:calc(100svh - var(--st-head));padding-top:16px;padding-bottom:40px}
+  .ch-on .ch-cat-list{height:100%;gap:0}
+  .ch-on .ch-cat-item{grid-area:1/1;height:100%;align-items:stretch;pointer-events:none;
+    --r:clamp(0, calc(var(--t, 0) - var(--i) + 1), 1);--e:clamp(0, calc(var(--t, 0) - var(--i)), 1);
+    --v:min(clamp(0, calc((var(--t, 0) - var(--i)) * 3 + 1), 1), clamp(0, calc((var(--i) - var(--t, 0)) * 3 + 1), 1))}
+  .ch-on .ch-cat-item.is-current{pointer-events:auto}
+  .ch-on .ch-cat-text{align-self:end;padding-bottom:8px;opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 28px))}
+  .ch-on .ch-cat-visual{aspect-ratio:auto;height:100%}
+  .ch-on .ch-cat-photo{clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0);will-change:clip-path}
+  .ch-on .ch-cat-photo img{transform:scale(calc(1.14 - var(--r) * .12 - var(--e) * .02)) translateY(calc((1 - var(--r)) * 5% - var(--e) * 4%));transition:none;will-change:transform}
+  .ch-on .ch-cat-piece{opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 36%))}
+  .ch-on .ch-cats .ch-progress{display:block}
+}
+.ch-cat-stage{position:relative}
+@media(max-width:900px){.ch-cat-item{grid-template-columns:minmax(0,1fr);gap:18px}.ch-cat-visual{order:-1}.ch-cat-link .st-cat-name{font-size:clamp(44px,12vw,72px)}}
+
+/* ---------- 03 After hours ---------- */
+.ch-ed{min-height:720px;overflow:hidden}
+.ch-ed .ch-ed-main{transform:scale(calc(1.14 - var(--p,.5) * .14)) translateY(calc((var(--p,.5) - .5) * -5%));transform-origin:50% 60%;will-change:transform}
+.ch-ed .st-editorial-copy{position:relative}
+.ch-ed-inset{position:absolute;bottom:7%;left:-25%;width:clamp(170px,17vw,280px);aspect-ratio:16/9;box-shadow:0 0 0 1px var(--ink);transform:translateY(calc((var(--p,.5) - .5) * -150px))}
+@media(max-width:900px){.ch-ed{min-height:0}.ch-ed-inset{display:none}}
+
+/* ---------- 04 Featured: one row of four, the 2nd and 4th set lower (editorial stagger) ---------- */
+@media(min-width:901px){
+  .ch-ft .st-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:56px 24px;align-items:start}
+  .ch-ft .st-grid>li:nth-child(even){margin-top:72px}
+}
+
+/* ---------- 05 Outerwear: jacket 01 → jacket 02 ---------- */
+@media(min-width:901px){
+  .ch-on .ch-ow[data-steps="2"]{grid-template-columns:minmax(0,1fr);--s:clamp(0, calc((var(--p, 0) - .36) / .28), 1)}
+  .ch-on .ch-ow[data-steps="2"]>li{grid-area:1/1}
+  .ch-on .ch-ow[data-steps="2"]>li:nth-child(1){opacity:calc(1 - var(--s))}
+  .ch-on .ch-ow[data-steps="2"]>li:nth-child(2){clip-path:inset(0 0 0 calc((1 - var(--s)) * 100%));pointer-events:none}
+  .ch-on .ch-ow[data-step="1"]>li:nth-child(2){pointer-events:auto}
+  .ch-on .ch-ow[data-step="1"]>li:nth-child(1){pointer-events:none}
+  .ch-on .ch-ow[data-steps="2"] .st-card-media{aspect-ratio:5/4}
+}
+
+/* ---------- SHOP mega-menu (desktop; components/Header.tsx MegaMenu) — compact: link columns + one row of tiles ---------- */
+.st-mega{display:none}
+@media(min-width:901px){
+  .st-nav-main>li.has-mega{position:static}
+  .st-mega{display:grid;grid-template-columns:auto minmax(0,1fr);gap:56px;position:absolute;left:0;right:0;top:100%;z-index:40;padding:30px var(--st-gutter) 34px;background:#101011fa;border-top:1px solid var(--line);border-bottom:1px solid var(--line);visibility:hidden;opacity:0;transform:translateY(-6px);transition:opacity .18s var(--ch-ease),transform .22s var(--ch-ease),visibility 0s linear .22s}
+  .st-mega:before{content:"";position:absolute;left:0;right:0;bottom:100%;height:24px}
+  .has-mega:hover>.st-mega,.has-mega:focus-within>.st-mega{visibility:visible;opacity:1;transform:none;transition-delay:.05s,.05s,0s}
+  .has-mega.is-off>.st-mega{visibility:hidden;opacity:0}
+  .st-mega-cols{display:grid;grid-auto-flow:column;grid-auto-columns:max-content;gap:0 48px;align-content:start}
+  .st-mega-h{margin:0 0 12px;font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--red)}
+  .st-mega ul{list-style:none;margin:0;padding:0}
+  .st-mega-col li a{min-height:0;padding:5px 0;font:14px/1.4 var(--body);letter-spacing:0;text-transform:none;color:#c9c7c1}
+  .st-mega-col li a:hover{color:var(--paper)}
+  .st-mega-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,150px));justify-content:end;gap:16px}
+  .st-mega-tile{display:block;min-height:0}
+  .st-mega .st-mega-tile{display:block}
+  .st-mega-img{display:grid;place-items:center;aspect-ratio:4/5;background:var(--st-stage);overflow:hidden}
+  .st-mega-img img{width:auto;height:auto;max-width:78%;max-height:84%;transition:transform .4s var(--ch-ease)}
+  .st-mega-tile:hover .st-mega-img img{transform:scale(1.04)}
+  .st-mega-tile b{display:block;margin-top:10px;font:600 16px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;color:var(--paper)}
+  .st-mega-tile:hover b{color:var(--red)}
+}
+@media(min-width:901px){
+  .st-mega-tile small{display:block;margin-top:5px;font:13px var(--body);color:var(--muted)}
+  .st-mega-tile b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.05}
+}
+@media(min-width:901px){
+  .st-mega{background:var(--ink)}
+  .st-mega-tiles{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,150px);justify-content:end}
+}

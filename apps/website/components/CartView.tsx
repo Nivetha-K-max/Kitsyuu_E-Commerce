@@ -17,7 +17,7 @@ export function LineImage({ line }: { line: CartLine }) {
 export function PageHead({ label, title, aside }: { label: string; title: string; aside?: React.ReactNode }) {
   return (
     <>
-      <Crumbs list={[{ label: 'Store', href: url.home }, { label }]} />
+      <Crumbs list={[{ label: 'Home', href: url.home }, { label }]} />
       <header className="st-plp-head"><h1 id="st-page-title" tabIndex={-1}>{title}</h1>{aside && <div className="st-plp-aside">{aside}</div>}</header>
     </>
   );

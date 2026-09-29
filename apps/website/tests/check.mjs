@@ -8,7 +8,7 @@ const out = []; const ok = (name, pass, extra = '') => out.push(`${pass ? 'PASS'
 const READY = '!document.querySelector("main .st-status")&&!!document.querySelector(".st-footer .st-footer-top")';
 const imgs = `[...document.querySelectorAll("main img,header img")].map(i=>({src:i.currentSrc||i.src,ok:i.complete&&i.naturalWidth>0}))`;
 const overflow = 'document.documentElement.scrollWidth-innerWidth';
-const skus = sel => `[...document.querySelectorAll("${sel} .st-card .st-tag:not(.st-tag-new)")].map(e=>e.textContent)`;
+const skus = sel => `[...document.querySelectorAll("${sel} .st-card[data-sku]")].map(e=>e.dataset.sku)`;
 const bySku = Object.fromEntries(data.products.map(p => [p.sku, p]));
 
 for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, true, 'mobile']]) {
@@ -51,7 +51,7 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   ok(`[${tag}] home Featured = products.json featured`, JSON.stringify(home.ft) === JSON.stringify(ftExpect), home.ft.join(', '));
   ok(`[${tag}] home has no held product in Featured/New Arrivals`, ![...home.na, ...home.ft].some(s => bySku[s].media.status === 'held'));
   ok(`[${tag}] home category tiles`, home.cats.join() === 'Tops,Bottoms,Outerwear', home.cats.join());
-  ok(`[${tag}] header nav order`, home.nav.join() === 'Shop,New Arrivals,Tops,Bottoms,Outerwear', home.nav.join());
+  ok(`[${tag}] header nav order`, home.nav.join() === 'Home,Shop,New Arrivals,Tops,Bottoms,Outerwear', home.nav.join());
   ok(`[${tag}] home images resolve`, home.imgs.every(i => i.ok), home.imgs.filter(i => !i.ok).map(i => i.src).join());
   ok(`[${tag}] home no horizontal overflow / errors`, home.ov <= 0 && b.errors.length === 0, `overflow ${home.ov}px ${b.errors.join('; ')}`);
   await b.shot(`${tag}-home.png`, true);
@@ -61,7 +61,7 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   for (const c of data.categories) routes.push([`?category=${c.id}`, data.products.filter(p => p.category === c.id || p.subcategory === c.id).length]);
   for (const [q, n] of routes) {
     await b.goto(`${B}/shop${q}`, READY);
-    const r = await b.eval(`({h1:document.querySelector('h1')?.innerText.replace(/\\n/g,' '),n:document.querySelectorAll('main .st-grid>li').length,count:document.querySelector('.st-result-count')?.textContent,cur:document.querySelector('.st-subnav [aria-current]')?.textContent,imgs:${imgs},ov:${overflow},heldOk:[...document.querySelectorAll('.st-card')].every(c=>{const s=c.querySelector('.st-tag').textContent,src=(${JSON.stringify(Object.fromEntries(data.products.map(p => [p.sku, p.media.status === 'held' ? null : 'storage/v1/object/public/product-images/products/' + p.id + '.webp'])))})[s];const photo=c.querySelector('img:not(.st-soon-mark)');return src===null?(!!c.querySelector('.st-soon .st-soon-title')&&!photo&&c.querySelector('.st-soon-title').textContent==='Photocoming soon'&&c.querySelector('.st-soon-label').textContent==='KITSYUU'):(!c.querySelector('.st-soon')&&photo.src.endsWith('/'+src))})})`);
+    const r = await b.eval(`({h1:document.querySelector('h1')?.innerText.replace(/\\n/g,' '),n:document.querySelectorAll('main .st-grid>li').length,count:document.querySelector('.st-result-count')?.textContent,cur:document.querySelector('.st-subnav [aria-current]')?.textContent,imgs:${imgs},ov:${overflow},heldOk:[...document.querySelectorAll('.st-card')].every(c=>{const s=c.dataset.sku,src=(${JSON.stringify(Object.fromEntries(data.products.map(p => [p.sku, p.media.status === 'held' ? null : 'storage/v1/object/public/product-images/products/' + p.id + '.webp'])))})[s];const photo=c.querySelector('img:not(.st-soon-mark)');return src===null?(!!c.querySelector('.st-soon .st-soon-title')&&!photo&&c.querySelector('.st-soon-title').textContent==='Photocoming soon'&&c.querySelector('.st-soon-label').textContent==='KITSYUU'):(!c.querySelector('.st-soon')&&photo.src.endsWith('/'+src))})})`);
     ok(`[${tag}] shop.html${q || ' (all)'}`, r.n === n && r.imgs.every(i => i.ok) && r.heldOk && r.ov <= 0 && b.errors.length === 0, `${r.h1} | ${r.n}/${n} cards | ${r.count} | tab: ${r.cur ?? '-'}${b.errors.length ? ' | ' + b.errors.join('; ') : ''}${r.ov > 0 ? ' | overflow ' + r.ov : ''}`);
     if (q === '' || q === '?category=tops.hoodies') await b.shot(`${tag}-shop${q ? '-hoodies' : ''}.png`, true);
   }

@@ -24,7 +24,7 @@ export default async function CompletePage({ params }: { params: Promise<{ order
   const link = `/account/orders/${encodeURIComponent(o.orderNumber)}`;
   return (
     <div className="st-wrap">
-      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Order confirmation' }]} />
+      <Crumbs list={[{ label: 'Home', href: '/' }, { label: 'Order confirmation' }]} />
       <section className="st-confirm" aria-labelledby="st-page-title">
         <p className="eyebrow"><span></span>{paid ? 'ORDER CONFIRMED' : (ORDER_STATUS_LABEL[o.status] ?? o.status).toUpperCase()}</p>
         <h1 id="st-page-title" tabIndex={-1}>{paid ? <>Thank you.<br /><em>Your order is placed.</em></> : <>Order<br /><em>{ORDER_STATUS_LABEL[o.status] ?? o.status}.</em></>}</h1>

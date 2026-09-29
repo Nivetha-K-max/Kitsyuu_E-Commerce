@@ -13,7 +13,7 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
   const valid = oneTimeToken.safeParse(token).success;
   return (
     <div className="st-wrap st-auth">
-      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Log in', href: '/login' }, { label: 'New password' }]} />
+      <Crumbs list={[{ label: 'Home', href: '/' }, { label: 'Log in', href: '/login' }, { label: 'New password' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title">Choose a new password</h1>
         <div className="st-plp-aside"><p className="st-result-count">Account</p><p>After this, you will be signed out on every device and can log in with the new password.</p></div>

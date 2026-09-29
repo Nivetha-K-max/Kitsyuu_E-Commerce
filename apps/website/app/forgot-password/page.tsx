@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Reset your password', robots: { inde
 export default function ForgotPasswordPage() {
   return (
     <div className="st-wrap st-auth">
-      <Crumbs list={[{ label: 'Store', href: '/' }, { label: 'Log in', href: '/login' }, { label: 'Reset password' }]} />
+      <Crumbs list={[{ label: 'Home', href: '/' }, { label: 'Log in', href: '/login' }, { label: 'Reset password' }]} />
       <header className="st-plp-head">
         <h1 id="st-page-title">Reset your password</h1>
         <div className="st-plp-aside"><p className="st-result-count">Account</p><p>Enter the email you use for KITSYUU. We will send a link to choose a new password.</p></div>

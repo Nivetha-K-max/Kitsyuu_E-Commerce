@@ -29,7 +29,7 @@ export default async function ProductPage({ params }: { params: Params }) {
   const caption: [string, string] = img.held ? ['Photo coming soon', 'Product photography in preparation'] : ['Product image', ''];
   return (
     <div className="st-wrap">
-      <Crumbs list={[{ label: 'Store', href: url.home }, { label: 'Shop', href: url.shop() }, { label: idx.catLabel(p.category), href: url.shop({ category: p.category }) }, ...(sub && sub !== idx.catLabel(p.category) ? [{ label: sub, href: url.shop({ category: p.subcategory }) }] : []), { label: p.name }]} />
+      <Crumbs list={[{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }, { label: idx.catLabel(p.category), href: url.shop({ category: p.category }) }, ...(sub && sub !== idx.catLabel(p.category) ? [{ label: sub, href: url.shop({ category: p.subcategory }) }] : []), { label: p.name }]} />
       <article className="st-pdp" aria-labelledby="st-pdp-title">
         <Gallery p={p} images={imgs} caption={caption} />
         <div className="st-info">

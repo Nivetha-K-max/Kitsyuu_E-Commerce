@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { asset, url, type Index } from '@/lib/catalogue-utils';
+import { asset, formatMoney, imageOf, url, type Index } from '@/lib/catalogue-utils';
+import type { Product } from '@/lib/types';
 import { useHydrated, useStore } from './StoreProvider';
 import { useAuth } from './AuthProvider';
 import { Icons } from './icons';
@@ -13,11 +14,13 @@ export function navItems(idx: Index) {
   const items = idx.c.navigation.map(n => n.all ? { key: 'all', label: 'Shop', href: url.shop(), children: [] as { id: string; label: string }[] }
     : n.collection ? { key: 'col:' + n.collection, label: n.label, href: url.shop({ collection: n.collection }), children: [] }
     : { key: 'cat:' + n.category, label: n.label, href: url.shop({ category: n.category! }), children: idx.children(n.category!) });
-  return [...items.filter(i => i.key === 'all'), ...items.filter(i => i.key !== 'all')];
+  const home = { key: 'home', label: 'Home', href: url.home, children: [] as { id: string; label: string }[] };
+  return [home, ...items.filter(i => i.key === 'all'), ...items.filter(i => i.key !== 'all')];
 }
 
 function useActive(idx: Index): Active {
   const path = usePathname(), q = useSearchParams();
+  if (path === '/') return { key: 'home', exact: true };
   if (path === '/shop') {
     const col = q.get('collection'), cat = q.get('category') && idx.cats.get(q.get('category')!);
     if (col) return { key: 'col:' + col, exact: true };
@@ -32,6 +35,74 @@ function useActive(idx: Index): Active {
   return tool ? { tool } : {};
 }
 
+/* Desktop mega-menus (hover or keyboard focus), one per header item: link columns on the left, one row of photo
+   tiles on the right. Compact by design. SHOP: new arrivals + every category, tiles = subcategories. NEW ARRIVALS: the new
+   pieces. TOPS / BOTTOMS / OUTERWEAR: that category's subcategories, tiles = its pieces. Phones keep the full-screen menu. */
+type MegaCol = { heading: string; links: { href: string; label: string }[] };
+type MegaTile = { key: string; href: string; img: ReturnType<typeof imageOf>; label: string; note?: string };
+
+function megaFor(idx: Index, key: string): { cols: MegaCol[]; tiles: MegaTile[] } | null {
+  const shown = (list: Product[]) => list.filter(p => !imageOf(p).held);
+  const productTile = (p: Product): MegaTile => ({ key: p.id, href: url.product(p), img: imageOf(p), label: p.name, note: formatMoney(p.price) });
+  if (key === 'all') {
+    const na = (idx.collection('new-arrivals')?.products ?? []).slice(0, 5);
+    const cols: MegaCol[] = [
+      ...(na.length ? [{ heading: 'New arrivals', links: na.map(p => ({ href: url.product(p), label: p.name })) }] : []),
+      ...idx.top.map(c => ({ heading: c.label, links: [{ href: url.shop({ category: c.id }), label: 'Shop all' }, ...idx.children(c.id).map(sub => ({ href: url.shop({ category: sub.id }), label: sub.label }))] })),
+    ];
+    const tiles = idx.top.flatMap(c => idx.children(c.id)).map(sub => {
+      const lead = shown(idx.inCategory(sub.id))[0];
+      return lead ? { key: sub.id, href: url.shop({ category: sub.id }), img: imageOf(lead), label: sub.label } : null;
+    }).filter((t): t is MegaTile => !!t).slice(0, 5);
+    return { cols, tiles };
+  }
+  if (key.startsWith('col:')) {
+    const col = idx.collection(key.slice(4));
+    if (!col) return null;
+    return {
+      cols: [{ heading: col.label, links: [...col.products.slice(0, 6).map(p => ({ href: url.product(p), label: p.name })), { href: url.shop({ collection: col.id }), label: 'View all' }] }],
+      tiles: shown(col.products).slice(0, 5).map(productTile),
+    };
+  }
+  if (key.startsWith('cat:')) {
+    const id = key.slice(4), cat = idx.cats.get(id);
+    if (!cat) return null;
+    return {
+      cols: [{ heading: cat.label, links: [{ href: url.shop({ category: id }), label: `Shop all ${cat.label.toLowerCase()}` }, ...idx.children(id).map(sub => ({ href: url.shop({ category: sub.id }), label: sub.label }))] }],
+      tiles: shown(idx.inCategory(id)).slice(0, 5).map(productTile),
+    };
+  }
+  return null;
+}
+
+function MegaMenu({ label, data, onPick }: { label: string; data: { cols: MegaCol[]; tiles: MegaTile[] }; onPick: () => void }) {
+  return (
+    <div className="st-mega" aria-label={`${label} menu`} onClick={e => { if ((e.target as HTMLElement).closest('a')) onPick(); }}>
+      <div className="st-mega-cols">
+        {data.cols.map(c => (
+          <div className="st-mega-col" key={c.heading}>
+            <p className="st-mega-h">{c.heading}</p>
+            <ul>{c.links.map(l => <li key={l.href + l.label}><Link href={l.href}>{l.label}</Link></li>)}</ul>
+          </div>
+        ))}
+      </div>
+      {data.tiles.length > 0 && (
+        <ul className="st-mega-tiles">
+          {data.tiles.map(t => (
+            <li key={t.key}>
+              <Link className="st-mega-tile" href={t.href}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="st-mega-img"><img src={t.img.src} alt="" width={t.img.width} height={t.img.height} loading="lazy" decoding="async" /></span>
+                <b>{t.label}</b>{t.note && <small>{t.note}</small>}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /* The one site header, on every page (the homepage included). */
 export default function Header() {
   const store = useStore(), hydrated = useHydrated(), idx = store.idx;
@@ -41,6 +112,7 @@ export default function Header() {
   const accountHref = hydrated && auth.status === 'guest' ? '/login' : '/account', accountLabel = hydrated && auth.status === 'guest' ? 'Log in' : 'Account';
   const active = useActive(idx), path = usePathname();
   const [open, setOpen] = useState(false);
+  const [megaOff, setMegaOff] = useState<string | null>(null);   // after a pick, that panel stays shut until the pointer leaves its item
   const header = useRef<HTMLElement>(null), nav = useRef<HTMLElement>(null), toggle = useRef<HTMLButtonElement>(null);
   const cur = (tool: string) => active.tool === tool ? { 'aria-current': 'page' as const } : {};
 
@@ -72,10 +144,12 @@ export default function Header() {
       <nav className={`st-nav${open ? ' is-open' : ''}`} id="st-nav" aria-label="Store" ref={nav} onClick={e => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}>
         <ul className="st-nav-main">
           {navItems(idx).map(i => {
-            const on = active.key === i.key;
+            const on = active.key === i.key, mega = megaFor(idx, i.key);
             return (
-              <li key={i.key}>
+              <li key={i.key} className={mega ? `has-mega${megaOff === i.key ? ' is-off' : ''}` : undefined}
+                onMouseLeave={mega ? () => setMegaOff(null) : undefined}>
                 <Link href={i.href} {...(on ? (active.exact ? { 'aria-current': 'page' as const } : { className: 'is-active' }) : {})}>{i.label}</Link>
+                {mega && <MegaMenu label={i.label} data={mega} onPick={() => setMegaOff(i.key)} />}
                 {i.children.length > 0 && (
                   <ul className="st-nav-sub">
                     {i.children.map(c => <li key={c.id}><Link href={url.shop({ category: c.id })} {...(active.sub === c.id ? { 'aria-current': 'page' as const } : {})}>{c.label}</Link></li>)}

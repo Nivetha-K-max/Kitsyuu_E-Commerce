@@ -13,7 +13,7 @@ type View =
   | { notFound?: false; title: string; list: Product[]; trail: { label: string; href?: string }[]; sub: string | null; aside: string; tabs: { label: string; items: Tab[]; current: string } | null; isNew: boolean; base: string };
 
 function resolve(idx: Index, catId: string, colId: string): View {
-  const trail: { label: string; href?: string }[] = [{ label: 'Store', href: url.home }, { label: 'Shop', href: url.shop() }];
+  const trail: { label: string; href?: string }[] = [{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }];
   if (colId) {
     const col = idx.collection(colId);
     if (!col) return { notFound: true, title: 'Collection not found', text: 'This collection is not part of the KITSYUU catalogue.' };

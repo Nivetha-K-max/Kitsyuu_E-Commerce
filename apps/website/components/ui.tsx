@@ -30,9 +30,8 @@ export function ProductCard({ p, categoryPath, level = 3, isNew = false, index =
   const H = `h${level}` as 'h2' | 'h3';
   return (
     <li>
-      <article className="st-card">
+      <article className="st-card" data-sku={p.sku}>
         <div className={`st-card-media${img.held ? ' is-held' : ''}`}>
-          <span className="st-tag">{p.sku}</span>
           {isNew && <span className="st-tag st-tag-new">New</span>}
           {index > 0 && <span className="st-index" aria-hidden="true">{pad(index)}</span>}
           {img.held ? <ComingSoon p={p} /> : <img src={img.src} alt="" width={img.width} height={img.height} loading="lazy" decoding="async" />}
@@ -48,9 +47,10 @@ export function ProductCard({ p, categoryPath, level = 3, isNew = false, index =
   );
 }
 
-export function ProductGrid({ list, pathOf, opts }: { list: Product[]; pathOf: (p: Product) => string; opts?: CardOpts | ((p: Product, i: number) => CardOpts) }) {
+/** reveal: each card fades in as it scrolls into view (store homepage; see components/Choreo.tsx). */
+export function ProductGrid({ list, pathOf, opts, reveal = false }: { list: Product[]; pathOf: (p: Product) => string; opts?: CardOpts | ((p: Product, i: number) => CardOpts); reveal?: boolean }) {
   return (
-    <ul className="st-grid">
+    <ul className="st-grid" data-reveal-children={reveal || undefined}>
       {list.map((p, i) => <ProductCard key={p.id} p={p} categoryPath={pathOf(p)} {...(typeof opts === 'function' ? opts(p, i) : opts)} />)}
     </ul>
   );
