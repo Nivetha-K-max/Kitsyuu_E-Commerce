@@ -127,7 +127,7 @@ try {
   ok('bulk edit: nothing selected is refused', /select at least one product/i.test(await ev(`document.querySelector('#bulk-edit-form')?.innerText ?? ''`)));
   ok('bulk edit: products listed with a select-all box', (await ev(`document.querySelectorAll('[data-bulk-row]').length`)) >= 22 && await exists('[data-select-all]'));
   await visit('/content');
-  ok('brand wording shows the current text by default', (await ev(`document.querySelector('#brand-copy-form [name=heroEyebrow]')?.value ?? ''`)) === 'KITSYUU — FROM JAPAN TO INDIA');
+  ok('brand wording shows the current text by default', (await ev(`document.querySelector('#brand-copy-form [name=heroEyebrow]')?.value ?? ''`)) === '', 'the Japan → India eyebrow line was removed at the client request (empty = not shown)');
 
   // ---------- client second pass: loyalty points (rules off until set; staff add points with a reason), COD settings ----------
   await visit('/loyalty');

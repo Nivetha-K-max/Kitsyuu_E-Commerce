@@ -24,7 +24,7 @@ function loadOrder(count: number, finest: number): number[] {
 export type HeroCopy = { heroTop: string; heroEyebrow: string; heroLead: string };
 const arrow = (t: string) => t.split('→').map((part, i) => <span key={i}>{i > 0 && <b aria-hidden="true">→</b>}{part}</span>);
 
-export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEyebrow: 'KITSYUU — FROM JAPAN TO INDIA', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
+export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEyebrow: '', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
   const section = useRef<HTMLElement>(null), canvas = useRef<HTMLCanvasElement>(null), word = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEye
         <h1 id="st-brand-title" className="st-brand-hero-word" ref={word}>KITSYUU</h1>
         <div className="st-brand-hero-copy st-wrap">
           <div>
-            <p className="eyebrow" data-brand-eyebrow><span></span>{copy.heroEyebrow}</p>
+            {copy.heroEyebrow && <p className="eyebrow" data-brand-eyebrow><span></span>{copy.heroEyebrow}</p>}
             <p className="st-brand-hero-lead" data-brand-lead>{copy.heroLead}</p>
           </div>
           <div className="st-brand-hero-actions">

@@ -57,6 +57,8 @@ const edits = [
   ['<main id="top">', '<div id="top">'],
   ['</main>', '</div>'],
   ['<a href="#about">Our world</a></nav>', '<a href="#about">Our world</a><a href="/">Store</a></nav>'],
+  // The client asked to remove this line wherever it appears (2026-09-30).
+  ['<p class="eyebrow"><span aria-hidden="true"></span><span data-copy="hero.eyebrow">KITSYUU — FROM JAPAN TO INDIA</span></p>', ''],
 ];
 let markup = body;
 for (const [from, to] of edits) {

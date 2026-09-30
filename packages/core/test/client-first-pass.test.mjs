@@ -280,8 +280,10 @@ test('production ↔ purchasing: shortfall, a draft PO raised for it and linked,
 
 // ---------------------------------------------------------------- brand wording
 test('brand wording: today\'s text by default; staff publish new wording; the store reads only published wording', async () => {
-  assert.equal(mergeBrandCopy(null).heroEyebrow, 'KITSYUU — FROM JAPAN TO INDIA');
-  assert.equal(mergeBrandCopy({heroEyebrow: '  '}).heroEyebrow, 'KITSYUU — FROM JAPAN TO INDIA', 'empty keeps the default');
+  // The hero eyebrow line was removed at the client's request: empty by default (not shown).
+  assert.equal(mergeBrandCopy(null).heroEyebrow, '');
+  assert.equal(mergeBrandCopy(null).heroLead, 'Japanese streetwear. Unconventional shapes. Made personal.', 'other lines keep their default');
+  assert.equal(mergeBrandCopy({heroLead: '  '}).heroLead, 'Japanese streetwear. Unconventional shapes. Made personal.', 'empty keeps the default');
   await assert.rejects(saveBrandCopy(admin, support, {heroEyebrow: 'X'}, ctx), ForbiddenError);
   await saveBrandCopy(admin, root, {heroEyebrow: 'KITSYUU — STREETWEAR', footerTagline: 'LINE ONE.\nLINE TWO.'}, ctx);
   const a = await getBrandCopyAdmin(admin, root);

@@ -139,7 +139,6 @@ export default function Header() {
       {/* A full page load (<a>), so leaving /our-story always unloads the landing's own script. */}
       <a className="st-brand" href={url.home} aria-label="KITSYUU home">
         <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} /></span>
-        <span className="st-wordmark" aria-hidden="true">KITSYUU</span>
       </a>
       <nav className={`st-nav${open ? ' is-open' : ''}`} id="st-nav" aria-label="Store" ref={nav} onClick={e => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}>
         <ul className="st-nav-main">

@@ -60,6 +60,9 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   const problems = cart.lines.filter(l => l.problem);
   const cod = t.payment?.cod, points = t.payment?.loyalty;
   const canPlace = !!provider || !!cod?.available;          // online payment set up, or cash on delivery possible for this order
+  // Cash on delivery is switched on but not possible for this address / delivery option: say why (the customer can choose
+  // another address); only when neither online payment nor COD is switched on does the checkout say payment is not set up.
+  const codBlocked = !provider && cod?.offered && !cod.available ? (cod.reason ?? 'Cash on delivery is not available for this address.') : null;
   const payment = t.payment && {
     method: t.payment.method, onlineAvailable: !!provider,
     cod: { offered: !!cod?.offered, available: !!cod?.available, reason: cod?.offered ? cod.reason : null,
@@ -77,17 +80,17 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               <p>{problems.map(lineProblemText).join(' ')}</p>
               <p><Link className="text-link" href="/cart">Update your cart</Link></p>
             </div>
-          ) : !canPlace ? (
-            <p className="st-form-alert" role="alert" data-no-payments>Online payment is not set up yet, so orders cannot be placed. Your cart is saved.</p>
           ) : !addresses.length ? (
             <section className="st-form-group" data-no-address>
               <h2>Deliver to</h2>
               <p>Add a delivery address to continue.</p>
               <p><Link className="button" href="/account/addresses/new?next=/checkout">Add an address</Link></p>
             </section>
+          ) : !canPlace && !codBlocked ? (
+            <p className="st-form-alert" role="alert" data-no-payments>Online payment is not set up yet, so orders cannot be placed. Your cart is saved.</p>
           ) : (
             <CheckoutForm idempotencyKey={randomBytes(16).toString('hex')} expectedTotalPaise={t.totalPaise} totalLabel={rupees(t.totalPaise)}
-              selectedAddressId={chosen?.id} policy={returnsPolicy(returns)} blocked={t.shipping.unavailable ?? null}
+              selectedAddressId={chosen?.id} policy={returnsPolicy(returns)} blocked={t.shipping.unavailable ?? codBlocked}
               deliveryOptions={(t.shipping.options ?? []).map(o => ({ id: o.rateId, label: `${o.label} · ${o.amountPaise > 0 ? rupees(o.amountPaise) : 'free'}${o.estimate ? ` · ${o.estimate}` : ''}` }))}
               selectedDeliveryId={t.shipping.rateId ?? null} payment={payment ?? undefined}
               addresses={addresses.map(a => ({ id: a.id, isDefault: a.isDefault,

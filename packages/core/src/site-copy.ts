@@ -13,7 +13,8 @@ export const BRAND_COPY_FIELDS = [
   { key: 'metaTitle', label: 'Site title (browser tab, search results)', where: 'Every page title', max: 70, default: 'KITSYUU Store: Japanese streetwear' },
   { key: 'metaDescription', label: 'Site description (search results)', where: 'Search engines and link previews', max: 160, default: 'KITSYUU store: Japanese streetwear brought to India. Tops, bottoms and outerwear.' },
   { key: 'heroTop', label: 'Hero top line (right)', where: 'Home page hero, top right', max: 40, default: 'JAPAN → INDIA' },
-  { key: 'heroEyebrow', label: 'Hero eyebrow', where: 'Home page hero, above the tagline', max: 60, default: 'KITSYUU — FROM JAPAN TO INDIA' },
+  // Removed at the client's request (was "KITSYUU — FROM JAPAN TO INDIA"): empty = the line is not shown; staff can add a line here.
+  { key: 'heroEyebrow', label: 'Hero eyebrow', where: 'Home page hero, above the tagline (empty: not shown)', max: 60, default: '' },
   { key: 'heroLead', label: 'Hero tagline', where: 'Home page hero', max: 120, default: 'Japanese streetwear. Unconventional shapes. Made personal.' },
   { key: 'homeEyebrow', label: 'Store section eyebrow', where: 'Home page, "Shop the rotation" section', max: 60, default: 'KITSYUU STORE / JAPAN → INDIA' },
   { key: 'homeIntro', label: 'Store section text', where: 'Home page, "Shop the rotation" section', max: 240, default: 'Japanese streetwear, brought to India. Oversized shapes, washed layers and hardware details, piece by piece.' },
