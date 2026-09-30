@@ -215,7 +215,7 @@ try {
     await ev(`window.confirm = () => true, true`);
     await submit('#st-cancel-order');
     await until(`/cancelled/i.test(document.querySelector('main')?.innerText || '')`);
-    const cancelled = {main: (await text('main')).slice(0, 160), stock: [before2, await stock(P2.vid)], status: (await ordersOf(email)).find(o => o.order_number === second)?.status};
+    const cancelled = {main: (await text('.st-account-main') || await text('main')).slice(0, 160), stock: [before2, await stock(P2.vid)], status: (await ordersOf(email)).find(o => o.order_number === second)?.status};
     ok(`[${tag}] cancelling returns the stock and the order shows as cancelled`, /cancelled/i.test(cancelled.main)
       && cancelled.stock[1] === before2 && cancelled.status === 'cancelled', JSON.stringify(cancelled));   // before2 = stock before the order took its unit
     await go(`/account/orders/${second}`, '!!document.querySelector("main h1")');

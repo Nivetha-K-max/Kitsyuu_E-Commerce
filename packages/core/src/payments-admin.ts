@@ -5,7 +5,7 @@
    · amount_mismatch        a captured payment's amount or currency differs from the order total;
    · duplicate_capture      an order has more than one captured payment;
    · paid_without_capture   an order is marked paid but has no captured payment record.
-   There is no returns/refunds workflow (business decision). The one staff action is recording that money received for
+   Refunds for returned items live in returns.ts (ERP module 3, off by default). The one staff action here is recording that money received for
    an already-cancelled order needs a MANUAL refund: a 'requested' refunds row plus an audit record. No provider is called. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { ConflictError, NotFoundError, type PaymentEventListQuery, type PaymentExceptionKind, type PaymentListQuery, type RecordManualRefundInput } from '@kitsyuu/contracts';

@@ -5,7 +5,7 @@ import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
 
 /* The KITSYUU column links to the brand landing sections at the top of the homepage. Links to `/` are plain <a> (full page
    loads) because the landing runs its own script. */
-export default function Footer({ catalogue }: { catalogue: Catalogue }) {
+export default function Footer({ catalogue, policy = RETURNS_POLICY }: { catalogue: Catalogue; policy?: string }) {
   const idx = indexCatalogue(catalogue);
   const items = idx.c.navigation.map(n => n.all ? { label: 'All products', href: url.shop() }
     : n.collection ? { label: n.label, href: url.shop({ collection: n.collection }) }
@@ -24,7 +24,7 @@ export default function Footer({ catalogue }: { catalogue: Catalogue }) {
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
           <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/our-story">The story</a></li><li><a href="/our-story#edit">Style studies</a></li><li><a href="/our-story#about">Our world</a></li></ul></nav>
-          <div><h2>Orders</h2><p className="st-footer-note" data-returns-policy>{RETURNS_POLICY}</p></div>
+          <div><h2>Orders</h2><p className="st-footer-note" data-returns-policy>{policy}</p></div>
         </div>
         <div className="st-footer-bottom"><span>KITSYUU STORE</span><a href="#main">Back to top ↑</a></div>
       </div>

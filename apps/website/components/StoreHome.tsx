@@ -62,7 +62,7 @@ export default async function StoreHome() {
                         <p className="ch-count" aria-hidden="true"><b>{pad(i + 1)}</b> / {pad(naList.length)}</p>
                         <h3 className="st-card-name"><Link href={url.product(p)}>{p.name}</Link></h3>
                         <p className="st-card-cat">{idx.categoryPath(p)}</p>
-                        <Price value={p.price} />
+                        <Price value={p.price} was={p.compareAt} />
                       </div>
                       <WishButton id={p.id} label={`Save ${p.name} to wishlist`} variant="card" />
                     </article>

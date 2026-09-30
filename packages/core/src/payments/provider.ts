@@ -43,4 +43,10 @@ export interface PaymentProvider {
       notifications omit it. */
   parseWebhook?(rawBody: string, header: (name: string) => string | null):
     { eventId: string; type: string; payment: ProviderPayment | null } | null;
+  /** ERP module 3: asks the provider to refund (part of) a captured payment. Returns the provider's refund as it reports it;
+      throws when the provider refuses or cannot be reached. Providers that cannot refund omit it (staff then refund outside
+      the platform and record it manually with the reference). A refund is never reported as done unless the provider says so. */
+  refund?(input: { paymentId: string; amountPaise: number; currency: string; notes: Record<string, string> }): Promise<ProviderRefund>;
 }
+
+export interface ProviderRefund { id: string; amountPaise: number; status: 'pending' | 'processed' | 'failed'; raw?: unknown }

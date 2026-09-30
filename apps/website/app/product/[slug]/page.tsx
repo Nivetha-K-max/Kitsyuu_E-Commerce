@@ -35,7 +35,7 @@ export default async function ProductPage({ params }: { params: Params }) {
         <div className="st-info">
           <p className="st-pdp-meta"><b>{idx.categoryPath(p)}</b><br />SKU {p.sku}</p>
           <h1 id="st-pdp-title">{p.name}</h1>
-          <p className="st-pdp-price">{formatMoney(p.price)}</p>
+          <p className="st-pdp-price">{formatMoney(p.price)}{p.compareAt ? <s className="st-was" aria-label={`was ${formatMoney(p.compareAt)}`}>{formatMoney(p.compareAt)}</s> : null}</p>
           <p className="st-colour"><i style={{ background: p.colour?.swatches?.[0] || 'transparent' }} aria-hidden="true"></i>Colour <b>{p.colour?.label}</b></p>
           <p className="st-desc">{p.description}</p>
           <BuyForm productId={p.id} />

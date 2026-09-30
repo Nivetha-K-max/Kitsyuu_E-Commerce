@@ -48,7 +48,7 @@ function Exceptions({ rows, canRefund, canOrders }: { rows: Awaited<ReturnType<t
   return (
     <section className="card" aria-labelledby="ex-h" data-section="exceptions">
       <h2 id="ex-h">Exceptions queue</h2>
-      <p className="note">There is no returns or refunds workflow. The only action here is recording that money received for a cancelled order was refunded by hand.</p>
+      <p className="note">The only action here is recording that money received for a cancelled order was refunded by hand. Refunds for returned items are handled under Returns &amp; refunds.</p>
       <div className="table-wrap"><table data-exceptions-table>
         <thead><tr><th>Exception</th><th>Order</th><th>Payment</th><th className="num">Received</th><th className="num">Order total</th><th>Handling</th></tr></thead>
         <tbody>{rows.map((e, i) => (

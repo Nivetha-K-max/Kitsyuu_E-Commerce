@@ -131,3 +131,22 @@
 .st-pay-test p{margin:0;line-height:1.6}
 .st-pay .st-note{margin-top:16px;color:var(--muted)}
 .st-confirm-ref dd{overflow-wrap:anywhere}
+/* ERP modules: returns, support messages, coupon, promotional banners (same sharp, flat store language) */
+.st-erp-list{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.st-erp-list li{display:grid;gap:4px;padding:14px 0;border-bottom:1px solid var(--line);font-size:14px}
+.st-erp-list a{color:var(--paper);text-decoration:none}
+.st-erp-list a:hover{color:var(--red)}
+.st-erp-list span{color:var(--muted);font-size:13px}
+.st-ticket-thread{list-style:none;margin:0 0 24px;padding:0;display:grid;gap:12px}
+.st-ticket-thread li{padding:14px 16px;border:1px solid var(--line);max-width:680px}
+.st-ticket-thread li.is-us{border-left:3px solid var(--red)}
+.st-ticket-who{margin:0 0 6px;font:12px var(--mono);letter-spacing:.4px;color:var(--muted)}
+.st-ticket-body{margin:0;white-space:pre-wrap;line-height:1.6}
+.st-coupon{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:10px}
+.st-coupon-form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.st-coupon-form .st-field{flex:1 1 160px;margin:0}
+.st-promo{border:1px solid var(--line);padding:22px 24px;margin:24px 0;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+.st-promo h2{margin:0;font-size:clamp(20px,3vw,28px);letter-spacing:-.01em}
+.st-promo p{margin:6px 0 0;color:#c9c7c1;max-width:620px;line-height:1.6}
+.st-was{color:var(--muted);text-decoration:line-through;margin-left:8px;font-size:.9em}
+@media (max-width:640px){.st-promo{padding:18px 16px}.st-coupon-form .button{width:100%}}

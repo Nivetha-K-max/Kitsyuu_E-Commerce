@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { NotFoundError, orderNumberInput } from '@kitsyuu/contracts';
-import { getCustomerOrder } from '@kitsyuu/core';
+import { customerReturnOptions, getCustomerOrder } from '@kitsyuu/core';
 import { Crumbs } from '@/components/ui';
 import { OrderItems, OrderSums } from '@/components/OrderSummary';
 import { CancelOrderButton } from '@/components/AccountForms';
 import { paymentProvider } from '@/lib/commerce';
 import { db, requireCustomer } from '@/lib/server';
 import { formatDate, formatDateTime, NEXT_STEP, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, rupees } from '@/lib/account-format';
+import { RETURN_STATUS_LABEL } from '@/lib/erp-format';
 
 export const metadata: Metadata = { title: 'Order' };
 type Params = Promise<{ orderNumber: string }>;
@@ -23,6 +24,8 @@ export default async function OrderPage({ params }: { params: Params }) {
   const o = await getCustomerOrder(db(), me, parsed.data.orderNumber).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const s = o.shipping;
   const canPay = o.canPay && !!paymentProvider();
+  // ERP module 3: a return can be requested only while the business has returns switched on (off by default).
+  const returns = await customerReturnOptions(db(), me, o.orderNumber).catch(() => null);
   return (
     <>
       <Crumbs list={[{ label: 'Orders', href: '/account/orders' }, { label: o.orderNumber }]} />
@@ -65,6 +68,14 @@ export default async function OrderPage({ params }: { params: Params }) {
           <ol className="st-order-timeline">{o.history.map((h, n) => <li key={n}><span>{ORDER_STATUS_LABEL[h.status] ?? h.status}</span><time dateTime={new Date(h.at).toISOString()}>{formatDateTime(h.at)}</time></li>)}</ol>
         </section>
       )}
+      {returns && (returns.allowed || returns.requests.length > 0) && (
+        <section className="st-form-group" aria-labelledby="st-ord-returns" data-order-returns>
+          <h2 id="st-ord-returns">Returns</h2>
+          {returns.requests.map(r => <p key={r.number}><Link className="text-link" href={`/account/returns/${r.number}`}>{r.number}</Link> · {RETURN_STATUS_LABEL[r.status] ?? r.status}</p>)}
+          {returns.allowed && <p><Link className="button button-outline" href={`/account/orders/${encodeURIComponent(o.orderNumber)}/return`} data-request-return>Request a return</Link></p>}
+        </section>
+      )}
+      <p className="st-account-more"><Link className="text-link" href={`/account/support/new?order=${encodeURIComponent(o.orderNumber)}`} data-order-help>Get help with this order</Link></p>
       <p className="st-account-more"><Link className="text-link" href="/account/orders">Back to orders <span aria-hidden="true">↗</span></Link></p>
     </>
   );

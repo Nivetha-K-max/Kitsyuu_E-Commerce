@@ -9,7 +9,7 @@ import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { applyOrderTransition, closeUnpaidPayments } from './order-state.ts';
 import { getShipment, recordShipmentForTransition } from './fulfilment.ts';
-import { availableCarriers } from './fulfilment/carrier.ts';
+import { listActiveCarriers } from './fulfilment/carrier.ts';
 import { cancelledOrderPaymentState, listPaymentExceptions } from './payments-admin.ts';
 
 export const ORDER_PAGE_SIZE = 50;
@@ -136,7 +136,7 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
     shipping: { name: text(ship.full_name ?? ship.name), line1: text(ship.line1), line2: text(ship.line2), city: text(ship.city), state: text(ship.state), pin: text(ship.pin), country: text(ship.country) },
     items, history, integrity, customer, billing, stock, shipment, payment,
     allowedTransitions: can(actor, 'orders.update_status') ? [...ORDER_TRANSITIONS[o.status]] : [],
-    carriers: availableCarriers().map(c => ({ code: c.code, label: c.label })),
+    carriers: (await listActiveCarriers(db)).map(c => ({ code: c.code, label: c.label })),
   };
 }
 

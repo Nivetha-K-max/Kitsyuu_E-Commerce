@@ -78,6 +78,12 @@ export function razorpayProvider(cfg: RazorpayConfig): PaymentProvider {
       if (p.status === 'authorized') p = toPayment(await call('POST', `/v1/payments/${encodeURIComponent(p.id)}/capture`, { amount: p.amountPaise, currency: p.currency }));
       return p;
     },
+    async refund(input) {
+      const r = await call<Record<string, unknown>>('POST', `/v1/payments/${encodeURIComponent(input.paymentId)}/refund`, { amount: input.amountPaise, notes: input.notes });
+      if (Number(r.amount) !== input.amountPaise) throw new Error(`Razorpay refund ${String(r.id)}: amount mismatch`);
+      const status = r.status === 'processed' ? 'processed' : r.status === 'failed' ? 'failed' : 'pending';
+      return { id: String(r.id), amountPaise: Number(r.amount), status, raw: r };
+    },
     async listPayments(sessionRef) {
       return ((await call<{ items: Record<string, unknown>[] }>('GET', `/v1/orders/${encodeURIComponent(sessionRef)}/payments`)).items ?? []).map(toPayment);
     },

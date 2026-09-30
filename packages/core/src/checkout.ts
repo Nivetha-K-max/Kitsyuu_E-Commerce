@@ -22,6 +22,8 @@ import { lineProblemText, lockActiveCart, priceCart } from './cart.ts';
 import { applyOrderTransition, closeUnpaidPayments, lockOrder, releaseOrderStock } from './order-state.ts';
 import type { CommerceConfig } from './pricing.ts';
 import type { PaymentProvider, ProviderPayment } from './payments/provider.ts';
+import { raiseAlertSafely } from './alerts.ts';
+import { recordDiscountRedemptions } from './discounts.ts';
 
 type Order = NonNullable<Awaited<ReturnType<typeof lockOrder>>>;
 const ctxAudit = (ctx?: RequestContext) => ({ ip: ctx?.ip ?? null, userAgent: ctx?.userAgent ?? null, requestId: ctx?.requestId ?? null });
@@ -76,7 +78,7 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
   await expireUnpaidOrders(db, {}, { customerId: p.customerId }).catch(e => console.error('[checkout] expiry sweep failed', e));
   const { paymentWindowMinutes } = await checkoutSettings(db);
   try {
-    return await db.transaction().execute(async tx => {
+    const placed = await db.transaction().execute(async tx => {
       const cartId = await lockActiveCart(tx, p.customerId);          // one checkout at a time per customer
       const same = await tx.selectFrom('orders').select('order_number')
         .where('customer_id', '=', p.customerId).where('idempotency_key', '=', input.idempotencyKey).executeTakeFirst();
@@ -90,6 +92,7 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
       const problems = cart.lines.filter(l => l.problem).map(lineProblemText);
       if (problems.length) throw new ConflictError(`${problems.join(' ')} Update your cart and try again.`);
       const t = cart.totals;
+      if (t.shipping.unavailable) throw new ConflictError(t.shipping.unavailable);
       if (t.totalPaise !== input.expectedTotalPaise)
         throw new ConflictError('Prices or quantities in your cart changed since this page was opened. Review your order and try again.');
       const me = await tx.selectFrom('customers').select(['email', 'full_name', 'phone']).where('id', '=', p.customerId).executeTakeFirstOrThrow();
@@ -119,12 +122,18 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
         image_path: l.imagePath, unit_price_paise: l.unitPaise, qty: l.qty, line_total_paise: l.lineTotalPaise,
       }))).execute();
       await tx.insertInto('order_status_history').values({ order_id: order.id, from_status: null, to_status: 'pending_payment', note: 'Order placed' }).execute();
+      await recordDiscountRedemptions(tx, order.id, p.customerId, t.discounts);
       await sql`select public.reserve_order_stock(${order.id}::uuid)`.execute(tx);
       await recordAudit(tx, { actorType: 'customer', customerId: p.customerId, action: 'order.placed', entityType: 'orders', entityId: order.id,
         after: { status: 'pending_payment', total_paise: t.totalPaise },
         metadata: { order_number: order.order_number, lines: cart.lines.length, units: t.units }, ...ctxAudit(ctx) });
-      return { orderNumber: order.order_number, reused: false };
+      return { orderNumber: order.order_number, reused: false, orderId: order.id, totalPaise: t.totalPaise };
     });
+    if (!placed.reused && placed.orderId && placed.totalPaise !== undefined) {
+      await raiseAlertSafely(db, { kind: 'order.placed', title: `New order ${placed.orderNumber}`, body: `₹${(placed.totalPaise / 100).toFixed(2)} · awaiting payment`,
+        entityType: 'orders', entityId: placed.orderId, link: `/orders/${placed.orderId}`, dedupeKey: `order.placed:${placed.orderId}` });
+    }
+    return { orderNumber: placed.orderNumber, reused: placed.reused };
   } catch (e) {
     // adjust_stock refused (another customer bought the last units a moment ago): nothing was written.
     if ((e as { code?: string })?.code === '23514') throw new ConflictError('Part of your order just sold out. Review your cart and try again.');
@@ -254,7 +263,19 @@ export async function submitPaymentResult(db: Db, provider: PaymentProvider, p: 
     throw new DomainError('invalid', NOT_VERIFIED);
   }
   const verified = pay;
-  return db.transaction().execute(async tx => applyPaymentResult(tx, (await lockOrder(tx, { id: owned.id }))!, provider.code, verified, { source: 'customer', customerId: p.customerId, ctx }));
+  const outcome = await db.transaction().execute(async tx => applyPaymentResult(tx, (await lockOrder(tx, { id: owned.id }))!, provider.code, verified, { source: 'customer', customerId: p.customerId, ctx }));
+  await paymentOutcomeAlert(db, outcome, owned.id, input.orderNumber);
+  return outcome;
+}
+
+/** Staff alert for a payment result (after it committed): paid → ready to pack; failed; or a payment that needs a person. */
+async function paymentOutcomeAlert(db: Db, outcome: string, orderId: string, orderNumber: string) {
+  const link = `/orders/${orderId}`;
+  if (outcome === 'paid') await raiseAlertSafely(db, { kind: 'order.paid', title: `Order ${orderNumber} paid: ready to pack`, entityType: 'orders', entityId: orderId, link, dedupeKey: `order.paid:${orderId}` });
+  else if (outcome === 'failed') await raiseAlertSafely(db, { kind: 'payment.failed', title: `Payment failed for order ${orderNumber}`, entityType: 'orders', entityId: orderId, link });
+  else if (['amount_mismatch', 'needs_refund', 'duplicate_capture'].includes(outcome))
+    await raiseAlertSafely(db, { kind: 'payment.issue', title: `Payment for order ${orderNumber} needs attention (${outcome.replace(/_/g, ' ')})`, entityType: 'orders', entityId: orderId,
+      link: '/payments?view=exceptions', dedupeKey: `payment.issue:${orderId}:${outcome}` });
 }
 
 // ======================= cancellation and expiry =======================
@@ -313,7 +334,8 @@ export async function handlePaymentWebhook(db: Db, provider: PaymentProvider, ra
   const event = provider.parseWebhook(rawBody, header);
   if (!event) return { status: 401, outcome: 'not_verified' };
   const eventKey = `${provider.code}:${event.eventId}`;
-  return db.transaction().execute(async tx => {
+  let alertOrderId: string | null = null;
+  const result = await db.transaction().execute(async tx => {
     const stored = await tx.insertInto('payment_events').values({ id: eventKey, provider: provider.code, type: event.type, payload: rawBody })
       .onConflict(oc => oc.column('id').doNothing()).returning('id').executeTakeFirst();
     if (!stored) return { status: 200 as const, outcome: 'duplicate' };
@@ -325,6 +347,9 @@ export async function handlePaymentWebhook(db: Db, provider: PaymentProvider, ra
       else { orderId = o.id; orderNumber = o.order_number; outcome = await applyPaymentResult(tx, o, provider.code, event.payment, { source: 'webhook' }); }
     }
     await tx.updateTable('payment_events').set({ processed_at: new Date(), outcome, order_id: orderId }).where('id', '=', eventKey).execute();
+    alertOrderId = orderId;
     return { status: 200 as const, outcome, orderNumber };
   });
+  if (alertOrderId && result.orderNumber) await paymentOutcomeAlert(db, result.outcome, alertOrderId, result.orderNumber);
+  return result;
 }

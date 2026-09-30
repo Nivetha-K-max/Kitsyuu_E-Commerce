@@ -68,12 +68,12 @@ export async function priceCart(q: Queryable, cartId: string | null, opts: { con
   const gone = items.filter(i => !byVariant.has(i.variant_id));
   if (gone.length) await q.deleteFrom('cart_items').where('id', 'in', gone.map(i => i.id)).execute();
   const lines = items.filter(i => byVariant.has(i.variant_id)).map(i => priced(byVariant.get(i.variant_id)!, i.qty));
-  const totals = await priceOrder(q, lines.filter(l => !l.problem), opts);
+  const totals = await priceOrder(q, lines.filter(l => !l.problem), { ...opts, cartId });
   return { lines, totals, canCheckout: lines.length > 0 && lines.every(l => !l.problem), removed: gone.length };
 }
 
-export async function getCustomerCart(db: Db, p: CustomerPrincipal, config?: CommerceConfig): Promise<PricedCart> {
-  return priceCart(db, await activeCartId(db, p.customerId), { config, customerId: p.customerId });
+export async function getCustomerCart(db: Db, p: CustomerPrincipal, config?: CommerceConfig, shipTo?: ShipTo | null): Promise<PricedCart> {
+  return priceCart(db, await activeCartId(db, p.customerId), { config, customerId: p.customerId, shipTo: shipTo ?? null });
 }
 
 const onlyLeft = (v: VariantRow) => `Only ${v.stock_qty} of ${v.name}, size ${v.size}, ${v.stock_qty === 1 ? 'is' : 'are'} available.`;

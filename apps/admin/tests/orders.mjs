@@ -59,6 +59,7 @@ try {
   // ================= sales: can view and change status =================
   ok('sales signs in', await signIn('sales', 'Sales E2E'));
   ok('menu has Orders under Sales', /Orders/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
+  await until(`!!document.querySelector('[data-kpi="Orders"] dd')`, 20000);   // figures stream in after the page shell
   ok('dashboard counts the orders from the database', (await ev(`document.querySelector('[data-kpi="Orders"] dd')?.innerText ?? ''`)).startsWith('8'));
 
   // ---------- list, filters, search ----------

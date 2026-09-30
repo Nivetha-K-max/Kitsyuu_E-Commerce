@@ -189,7 +189,9 @@ try {
   ok('settings: tax and account security locked', (await exists('[data-setting="billing.prices_include_tax"] [data-locked]')) && (await exists('[data-setting="auth.login_max_failures"] [data-locked]')));
   // M10 made company details and the delivery charge editable too; business rules (tax, hold time, security) stay locked.
   const editable = await ev(`[...document.querySelectorAll('[data-settings-table] form')].map(f=>f.closest('[data-setting]').dataset.setting).sort().join()`);
-  ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable === ['company.address','company.gstin','company.legal_name','company.phone','company.support_email','inventory.low_stock_threshold','notifications.order_cancelled','notifications.order_shipped','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method'].join(), editable);
+  ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable.split(',').filter(k => !k.startsWith('alerts.')).join() === ['carts.abandon_after_hours','company.address','company.gstin','company.legal_name','company.phone','company.state','company.support_email','discounts.enabled','discounts.stacking','inventory.low_stock_threshold',
+    'notifications.abandoned_cart','notifications.order_cancelled','notifications.order_delivered','notifications.order_shipped','notifications.refund_processed','notifications.return_status','notifications.support_reply',
+    'returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method'].join(), editable);   // ERP modules add business switches (all off) and staff alert switches
   ok('settings: returns/refunds policy shown as none', /Returns and refunds[\s\S]*None/.test(await text('[data-policies]')));
   const L = '[data-setting="inventory.low_stock_threshold"] form';
   const [orig] = await q(`select value from settings where key = 'inventory.low_stock_threshold'`);

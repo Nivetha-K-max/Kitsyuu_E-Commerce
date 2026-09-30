@@ -92,7 +92,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Store content|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -192,8 +192,9 @@ try {
   await fill('input[name=fullName]', 'Support E2E'); await fill('input[name=password]', PW); await fill('input[name=confirm]', PW); await submit();
   ok('support user signs in', await until(`location.pathname==='/dashboard'`));
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit.
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Products|Inventory|Stock counts|Orders|Customers|Reviews', supNav);
+  // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit;
+  // ERP modules add read access to shipping, returns, carts and support (and the notification centre everyone has).
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Inventory|Stock counts|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

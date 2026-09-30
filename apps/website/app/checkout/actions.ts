@@ -4,8 +4,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
-import { DomainError, orderNumberInput, paymentResultInput, placeOrderInput, type ActionState } from '@kitsyuu/contracts';
-import { cancelOrderByCustomer, checkoutRateLimit, currentPaymentSession, placeOrder, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
+import { couponInput, DomainError, orderNumberInput, paymentResultInput, placeOrderInput, type ActionState } from '@kitsyuu/contracts';
+import { cancelOrderByCustomer, checkoutRateLimit, currentPaymentSession, placeOrder, setCartCoupon, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { sendOrderConfirmation } from '@/lib/order-mail';
 import { commerceConfig, paymentProvider, testProvider } from '@/lib/commerce';
@@ -74,4 +74,23 @@ export async function cancelOrderAction(_: ActionState, form: FormData): Promise
     revalidatePath('/account', 'layout');
     return { ok: true, message: r.released ? 'Your order is cancelled and its items are back in stock. Nothing was charged.' : 'Your order is cancelled.' };
   });
+}
+
+/** ERP module 1: apply a coupon code to the cart (checked on the server; whether it applies is shown with the totals). */
+export async function applyCouponAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const me = await requireCustomer('/checkout');
+  const r = await handle(couponInput, form, async input => {
+    if (!input.code) return { ok: false, fieldErrors: { code: 'Enter a coupon code.' }, message: 'Enter a coupon code.' };
+    await setCartCoupon(db(), me, input.code);
+    return { ok: true, message: 'Coupon added.' };
+  });
+  if (r.ok) revalidatePath('/checkout');
+  return r;
+}
+
+export async function removeCouponAction(_: ActionState): Promise<ActionState> {
+  const me = await requireCustomer('/checkout');
+  await setCartCoupon(db(), me, null);
+  revalidatePath('/checkout');
+  return { ok: true, message: 'Coupon removed.' };
 }

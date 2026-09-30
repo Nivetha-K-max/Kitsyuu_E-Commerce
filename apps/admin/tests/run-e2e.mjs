@@ -71,7 +71,10 @@ try {
       : f === 'm14-production.test.mjs' ? {units: 1108}                            // M14: 8 passed pieces added through the ledger
       : f === 'm15-stock.test.mjs' ? {units: 1100, everySizeTen: false}           // M15: count differences (+2 / −1) and a write-off (−1)
       : f === 'm16-reports.test.mjs' ? {customers: 2, orders: 4}                   // M16: report fixtures (no stock moved)
-      : f === 'm17-engagement.test.mjs' ? {customers: 1, orders: 2} : {};          // M17: email fixtures (no stock moved)
+      : f === 'm17-engagement.test.mjs' ? {customers: 1, orders: 2}              // M17: email fixtures (no stock moved)
+      // ERP modules: 2 customers, 5 checkout orders (sold, cancelled, returned); 1 unit restocked from a return and 1 sent
+      // out as an exchange, all through the ledger (ledger_mismatch must stay 0).
+      : f === 'erp-modules.test.mjs' ? {customers: 2, orders: 5, units: 1095, everySizeTen: false} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 
@@ -132,6 +135,12 @@ try {
     const m8Files = Object.fromEntries(Object.entries(m8Accounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const m8 = node(['apps/admin/tests/m8.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(m8Files)});
     if (!step('M8 operations browser tests', m8)) failed = true;
+
+    // ---------- ERP modules 1–8: every new screen, key forms, permissions, phone width (no stock moved, no orders) ----------
+    const erpAccounts = {root: ['erp.root@test.local', 'super_admin'], support: ['erp.support@test.local', 'support'], accountant: ['erp.accounts@test.local', 'accountant']};
+    const erpFiles = Object.fromEntries(Object.entries(erpAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const erp = node(['apps/admin/tests/erp.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(erpFiles)});
+    if (!step('ERP modules browser tests', erp)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.

@@ -4,9 +4,10 @@
    generic editor and no way to create keys from the UI; only registry keys marked editable can change, one validated
    value at a time, with an audit record. */
 import { recordAudit, type Db } from '@kitsyuu/db';
-import { DomainError, ForbiddenError, NotFoundError, type SettingUpdateInput } from '@kitsyuu/contracts';
+import { DomainError, ForbiddenError, INDIAN_STATES, NotFoundError, type SettingUpdateInput } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
+import { ALERT_KINDS } from './alerts.ts';
 
 export type SettingType =
   | { kind: 'integer'; min: number; max: number; unit?: string }
@@ -27,6 +28,7 @@ const M7 = 'Business decision (M7). Not editable from the admin.';
 const TAX = 'Tax / GST rules are not decided yet. Not editable until they are.';
 const SECURITY = 'Account security setting. Changed only through a reviewed database migration.';
 const PRICING = 'Pricing and checkout rule. Not editable from the admin.';
+const ON_OFF: SettingType = { kind: 'choice', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] };
 const def = (key: string, label: string, group: string, description: string, type: SettingType, lockedReason?: string): SettingDef =>
   ({ key, label, group, description, type, readPermission: 'settings.read', editPermission: 'settings.manage', editable: !lockedReason, lockedReason });
 
@@ -60,7 +62,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('company.phone', 'Phone', 'Company', 'Customer support phone number.', { kind: 'text', maxLength: 20, pattern: '^[+0-9 ()-]{6,20}$', patternHint: 'digits, spaces, + ( ) -', optional: true }),
   // M10: shipping is chosen by the business. Until a method is set, nothing is charged and the store says "Not set up yet".
   def('shipping.method', 'Delivery charge', 'Shipping', 'How delivery is charged at checkout. "Not set up" charges nothing and tells customers so.',
-    { kind: 'choice', options: [{ value: 'none', label: 'Not set up (no charge)' }, { value: 'flat', label: 'Flat rate per order' }] }),
+    { kind: 'choice', options: [{ value: 'none', label: 'Not set up (no charge)' }, { value: 'flat', label: 'Flat rate per order' }, { value: 'zones', label: 'By delivery zone (Shipping → Zones and rates)' }] }),
   def('shipping.flat_rate_paise', 'Flat delivery charge', 'Shipping', 'Charged once per order when the flat rate is chosen.', { kind: 'money' }),
   // M12: when a purchase counts as "bought" for reviews. Not decided yet, so it starts closed (no reviews can be written).
   def('reviews.eligibility', 'Who can review', 'Reviews', 'Customers can review an item once their order reaches this point. Reviews are always checked by staff before they appear.',
@@ -71,15 +73,35 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('notifications.order_cancelled', 'Email when the shop cancels an order', 'Customer emails', 'Sends the customer an email when staff cancel an order.',
     { kind: 'choice', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] }),
   def('shipping.free_from_paise', 'Free delivery from', 'Shipping', 'Orders at or above this amount ship free. Leave empty for no free delivery.', { kind: 'money', optional: true }),
+  // ERP modules 1–8. Every switch starts OFF (no row = off) so the store behaves exactly as before until the business decides.
+  def('discounts.enabled', 'Discounts and coupons', 'Discounts', 'Master switch. When off, no discount or coupon is applied at checkout, whatever is set up under Pricing.', ON_OFF),
+  def('discounts.stacking', 'More than one discount', 'Discounts', 'When several discounts apply to one order: only the largest one, or all of them together.',
+    { kind: 'choice', options: [{ value: 'best', label: 'Only the largest discount' }, { value: 'all', label: 'All applicable discounts' }] }),
+  def('returns.enabled', 'Return requests', 'Returns', 'When on, customers can request a return from their order page (within the window below). When off, the store keeps saying all sales are final.', ON_OFF),
+  def('returns.window_days', 'Return window', 'Returns', 'Days after delivery during which a return can be requested. With no value, customers cannot request returns.',
+    { kind: 'integer', min: 1, max: 365, unit: 'days' }),
+  def('carts.abandon_after_hours', 'Abandoned cart after', 'Carts', 'A cart with items that has not changed for this long counts as abandoned. With no value, no cart is treated as abandoned.',
+    { kind: 'integer', min: 1, max: 24 * 60, unit: 'hours' }),
+  def('company.state', 'Registered state', 'Company', 'State of the registered business. Used for the place of supply on invoices (CGST + SGST within the state, IGST outside it).',
+    { kind: 'choice', options: [{ value: '', label: 'Not set' }, ...INDIAN_STATES.map(s => ({ value: s, label: s }))] }),
+  def('notifications.order_delivered', 'Email when an order is delivered', 'Customer emails', 'Sends the customer an email when the delivery is marked delivered.', ON_OFF),
+  def('notifications.return_status', 'Emails about return requests', 'Customer emails', 'Sends the customer an email when their return request is approved, rejected, needs information, or is completed.', ON_OFF),
+  def('notifications.refund_processed', 'Email when a refund is made', 'Customer emails', 'Sends the customer an email when a refund is recorded as processed.', ON_OFF),
+  def('notifications.support_reply', 'Email when staff reply to a ticket', 'Customer emails', 'Sends the customer an email when staff reply to their support ticket (internal notes are never sent).', ON_OFF),
+  def('notifications.abandoned_cart', 'Abandoned-cart reminder emails', 'Customer emails', 'Allows staff to send a reminder email for an abandoned cart (never sent automatically).', ON_OFF),
+  ...Object.entries(ALERT_KINDS).map(([kind, k]) => def(`alerts.${kind}`, k.label, 'Staff alerts',
+    `Show "${k.label}" in the staff notification centre (seen by staff with ${k.permission}). On unless switched off.`,
+    { kind: 'choice', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] })),
 ];
 const byKey = new Map(SETTINGS_REGISTRY.map(d => [d.key, d]));
 
 /** Business rules that live in code or deployment configuration, shown for reference (never editable here). */
 export const POLICY_NOTES = [
-  { label: 'Returns and refunds', value: 'None. All sales are final.', source: 'Business decision (2026-09-27); shown to customers in the store footer and at checkout.' },
+  { label: 'Returns and refunds', value: 'None. All sales are final unless "Return requests" is switched on under Returns.', source: 'Business decision (2026-09-27); the returns workflow exists but stays off until the business changes that decision.' },
   { label: 'Payment provider', value: 'Configured per deployment (off by default).', source: 'Website environment (PAYMENT_PROVIDER). Not set from the admin.' },
   { label: 'Shipping charges', value: 'Set under Shipping above.', source: 'Chosen by the business; until then nothing is charged and the store says "Not set up yet".' },
-  { label: 'Discounts', value: 'None at launch.', source: 'Business decision (2026-09-27).' },
+  { label: 'Discounts', value: 'None at launch: off unless "Discounts and coupons" is switched on.', source: 'Business decision (2026-09-27). Discounts are set up under Pricing.' },
+  { label: 'Cash on delivery', value: 'Not offered at checkout.', source: 'Rates can record whether COD is allowed and its fee, but COD checkout needs a business decision before it is switched on.' },
 ] as const;
 
 export interface SettingRow extends SettingDef { value: unknown; updatedAt: Date | null; updatedBy: string | null; canEdit: boolean }

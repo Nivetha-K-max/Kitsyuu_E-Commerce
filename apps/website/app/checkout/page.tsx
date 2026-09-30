@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { randomBytes } from 'node:crypto';
-import { getCustomerCart, lineProblemText, listCustomerAddresses } from '@kitsyuu/core';
+import { discountSettings, getCustomerCart, lineProblemText, listCustomerAddresses, returnSettings } from '@kitsyuu/core';
 import CheckoutForm from '@/components/CheckoutForm';
+import CouponForm from '@/components/CouponForm';
+import { returnsPolicy } from '@/lib/store-policy';
 import { Crumbs, EmptyState } from '@/components/ui';
 import { commerceConfig, paymentProvider } from '@/lib/commerce';
 import { currentCustomer, db } from '@/lib/server';
@@ -21,7 +23,7 @@ const head = (aside?: React.ReactNode) => (
   </>
 );
 
-export default async function CheckoutPage() {
+export default async function CheckoutPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await currentCustomer();
   if (!me) {
     return (
@@ -38,7 +40,14 @@ export default async function CheckoutPage() {
       </div>
     );
   }
-  const [cart, addresses] = await Promise.all([getCustomerCart(db(), me, commerceConfig()), listCustomerAddresses(db(), me)]);
+  const addresses = await listCustomerAddresses(db(), me);
+  // The delivery charge can depend on the address: price the cart for the chosen (or default) one.
+  const wanted = (await searchParams).address;
+  const chosen = addresses.find(a => a.id === wanted) ?? addresses.find(a => a.isDefault) ?? addresses[0];
+  const [cart, discounts, returns] = await Promise.all([
+    getCustomerCart(db(), me, commerceConfig(), chosen ? { state: chosen.state, pin: chosen.pin, country: chosen.country ?? 'IN' } : null),
+    discountSettings(db()), returnSettings(db()).catch(() => ({ enabled: false, windowDays: null })),
+  ]);
   const provider = paymentProvider();
   if (!cart.lines.length) {
     return <div className="st-wrap">{head()}<EmptyState title="Your cart is empty." text="Add a product to your cart before checking out." /></div>;
@@ -65,6 +74,7 @@ export default async function CheckoutPage() {
             </section>
           ) : (
             <CheckoutForm idempotencyKey={randomBytes(16).toString('hex')} expectedTotalPaise={t.totalPaise} totalLabel={rupees(t.totalPaise)}
+              selectedAddressId={chosen?.id} policy={returnsPolicy(returns)} blocked={t.shipping.unavailable ?? null}
               addresses={addresses.map(a => ({ id: a.id, isDefault: a.isDefault,
                 label: `${a.fullName}, ${a.line1}${a.line2 ? ', ' + a.line2 : ''}, ${a.city}, ${a.state} ${a.pin} · ${a.phone}` }))} />
           )}
@@ -86,10 +96,11 @@ export default async function CheckoutPage() {
           <dl>
             <dt>Subtotal</dt><dd data-subtotal>{rupees(t.subtotalPaise)}</dd>
             {t.discounts.map(d => <Fragment key={d.code}><dt>{d.label}</dt><dd>−{rupees(d.amountPaise)}</dd></Fragment>)}
-            <dt>Shipping</dt><dd data-shipping>{!t.shipping.configured ? 'Not set up yet' : t.shippingPaise > 0 ? rupees(t.shippingPaise) : t.shipping.label}</dd>
+            <dt>Shipping</dt><dd data-shipping>{!t.shipping.configured ? 'Not set up yet' : t.shipping.unavailable ? 'Not available' : t.shippingPaise > 0 ? rupees(t.shippingPaise) : t.shipping.label}{t.shipping.estimate ? <small> · {t.shipping.estimate}</small> : null}</dd>
             <dt>Taxes</dt><dd>{t.pricesIncludeTax ? 'Included in the prices' : rupees(t.taxPaise)}</dd>
             <dt className="st-total">Total</dt><dd className="st-total" data-total>{rupees(t.totalPaise)}</dd>
           </dl>
+          {discounts.enabled && <CouponForm code={t.coupon?.code ?? null} applied={!!t.coupon?.applied} message={t.coupon?.message ?? null} />}
         </aside>
       </div>
     </div>

@@ -3,7 +3,7 @@
    are unchanged. Until a method is chosen, or when the flat rate is missing, it behaves exactly like the unconfigured
    provider: nothing is charged and the quote says "Not set up yet". Carrier rate tables can replace it later. */
 import type { Queryable } from '@kitsyuu/db';
-import { unconfiguredShipping, type ShippingProvider, type ShippingQuote } from './pricing.ts';
+import { unconfiguredShipping, type ShippingProvider, type ShippingQuote, type ShipTo } from './pricing.ts';
 
 export const SHIPPING_KEYS = ['shipping.method', 'shipping.flat_rate_paise', 'shipping.free_from_paise'] as const;
 
@@ -29,7 +29,59 @@ export function settingsShipping(getQueryable: () => Queryable): ShippingProvide
   return {
     code: 'settings',
     async quote(input) {
-      return quoteFromSettings(await readShippingSettings(getQueryable()), input.subtotalPaise) ?? unconfiguredShipping.quote(input);
+      const q = getQueryable();
+      const s = await readShippingSettings(q);
+      if (s.method === 'zones') return quoteFromZones(q, input.subtotalPaise, input.shipTo);
+      return quoteFromSettings(s, input.subtotalPaise) ?? unconfiguredShipping.quote(input);
     },
   };
+}
+
+// ---------------------------------------------------------------- ERP module 2: zone-based rates
+export type ZoneRate = {
+  zoneId: string; zoneName: string; states: string[]; pinPrefixes: string[]; zoneSort: number;
+  rateId: string; name: string; amountPaise: number; freeFromPaise: number | null; minOrderPaise: number | null; maxOrderPaise: number | null;
+  estMin: number | null; estMax: number | null; rateSort: number;
+};
+
+/** The zone for an address: the longest matching PIN prefix wins; otherwise a zone listing the state. Pure. */
+export function matchZone<T extends { zoneId: string; states: string[]; pinPrefixes: string[]; zoneSort: number }>(zones: T[], shipTo: ShipTo): T | null {
+  const pin = (shipTo.pin ?? '').replace(/\s/g, '');
+  let best: T | null = null, bestLen = 0;
+  for (const z of zones) for (const p of z.pinPrefixes) if (pin.startsWith(p) && p.length > bestLen) { best = z; bestLen = p.length; }
+  if (best) return best;
+  const state = (shipTo.state ?? '').trim().toLowerCase();
+  return [...zones].sort((a, b) => a.zoneSort - b.zoneSort).find(z => z.states.some(s => s.toLowerCase() === state)) ?? null;
+}
+
+/** The quote for an order under the zone rates (pure; shared by the provider, the admin rate checker and the tests). */
+export function quoteFromZoneRates(rates: ZoneRate[], subtotalPaise: number, shipTo: ShipTo | null): ShippingQuote {
+  if (!shipTo) return { amountPaise: 0, method: 'zones', label: 'Calculated at checkout', configured: true };
+  const zones = [...new Map(rates.map(r => [r.zoneId, r])).values()];
+  const zone = matchZone(zones, shipTo);
+  const unavailable = 'We do not deliver to this address yet. Choose another address or contact us.';
+  if (!zone) return { amountPaise: 0, method: 'zones', label: 'Not available', configured: true, unavailable };
+  const rate = rates.filter(r => r.zoneId === zone.zoneId)
+    .filter(r => (r.minOrderPaise === null || subtotalPaise >= r.minOrderPaise) && (r.maxOrderPaise === null || subtotalPaise < r.maxOrderPaise))
+    .sort((a, b) => a.rateSort - b.rateSort || a.amountPaise - b.amountPaise)[0];
+  if (!rate) return { amountPaise: 0, method: 'zones', label: 'Not available', configured: true, unavailable: 'Delivery is not available for this order value to this address.' };
+  const estimate = rate.estMin !== null && rate.estMax !== null ? `${rate.estMin}–${rate.estMax} days` : rate.estMax !== null ? `up to ${rate.estMax} days` : null;
+  if (rate.freeFromPaise !== null && subtotalPaise >= rate.freeFromPaise) return { amountPaise: 0, method: 'zones', label: `Free delivery (${rate.name})`, configured: true, estimate };
+  return { amountPaise: rate.amountPaise, method: 'zones', label: rate.name, configured: true, estimate };
+}
+
+export async function activeZoneRates(q: Queryable): Promise<ZoneRate[]> {
+  const rows = await q.selectFrom('shipping_rates as r').innerJoin('shipping_zones as z', 'z.id', 'r.zone_id')
+    .select(['z.id as zone_id', 'z.name as zone_name', 'z.states', 'z.pin_prefixes', 'z.sort_order as zone_sort', 'r.id as rate_id', 'r.name', 'r.amount_paise',
+      'r.free_from_paise', 'r.min_order_paise', 'r.max_order_paise', 'r.est_days_min', 'r.est_days_max', 'r.sort_order as rate_sort'])
+    .where('z.is_active', '=', true).where('r.is_active', '=', true).execute();
+  return rows.map(r => ({ zoneId: r.zone_id, zoneName: r.zone_name, states: r.states, pinPrefixes: r.pin_prefixes, zoneSort: r.zone_sort, rateId: r.rate_id,
+    name: r.name, amountPaise: r.amount_paise, freeFromPaise: r.free_from_paise, minOrderPaise: r.min_order_paise, maxOrderPaise: r.max_order_paise,
+    estMin: r.est_days_min, estMax: r.est_days_max, rateSort: r.rate_sort }));
+}
+
+export async function quoteFromZones(q: Queryable, subtotalPaise: number, shipTo: ShipTo | null): Promise<ShippingQuote> {
+  const rates = await activeZoneRates(q);
+  if (!rates.length) return unconfiguredShipping.quote({ lines: [], subtotalPaise, shipTo });
+  return quoteFromZoneRates(rates, subtotalPaise, shipTo);
 }

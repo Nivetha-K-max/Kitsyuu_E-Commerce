@@ -9,6 +9,7 @@ import { recordAudit, sql, type Db, type OrderStatus, type Queryable } from '@ki
 import { ConflictError, DomainError, ForbiddenError, NotFoundError, type SubmitReviewInput } from '@kitsyuu/contracts';
 import { requirePermission, type CustomerPrincipal, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
 import { sniffImageType } from './images.ts';
+import { raiseAlertSafely } from './alerts.ts';
 import type { MutationContext } from './staff.ts';
 
 export const REVIEW_ELIGIBILITY_KEY = 'reviews.eligibility';
@@ -73,7 +74,7 @@ export async function submitReview(db: Db, p: CustomerPrincipal, input: SubmitRe
   for (const ph of photos) processed.push(await processReviewPhoto(ph.bytes));       // before the transaction: CPU work
   const eligibility = await reviewEligibility(db);
   if (!eligibility) throw new ForbiddenError('Reviews are not open yet.');
-  return db.transaction().execute(async tx => {
+  const created = await db.transaction().execute(async tx => {
     const line = await tx.selectFrom('order_items').select(['id', 'product_id', 'order_id']).where('id', '=', input.orderItemId).executeTakeFirst();
     // Lock the order row (its status decides eligibility). The website role may not lock order_items, and the unique
     // order_item_id constraint already stops a second review of the same line.
@@ -92,6 +93,9 @@ export async function submitReview(db: Db, p: CustomerPrincipal, input: SubmitRe
       after: { product_id: item.product_id, rating: input.rating, photos: processed.length }, ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
     return { id: r.id };
   });
+  await raiseAlertSafely(db, { kind: 'review.submitted', title: 'New review to moderate', entityType: 'reviews', entityId: created.id, link: '/reviews?status=pending',
+    dedupeKey: `review.submitted:${created.id}` });
+  return created;
 }
 
 // ---------------------------------------------------------------- public (store)

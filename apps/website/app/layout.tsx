@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { getCatalogue, toClientCatalogue } from '@/lib/catalogue';
-import { getAnnouncement } from '@/lib/content';
+import { getAnnouncement, getReturnsPolicy } from '@/lib/content';
 import StoreProvider from '@/components/StoreProvider';
 import AuthProvider from '@/components/AuthProvider';
 import Header from '@/components/Header';
@@ -19,7 +19,7 @@ export const revalidate = 60;
 /* The KITSYUU stylesheets are served as-is from public/ in the same order as the static store:
    fonts.css → styles.css (shared tokens) → store.css (st- classes). */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [catalogue, announcement] = await Promise.all([getCatalogue().then(toClientCatalogue), getAnnouncement()]);
+  const [catalogue, announcement, policy] = await Promise.all([getCatalogue().then(toClientCatalogue), getAnnouncement(), getReturnsPolicy()]);
   return (
     <html lang="en" className="st">
       <head>
@@ -38,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           )}
           <Suspense fallback={<header className="st-header" />}><Header /></Suspense>
           <main id="main" tabIndex={-1}>{children}</main>
-          <Footer catalogue={catalogue} />
+          <Footer catalogue={catalogue} policy={policy} />
         </StoreProvider>
         </AuthProvider>
       </body>

@@ -40,7 +40,7 @@ export {
   applyPaymentResult, checkoutSettings, customerOrderActions, currentPaymentSession, type PaymentStart, type PaymentOutcome,
 } from './checkout.ts';
 export { orderConfirmationEmail } from './notifications.ts';
-export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus } from './payments/provider.ts';
+export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus, ProviderRefund } from './payments/provider.ts';
 export { testPaymentProvider, type TestPaymentProvider } from './payments/test-provider.ts';
 export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';
 // ---------- M8: operations ----------
@@ -51,7 +51,7 @@ export {
 } from './payments-admin.ts';
 export { listSettings, updateSetting, companyDetails, SETTINGS_REGISTRY, POLICY_NOTES, type SettingDef, type SettingRow, type SettingType, type CompanyDetails } from './settings.ts';
 export { getShipment, setPackingState, updateShipmentTracking, type ShipmentView } from './fulfilment.ts';
-export { availableCarriers, carrierFor, manualCarrier, type CarrierProvider } from './fulfilment/carrier.ts';
+export { availableCarriers, carrierFor, manualCarrier, resolveCarrier, listActiveCarriers, trackingFromTemplate, type CarrierProvider } from './fulfilment/carrier.ts';
 // ---------- M9: operations hardening ----------
 export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_PAGE_SIZE, CHECKOUT_RATE_KEY, type RuntimeInfo } from './system.ts';
 export { settingsShipping, readShippingSettings, quoteFromSettings, SHIPPING_KEYS, type ShippingSettings } from './shipping.ts';
@@ -92,3 +92,48 @@ export { globalSearch, type SearchGroup, type SearchHit } from './search.ts';
 export { securityAlerts } from './system.ts';
 export { resetStaffTwoFactor } from './staff.ts';
 export { attentionSummary, type AttentionItem } from './attention.ts';
+// ---------- ERP module 8: notifications and alerts ----------
+export {
+  ALERT_KINDS, raiseStaffAlert, raiseAlertSafely, sweepConditionAlerts, sweepConditionAlertsThrottled, listStaffNotifications, unreadNotifications,
+  markNotificationsRead, NOTIFICATION_PAGE_SIZE, type AlertKindCode, type AlertSeverity,
+} from './alerts.ts';
+export { CUSTOMER_EMAILS, customerEmailEnabled, sendCustomerEmail, type CustomerEmailEvent, type EmailResult } from './customer-email.ts';
+// ---------- ERP module 1: pricing and discounts ----------
+export {
+  listProductPrices, getProductPricing, priceHistory, setProductPricing, schedulePriceChange, cancelPriceChange, listScheduledChanges,
+  applyDuePriceChanges, bulkUpdatePrices, pricingOverview, PRICING_PAGE_SIZE,
+} from './pricing-admin.ts';
+export {
+  discountSettings, discountAmount, databaseDiscounts, setCartCoupon, recordDiscountRedemptions, listDiscounts, saveDiscount, setDiscountActive,
+  discountRedemptions, promotionTargets,
+} from './discounts.ts';
+export type { DiscountSource, CouponState } from './pricing.ts';
+// ---------- ERP module 2: shipping ----------
+export { quoteFromZoneRates, quoteFromZones, activeZoneRates, matchZone, type ZoneRate } from './shipping.ts';
+export {
+  listShippingZones, saveShippingZone, saveShippingRate, deleteShippingRate, checkShippingQuote, listCouriers, saveCourier, listShipments,
+  getShipmentDetail, updateShipmentStatus, shippingReport, notifyOrderDelivered, SHIPMENT_MOVES, SHIPMENT_PAGE_SIZE,
+} from './shipping-admin.ts';
+// ---------- ERP module 3: returns and refunds ----------
+export {
+  returnSettings, customerReturnOptions, requestReturn, listCustomerReturns, getCustomerReturn, cancelReturnByCustomer, listReturns, getReturn, returnAction,
+  updateReturnItem, refundReturn, notifyReturn, returnsReport, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
+} from './returns.ts';
+// ---------- ERP module 4: marketing ----------
+export {
+  listCampaigns, saveCampaign, setCampaignActive, listBanners, saveBanner, setBannerActive, listSegments, saveSegment, deleteSegment, segmentMembers,
+  getSegment, promotionReport,
+} from './marketing.ts';
+// ---------- ERP module 5: support ----------
+export {
+  supportCategories, openCustomerTicket, listCustomerTickets, getCustomerTicket, replyAsCustomer, listTickets, getTicket, openStaffTicket, replyToTicket,
+  updateTicket, notifyTicketReply, supportReport, TICKET_PAGE_SIZE,
+} from './support.ts';
+// ---------- ERP module 6: finance ----------
+export {
+  listTaxRates, saveTaxRate, listProductTax, setProductTax, taxSplit, listInvoices, ordersWithoutInvoice, createInvoiceForOrder, voidInvoice, getInvoice,
+  listFinanceNotes, createFinanceNote, setFinanceNoteStatus, expenseCategories, listExpenses, saveExpense, voidExpense, listVendorPayments, saveVendorPayment,
+  financeSummary, reconciliation, exportFinance, financeLookups, companyState, FINANCE_EXPORTS, type FinanceExport,
+} from './finance.ts';
+// ---------- ERP module 7: carts and wishlists ----------
+export { abandonAfterHours, listCarts, getCart, setCartRecovery, sendCartReminder, wishlistReport, listWishlists, CART_PAGE_SIZE } from './carts-admin.ts';

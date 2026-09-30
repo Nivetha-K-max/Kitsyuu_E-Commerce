@@ -40,7 +40,7 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
     sb.from('collections').select('*, collection_products (product_id, position)')
   ]);
   fail('categories', cats.error); fail('products', prods.error); fail('collections', cols.error);
-  const [attr, seo, ratings] = await Promise.all([readAttributes(sb), readSeo(sb), readRatings(sb)]);
+  const [attr, seo, ratings, compareAt] = await Promise.all([readAttributes(sb), readSeo(sb), readRatings(sb), readCompareAt(sb)]);
 
   const publicUrl = (path: string) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const toImage = (i: Row['product_images'][number], name: string): MediaImage =>
@@ -63,7 +63,8 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
       catalogueRef: r.catalogue_ref, material: r.material, care: r.care, origin: r.origin,
       attrs: attr.byProduct.get(r.id) ?? {},
       seo: seo.get(r.id) ?? { title: null, description: null },
-      rating: ratings.get(r.id) ?? null
+      rating: ratings.get(r.id) ?? null,
+      compareAt: (() => { const c = compareAt.get(r.id); return c && c > r.price_paise ? c / 100 : null; })()
     };
   });
 
@@ -84,6 +85,16 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
   /* Prices are prototype INR estimates; tax inclusion is unconfirmed (null keeps the existing "unconfirmed" wording). */
   return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products, attributes: attr.attributes };
 });
+
+/* Compare-at ("was") prices set under Pricing (ERP module 1). Optional: before that migration the column does not exist,
+   and on any error no "was" price is shown (the price itself is unaffected). */
+async function readCompareAt(sb: ReturnType<typeof publicSupabase>): Promise<Map<string, number>> {
+  try {
+    const r = await sb.from('products').select('id, compare_at_paise').eq('status', 'active').not('compare_at_paise', 'is', null);
+    if (r.error) return new Map();
+    return new Map((r.data ?? []).map(x => [String(x.id), Number(x.compare_at_paise)]));
+  } catch { return new Map(); }
+}
 
 /* Rating totals of approved reviews (M12), from the public view v_product_ratings (aggregates only). Optional: before
    migration 2300 the view does not exist and products simply have no rating. Any other error fails as usual. */

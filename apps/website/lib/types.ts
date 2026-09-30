@@ -43,6 +43,8 @@ export type Product = {
   seo: { title: string | null; description: string | null };
   /** Average of APPROVED reviews (M12); null when there are none. */
   rating: { average: number; count: number } | null;
+  /** ERP module 1: the compare-at ("was") price in rupees when it is above the price; otherwise null. */
+  compareAt?: number | null;
 };
 
 /** A product attribute the store can filter by (defined in the admin); only active attributes reach the store. */

@@ -20,8 +20,8 @@ export function ComingSoon({ p, label = false }: { p: Product; label?: boolean }
   );
 }
 
-export function Price({ value }: { value: number }) {
-  return <p className="st-price">{formatMoney(value)}</p>;
+export function Price({ value, was }: { value: number; was?: number | null }) {
+  return <p className="st-price">{formatMoney(value)}{was ? <s className="st-was" aria-label={`was ${formatMoney(was)}`}>{formatMoney(was)}</s> : null}</p>;
 }
 
 export type CardOpts = { level?: 2 | 3; isNew?: boolean; index?: number };
@@ -39,7 +39,7 @@ export function ProductCard({ p, categoryPath, level = 3, isNew = false, index =
         <div className="st-card-body">
           <H className="st-card-name"><Link href={url.product(p)}>{p.name}</Link></H>
           <p className="st-card-cat">{categoryPath}{img.held && <span className="sr-only">. Photo coming soon</span>}</p>
-          <Price value={p.price} />
+          <Price value={p.price} was={p.compareAt} />
         </div>
         <WishButton id={p.id} label={`Save ${p.name} to wishlist`} variant="card" />
       </article>

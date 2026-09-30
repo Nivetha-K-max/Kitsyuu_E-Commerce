@@ -6,6 +6,7 @@ import {
   ExternalLink, Factory, ImageOff, Inbox, IndianRupee, Keyboard, Layers, LayoutDashboard, ListFilter, LogOut, Megaphone, Menu, Monitor,
   Moon, Package, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Rows3, ScrollText, Search, Settings, ShieldCheck, ShoppingCart,
   SlidersHorizontal, Star, Sun, SunMoon, Tags, TriangleAlert, Truck, Upload, User, UserCog, Users, Warehouse, X, Cylinder,
+  BadgePercent, PackageCheck, Undo2, Sparkles, LifeBuoy, Landmark, ShoppingBasket, BellRing,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -19,6 +20,8 @@ const ICONS: Record<string, LucideIcon> = {
   'sort-asc': ArrowUp, 'sort-desc': ArrowDown, sort: ArrowUpDown, 'no-image': ImageOff, external: ExternalLink, archive: Archive,
   restore: ArchiveRestore, edit: Pencil, download: Download, columns: Columns3, density: Rows3, filter: ListFilter, info: CircleAlert,
   enter: CornerDownLeft, keyboard: Keyboard, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen, star: Star,
+  pricing: BadgePercent, shipping: PackageCheck, returns: Undo2, marketing: Sparkles, support: LifeBuoy, finance: Landmark, carts: ShoppingBasket,
+  notifications: BellRing,
 };
 
 export type IconName = keyof typeof ICONS;

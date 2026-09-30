@@ -282,7 +282,7 @@ export interface TaxRatesTable {
   id: Generated<string>; code: string; label: string; rate_bp: number; is_inclusive: boolean; is_active: boolean;
   valid_from: Date; valid_to: Date | null;
 }
-/** Refund records. There is no returns/refunds workflow (business decision); M8 uses a 'requested' row only to record
+/** Refund records. M8 uses a 'requested' row to record (ERP module 3 adds return refunds, provider or manual)
     that money received for an already-cancelled order needs a manual refund (payment exception). */
 export interface RefundsTable {
   id: Generated<string>; payment_id: string; order_id: string; amount_paise: number; reason: Generated<string>;
@@ -374,4 +374,165 @@ export interface Database {
   invoices: InvoicesTable;
   v_sales_daily: SalesDailyView;
   v_low_stock: LowStockView;
+}
+
+// ============================== ERP modules 1–8 (migrations 20260930002900 … 003600) ==============================
+// Declaration merging: the interfaces below add the new columns to existing tables and the new tables to Database.
+type TextArray = ColumnType<string[], string[] | undefined, string[]>;
+
+export interface ProductsTable { compare_at_paise: number | null; tax_rate_code: string | null }
+export interface ProductVariantsTable { compare_at_paise: number | null }
+export interface CartsTable { coupon_code: string | null }
+export interface RefundsTable {
+  return_id: string | null; method: 'provider' | 'manual' | null; reference: string | null; failure_reason: string | null; processed_by: string | null;
+}
+export type ShipmentStatus = 'pending' | 'processing' | 'packed' | 'shipped' | 'in_transit' | 'delivered' | 'failed_delivery' | 'cancelled';
+export interface ShipmentsTable {
+  status: Generated<ShipmentStatus>; tracking_url: string | null; label: JsonWithDefault; courier_response: JsonNullable;
+  in_transit_at: Timestamp | null; failed_at: Timestamp | null; failure_reason: string | null; cancelled_at: Timestamp | null;
+}
+export interface InvoicesTable {
+  billing_address: JsonWithDefault; seller_details: JsonWithDefault; notes: string | null; voided_at: Timestamp | null; void_reason: string | null;
+  created_by: string | null; currency: Generated<string>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+  shipping_address: JsonWithDefault; discount_paise: Generated<number>; shipping_paise: Generated<number>; place_of_supply: string | null; tax_split: JsonWithDefault;
+}
+export interface InvoiceItemsTable {
+  id: Generated<string>; invoice_id: string; order_item_id: string | null; position: Generated<number>; description: string; sku: string | null;
+  hsn_code: string | null; qty: number; unit_price_paise: number; tax_rate_id: string | null; tax_rate_bp: Generated<number>; tax_paise: Generated<number>;
+  line_total_paise: number;
+}
+
+// 8 — notifications
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+export interface StaffNotificationsTable {
+  id: Generated<string>; kind: string; severity: Generated<NotificationSeverity>; title: string; body: string | null; entity_type: string | null;
+  entity_id: string | null; link: string | null; permission: string; dedupe_key: string | null; created_at: Generated<Timestamp>;
+}
+export interface StaffNotificationReadsTable { notification_id: string; staff_user_id: string; read_at: Generated<Timestamp> }
+
+// 1 — pricing & discounts
+export interface PriceHistoryTable {
+  id: Generated<string>; product_id: string; variant_id: string | null; field: 'price' | 'compare_at'; old_paise: number | null; new_paise: number | null;
+  source: 'manual' | 'bulk' | 'scheduled'; change_id: string | null; staff_user_id: string | null; created_at: Generated<Timestamp>;
+}
+export type PriceChangeStatus = 'scheduled' | 'applied' | 'cancelled' | 'failed';
+export interface PriceChangesTable {
+  id: Generated<string>; product_id: string; variant_id: string | null; new_price_paise: number | null; new_compare_at_paise: number | null;
+  clear_compare_at: Generated<boolean>; effective_at: Timestamp; status: Generated<PriceChangeStatus>; note: string | null; failure_reason: string | null;
+  created_by: string | null; created_at: Generated<Timestamp>; applied_at: Timestamp | null; cancelled_at: Timestamp | null;
+}
+export type DiscountKind = 'percent' | 'fixed';
+export type DiscountScope = 'order' | 'products' | 'categories' | 'collections';
+export interface DiscountsTable {
+  id: Generated<string>; name: string; code: string | null; kind: DiscountKind; value: number; scope: Generated<DiscountScope>;
+  product_ids: TextArray; category_ids: TextArray; collection_ids: TextArray; min_order_paise: number | null; max_discount_paise: number | null;
+  starts_at: Timestamp | null; ends_at: Timestamp | null; is_active: Generated<boolean>; usage_limit: number | null; per_customer_limit: number | null;
+  campaign_id: string | null; created_by: string | null; updated_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface DiscountRedemptionsTable {
+  id: Generated<string>; discount_id: string; order_id: string; customer_id: string | null; code: string | null; amount_paise: number; created_at: Generated<Timestamp>;
+}
+
+// 2 — shipping
+export interface ShippingZonesTable {
+  id: Generated<string>; name: string; states: TextArray; pin_prefixes: TextArray; is_active: Generated<boolean>; sort_order: Generated<number>;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ShippingRatesTable {
+  id: Generated<string>; zone_id: string; name: string; amount_paise: number; free_from_paise: number | null; min_order_paise: number | null;
+  max_order_paise: number | null; cod_allowed: Generated<boolean>; cod_fee_paise: number | null; est_days_min: number | null; est_days_max: number | null;
+  is_active: Generated<boolean>; sort_order: Generated<number>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface CouriersTable {
+  code: string; name: string; mode: Generated<'manual' | 'api'>; tracking_url_template: string | null; is_active: Generated<boolean>; notes: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ShipmentEventsTable {
+  id: Generated<string>; shipment_id: string; status: string; note: string | null; source: Generated<'staff' | 'courier' | 'system'>;
+  staff_user_id: string | null; created_at: Generated<Timestamp>;
+}
+
+// 3 — returns & refunds
+export type ReturnStatus = 'requested' | 'under_review' | 'info_requested' | 'approved' | 'rejected' | 'pickup_scheduled' | 'picked_up' | 'received'
+  | 'inspection' | 'refund_pending' | 'refunded' | 'exchange_pending' | 'exchanged' | 'completed' | 'cancelled';
+export interface ReturnReasonsTable { code: string; label: string; sort_order: Generated<number>; is_active: Generated<boolean> }
+export interface ReturnRequestsTable {
+  id: Generated<string>; number: Generated<string>; order_id: string; customer_id: string | null; status: Generated<ReturnStatus>;
+  resolution: 'refund' | 'exchange' | null; reason_code: string; description: string | null; staff_note: string | null; pickup_at: Timestamp | null;
+  pickup_ref: string | null; received_at: Timestamp | null; inspection_result: 'ok' | 'damaged' | 'not_returnable' | null; inspection_note: string | null;
+  refund_amount_paise: number | null; requested_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; completed_at: Timestamp | null;
+}
+export interface ReturnItemsTable {
+  id: Generated<string>; return_id: string; order_item_id: string; qty: number; restock: Generated<boolean>; restocked_qty: Generated<number>;
+  exchange_variant_id: string | null;
+}
+export interface ReturnEventsTable {
+  id: Generated<string>; return_id: string; from_status: string | null; to_status: string; note: string | null;
+  actor_type: 'customer' | 'staff' | 'system'; staff_user_id: string | null; created_at: Generated<Timestamp>;
+}
+
+// 4 — marketing
+export interface CampaignsTable {
+  id: Generated<string>; name: string; description: string | null; starts_at: Timestamp | null; ends_at: Timestamp | null; is_active: Generated<boolean>;
+  product_ids: TextArray; collection_ids: TextArray; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface BannersTable {
+  id: Generated<string>; placement: 'home' | 'shop'; heading: string; body: string | null; cta_label: string | null; link: string | null;
+  image_path: string | null; starts_at: Timestamp | null; ends_at: Timestamp | null; is_active: Generated<boolean>; sort_order: Generated<number>;
+  campaign_id: string | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface CustomerSegmentsTable {
+  id: Generated<string>; name: string; description: string | null; rules: JsonWithDefault; created_by: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+
+// 5 — support
+export type TicketStatus = 'open' | 'assigned' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed';
+export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export interface SupportCategoriesTable { code: string; label: string; sort_order: Generated<number>; is_active: Generated<boolean> }
+export interface SupportTicketsTable {
+  id: Generated<string>; number: Generated<string>; customer_id: string | null; contact_email: string; contact_name: string | null; order_id: string | null;
+  subject: string; category_code: string; priority: Generated<TicketPriority>; status: Generated<TicketStatus>; assigned_to: string | null;
+  channel: Generated<'store' | 'staff'>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; resolved_at: Timestamp | null;
+  closed_at: Timestamp | null; last_customer_reply_at: Timestamp | null; last_staff_reply_at: Timestamp | null;
+}
+export interface SupportMessagesTable {
+  id: Generated<string>; ticket_id: string; author_type: 'customer' | 'staff' | 'system'; staff_user_id: string | null; customer_id: string | null;
+  body: string; is_internal: Generated<boolean>; created_at: Generated<Timestamp>;
+}
+
+// 6 — finance
+export interface FinanceNotesTable {
+  id: Generated<string>; kind: 'credit' | 'debit'; number: string | null; invoice_id: string | null; order_id: string | null; refund_id: string | null;
+  reason: string; amount_paise: number; tax_paise: Generated<number>; note_date: Generated<Date>; status: Generated<'draft' | 'issued' | 'void'>;
+  created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ExpenseCategoriesTable { code: string; label: string; sort_order: Generated<number>; is_active: Generated<boolean> }
+export interface ExpensesTable {
+  id: Generated<string>; category_code: string; amount_paise: number; tax_paise: Generated<number>; vendor_id: string | null; expense_date: Date | string;
+  description: string; reference: string | null; voided_at: Timestamp | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export type VendorPaymentMethod = 'bank_transfer' | 'upi' | 'cheque' | 'cash' | 'card' | 'other';
+export interface VendorPaymentsTable {
+  id: Generated<string>; vendor_id: string; purchase_order_id: string | null; amount_paise: number; status: Generated<'scheduled' | 'paid' | 'void'>;
+  paid_on: Date | string | null; method: VendorPaymentMethod | null; reference: string | null; notes: string | null; created_by: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+
+// 7 — carts
+export interface CartRecoveryTable {
+  cart_id: string; status: Generated<'open' | 'emailed' | 'recovered' | 'dismissed'>; campaign_id: string | null; emailed_at: Timestamp | null;
+  email_count: Generated<number>; note: string | null; updated_by: string | null; updated_at: Generated<Timestamp>;
+}
+
+export interface Database {
+  invoice_items: InvoiceItemsTable;
+  staff_notifications: StaffNotificationsTable; staff_notification_reads: StaffNotificationReadsTable;
+  price_history: PriceHistoryTable; price_changes: PriceChangesTable; discounts: DiscountsTable; discount_redemptions: DiscountRedemptionsTable;
+  shipping_zones: ShippingZonesTable; shipping_rates: ShippingRatesTable; couriers: CouriersTable; shipment_events: ShipmentEventsTable;
+  return_reasons: ReturnReasonsTable; return_requests: ReturnRequestsTable; return_items: ReturnItemsTable; return_events: ReturnEventsTable;
+  campaigns: CampaignsTable; banners: BannersTable; customer_segments: CustomerSegmentsTable;
+  support_categories: SupportCategoriesTable; support_tickets: SupportTicketsTable; support_messages: SupportMessagesTable;
+  finance_notes: FinanceNotesTable; expense_categories: ExpenseCategoriesTable; expenses: ExpensesTable; vendor_payments: VendorPaymentsTable;
+  cart_recovery: CartRecoveryTable;
 }

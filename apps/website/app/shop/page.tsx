@@ -4,6 +4,7 @@ import { indexCatalogue, plural, url, type Index } from '@/lib/catalogue-utils';
 import type { Product } from '@/lib/types';
 import { Crumbs, NotFoundBlock } from '@/components/ui';
 import ShopResults, { type Tab } from '@/components/ShopResults';
+import PromoBanners from '@/components/PromoBanners';
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || '';
@@ -48,6 +49,7 @@ export default async function Shop({ searchParams }: { searchParams: SP }) {
         <h1>{v.sub && <small>{v.sub.toUpperCase()} /</small>}{v.title}</h1>
         <div className="st-plp-aside"><p className="st-result-count">{plural(v.list.length, 'product')}</p>{v.aside && <p>{v.aside}</p>}</div>
       </header>
+      <PromoBanners placement="shop" wrap={false} />
       <ShopResults productIds={v.list.map(p => p.id)} tabs={v.tabs} isNew={v.isNew} base={v.base} initialSort={one(q.sort)} />
       <p className="st-footnote">Prices in INR.</p>
     </div>

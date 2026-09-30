@@ -81,6 +81,15 @@ export async function startFakeRazorpay({keyId = TEST_KEY_ID, keySecret, webhook
         if (!p || p.status !== 'authorized' || body.amount !== p.amount) return send(400, {error: {code: 'BAD_REQUEST_ERROR', description: 'cannot capture'}});
         p.status = 'captured'; p.captured = true; orders.get(p.order_id).status = 'paid'; return send(200, p);
       }
+      if (req.method === 'POST' && (m = url.pathname.match(/^\/v1\/payments\/([\w]+)\/refund$/))) {
+        // ERP module 3 tests: refunds of captured payments, never more than what is left; state.refundFails forces a refusal.
+        const p = payments.get(m[1]);
+        const done = p?.amount_refunded ?? 0;
+        if (!p || p.status !== 'captured' && p.status !== 'refunded' || state.refundFails || !(body.amount > 0) || body.amount > p.amount - done)
+          return send(400, {error: {code: 'BAD_REQUEST_ERROR', description: state.refundFails ? 'Refund declined (test)' : 'The refund amount is invalid'}});
+        p.amount_refunded = done + body.amount; if (p.amount_refunded === p.amount) p.status = 'refunded';
+        return send(200, {id: `rfnd_${Math.random().toString(36).slice(2, 16)}`, entity: 'refund', amount: body.amount, currency: p.currency, payment_id: p.id, notes: body.notes ?? {}, status: 'processed'});
+      }
       if (req.method === 'GET' && (m = url.pathname.match(/^\/v1\/orders\/([\w]+)\/payments$/))) {
         const items = [...payments.values()].filter(p => p.order_id === m[1]); return send(200, {entity: 'collection', count: items.length, items});
       }

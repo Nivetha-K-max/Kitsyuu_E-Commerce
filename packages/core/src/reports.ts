@@ -13,7 +13,7 @@ export const REPORTS = ['sales', 'products', 'inventory', 'customers', 'purchasi
 export type ReportKind = typeof REPORTS[number];
 
 const day = sql`(o.created_at at time zone 'Asia/Kolkata')::date`;
-function checkRange(r: ReportRange) {
+export function checkRange(r: ReportRange) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(r.from) || !/^\d{4}-\d{2}-\d{2}$/.test(r.to) || r.from > r.to) throw new DomainError('invalid', 'Choose a valid date range.');
   if ((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 > 3660) throw new DomainError('invalid', 'Choose a range of at most ten years.');
 }
@@ -100,7 +100,7 @@ export async function productionReport(db: Db, actor: StaffPrincipal, r: ReportR
 }
 
 // ---------------------------------------------------------------- CSV
-const csvCell = (v: unknown) => {
+export const csvCell = (v: unknown) => {
   let t = v === null || v === undefined ? '' : String(v);
   if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;                       // never let a spreadsheet run a cell as a formula
   return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;

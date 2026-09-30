@@ -39,6 +39,11 @@ export function testPaymentProvider(opts: { secret?: string; production?: boolea
         status: r.status as 'captured' | 'failed', method: 'test', failureReason: r.status === 'failed' ? 'Declined (test payment)' : null };
       return p;
     },
+    /** Test provider: no money moves. Refunds of test payments are "processed" immediately, and say so in their id. */
+    async refund(input) {
+      if (!/^testpay_[a-f0-9]{16}$/.test(input.paymentId)) throw new Error('Not a test payment.');
+      return { id: `testrfnd_${randomBytes(8).toString('hex')}`, amountPaise: input.amountPaise, status: 'processed' };
+    },
     async listPayments() { return []; },
   };
 }

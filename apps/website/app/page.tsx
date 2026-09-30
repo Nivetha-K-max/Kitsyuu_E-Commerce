@@ -1,5 +1,6 @@
 import BrandHero from '@/components/BrandHero';
 import StoreHome from '@/components/StoreHome';
+import PromoBanners from '@/components/PromoBanners';
 
 /* The KITSYUU homepage is the store, as on a typical online shop: the layout's one store header, the brand hero, then the
    store homepage (new arrivals, the rotation banner, categories, featured pieces), then the layout's one footer.
@@ -8,6 +9,7 @@ export default function Home() {
   return (
     <>
       <BrandHero />
+      <PromoBanners placement="home" />
       <StoreHome />
     </>
   );

@@ -602,3 +602,6 @@ export const announcementInput = z.object({
   publish: z.enum(['yes', 'no']).default('no').transform(v => v === 'yes'),
 });
 export const customerNoteInput = z.object({ customerId: uuid, body: z.string().trim().min(1, 'Write the note.').max(1000, 'Keep notes under 1000 characters.') });
+
+// ERP modules 1–8 (pricing, shipping, returns, marketing, support, finance, carts, notifications).
+export * from './erp.ts';

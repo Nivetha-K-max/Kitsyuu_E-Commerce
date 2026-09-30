@@ -7,12 +7,12 @@ import 'server-only';
      build may set; that case logs a loud warning.
    - PAYMENT_PROVIDER=razorpay → the Razorpay adapter (needs its credentials; a provider that cannot start is logged and off).
    - Shipping: the delivery charge chosen in admin Settings (M10; "Not set up yet" and no charge until then).
-   - Discounts: none at launch (core default: no rules). A shipping provider or discount
-     rules are added here when they are decided.
+   - Discounts (ERP module 1): the discounts set up in the admin, applied only while the admin switch discounts.enabled
+     is on (off at launch, so nothing changes until the business decides).
    See apps/website/.env.example. */
 import type { StoreCart } from './types';
 import { db } from './server';
-import { defaultCommerceConfig, razorpayProvider, settingsShipping, testPaymentProvider, type CommerceConfig, type PaymentProvider, type PricedCart, type TestPaymentProvider } from '@kitsyuu/core';
+import { databaseDiscounts, defaultCommerceConfig, razorpayProvider, settingsShipping, testPaymentProvider, type CommerceConfig, type PaymentProvider, type PricedCart, type TestPaymentProvider } from '@kitsyuu/core';
 
 const g = globalThis as unknown as { __kitsyuuPayment?: PaymentProvider | null };
 
@@ -55,8 +55,8 @@ export const testProvider = (): TestPaymentProvider | null => {
 /** Providers by code, for work on orders that may have been started with any of them (expiry). */
 export const paymentProviders = (): Record<string, PaymentProvider> => { const p = paymentProvider(); return p ? { [p.code]: p } : {}; };
 
-/** Delivery charge from admin Settings (M10; "Not set up" until the business chooses one). No discounts at launch. */
-export function commerceConfig(): CommerceConfig { return { ...defaultCommerceConfig, shipping: settingsShipping(() => db()) }; }
+/** Delivery charge from admin Settings (M10; "Not set up" until the business chooses one); discounts from the admin (off by default). */
+export function commerceConfig(): CommerceConfig { return { ...defaultCommerceConfig, shipping: settingsShipping(() => db()), discountSource: databaseDiscounts }; }
 
 /** The cart as the browser receives it: display values only (never ids of other rows, never stock counts beyond "available"). */
 export function clientCart(c: PricedCart, problemText: (l: PricedCart['lines'][number]) => string): StoreCart {
