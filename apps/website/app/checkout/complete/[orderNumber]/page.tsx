@@ -19,7 +19,9 @@ export default async function CompletePage({ params }: { params: Promise<{ order
   if (!parsed.success) notFound();
   const me = await requireCustomer(`/checkout/complete/${encodeURIComponent(orderNumber)}`);
   const o = await getCustomerOrder(db(), me, parsed.data.orderNumber).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
-  const paid = o.paymentStatus === 'paid' && o.status !== 'cancelled';
+  // Paid online, or a cash-on-delivery order confirmed for delivery (second pass).
+  const codOpen = o.paymentMethod === 'cod' && o.codStatus === 'to_collect' && o.status !== 'cancelled';
+  const paid = (o.paymentStatus === 'paid' && o.status !== 'cancelled') || codOpen;
   const s = o.shipping, c = o.contact;
   const link = `/account/orders/${encodeURIComponent(o.orderNumber)}`;
   return (
@@ -31,7 +33,7 @@ export default async function CompletePage({ params }: { params: Promise<{ order
         <p className="st-confirm-lead" data-next-step>{NEXT_STEP[o.status]}</p>
         <dl className="st-confirm-ref">
           <dt>Order number</dt><dd data-order-number>{o.orderNumber}</dd>
-          <dt>Payment</dt><dd data-payment-status={o.paymentStatus ?? 'none'}>{o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : 'Not started'}{o.paidAt && <> · {formatDateTime(o.paidAt)}</>}</dd>
+          <dt>Payment</dt><dd data-payment-status={o.paymentStatus ?? 'none'}>{codOpen ? 'Cash on delivery' : o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : 'Not started'}{o.paidAt && <> · {formatDateTime(o.paidAt)}</>}</dd>
         </dl>
         {!paid && o.canPay && <p><Link className="button" href={`/checkout/pay/${encodeURIComponent(o.orderNumber)}`}>Pay now</Link></p>}
       </section>

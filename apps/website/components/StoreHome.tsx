@@ -7,6 +7,7 @@ import Newsletter from '@/components/Newsletter';
 import HeroTurntable from '@/components/HeroTurntable';
 import WishButton from '@/components/WishButton';
 import Choreo from '@/components/Choreo';
+import { getBrandCopy } from '@/lib/content';
 
 /* KITSYUU v2 store homepage (the brand hero above it, components/BrandHero.tsx, is unchanged). Same sections, copy,
    links and products as before; the images now carry the movement (see components/Choreo.tsx and the "KITSYUU v2"
@@ -27,7 +28,7 @@ function Cutout({ p, className = '', eager = false }: { p: Product; className?: 
 }
 
 export default async function StoreHome() {
-  const idx = indexCatalogue(await getCatalogue());
+  const [idx, copy] = await Promise.all([getCatalogue().then(indexCatalogue), getBrandCopy()]);   // brand wording: client change request
   const na = idx.collection('new-arrivals'), featured = idx.featured();
   const outer = idx.inCategory('outerwear').filter(p => !imageOf(p).held).slice(0, 2);
   const naList = na?.products ?? [];
@@ -57,6 +58,8 @@ export default async function StoreHome() {
                       <div className={`st-card-media ch-na-media${imageOf(p).held ? ' is-held' : ''}`}>
                         <span className="st-tag st-tag-new">New</span>
                         <Cutout p={p} eager />
+                        {/* The picture opens the product too (the name link below is the one keyboard users reach). */}
+                        <Link className="st-media-link" href={url.product(p)} tabIndex={-1} aria-hidden="true" />
                       </div>
                       <div className="st-card-body ch-na-info">
                         <p className="ch-count" aria-hidden="true"><b>{pad(i + 1)}</b> / {pad(naList.length)}</p>
@@ -83,13 +86,13 @@ export default async function StoreHome() {
         <div className="st-hero-shade"></div>
         <div className="ch-rot-frames" aria-hidden="true">
           {rotation.map((p, i) => (
-            <span key={p.id} className={`ch-frame ch-rot-frame ch-rot-frame-${i + 1}`} data-reveal><Cutout p={p} eager /></span>
+            <Link key={p.id} href={url.product(p)} tabIndex={-1} className={`ch-frame ch-rot-frame ch-rot-frame-${i + 1}`} data-reveal><Cutout p={p} eager /></Link>
           ))}
         </div>
         <div className="st-hero-copy st-wrap">
-          <p className="eyebrow"><span></span>KITSYUU STORE / JAPAN → INDIA</p>
+          <p className="eyebrow" data-brand-home-eyebrow><span></span>{copy.homeEyebrow}</p>
           <h2 id="st-hero-title">Shop the<br /><em>rotation.</em></h2>
-          <p>Japanese streetwear, brought to India. Oversized shapes, washed layers and hardware details, piece by piece.</p>
+          <p data-brand-home-intro>{copy.homeIntro}</p>
           <div className="st-hero-actions">
             <Link className="button" href={url.shop()}>Shop all products</Link>
             <Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>New arrivals <span aria-hidden="true">↗</span></Link>

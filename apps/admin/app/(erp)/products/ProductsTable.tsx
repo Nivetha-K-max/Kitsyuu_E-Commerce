@@ -23,13 +23,16 @@ export interface ProductRowView {
 }
 type Category = { id: string; label: string; parent_id: string | null };
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
-export interface ProductFilters { q: string; category: string; status: 'all' | 'active' | 'inactive'; pmin: string; pmax: string }
+export interface ProductFilters { q: string; category: string; status: 'all' | 'active' | 'inactive' | 'draft' | 'archived'; pmin: string; pmax: string;
+  /** Client change request: filter by collection and by availability (combine with the others). */
+  collection: string; stock: 'all' | 'in_stock' | 'low' | 'out' }
 
 const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const STATUS_FILTERS = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Draft or archived' }] as const;
+const STATUS_FILTERS = [{ value: 'active', label: 'Active' }, { value: 'draft', label: 'Draft' }, { value: 'archived', label: 'Archived' }, { value: 'inactive', label: 'Draft or archived' }] as const;
+const STOCK_FILTERS = [{ value: 'in_stock', label: 'In stock' }, { value: 'low', label: 'Low or out of stock (a size)' }, { value: 'out', label: 'Sold out' }] as const;
 
-export default function ProductsTable({ rows, categories, filters, canWrite, bulkAction, statusAction }: {
-  rows: ProductRowView[]; categories: Category[]; filters: ProductFilters; canWrite: boolean; bulkAction: Action; statusAction: Action;
+export default function ProductsTable({ rows, categories, collections = [], filters, canWrite, bulkAction, statusAction }: {
+  rows: ProductRowView[]; categories: Category[]; collections?: { id: string; label: string }[]; filters: ProductFilters; canWrite: boolean; bulkAction: Action; statusAction: Action;
 }) {
   const router = useRouter();
   const path = usePathname();
@@ -47,6 +50,8 @@ export default function ProductsTable({ rows, categories, filters, canWrite, bul
     if (next.status !== 'all') sp.set('status', next.status);
     if (next.pmin) sp.set('pmin', next.pmin);
     if (next.pmax) sp.set('pmax', next.pmax);
+    if (next.collection) sp.set('collection', next.collection);
+    if (next.stock !== 'all') sp.set('stock', next.stock);
     navigate(() => router.replace(sp.size ? `${path}?${sp}` : path, { scroll: false }));
   };
   // Search applies 300 ms after typing stops.
@@ -66,7 +71,8 @@ export default function ProductsTable({ rows, categories, filters, canWrite, bul
     const p = c?.parent_id ? categories.find(x => x.id === c.parent_id) : null;
     return c ? (p ? `${p.label} / ${c.label}` : c.label) : id;
   };
-  const filtered = !!(filters.q || filters.category || filters.status !== 'all' || filters.pmin || filters.pmax);
+  const filtered = !!(filters.q || filters.category || filters.status !== 'all' || filters.pmin || filters.pmax || filters.collection || filters.stock !== 'all');
+  const colLabel = (id: string) => collections.find(c => c.id === id)?.label ?? id;
 
   async function setStatus(p: ProductRowView, status: 'draft' | 'archived') {
     const yes = await ask(status === 'archived'
@@ -160,6 +166,12 @@ export default function ProductsTable({ rows, categories, filters, canWrite, bul
       <FilterMenu label="Status" value={filters.status === 'all' ? null : STATUS_FILTERS.find(s => s.value === filters.status)?.label ?? null}
         options={STATUS_FILTERS.map(s => ({ value: s.value, label: s.label }))} selected={filters.status}
         onPick={v => setParams({ status: (v ?? 'all') as ProductFilters['status'] })} />
+      {collections.length > 0 && <FilterMenu label="Collection" value={filters.collection ? colLabel(filters.collection) : null}
+        options={collections.map(c => ({ value: c.id, label: c.label }))} selected={filters.collection || 'all'}
+        onPick={v => setParams({ collection: v ?? '' })} />}
+      <FilterMenu label="Availability" value={filters.stock === 'all' ? null : STOCK_FILTERS.find(s => s.value === filters.stock)?.label ?? null}
+        options={STOCK_FILTERS.map(s => ({ value: s.value, label: s.label }))} selected={filters.stock}
+        onPick={v => setParams({ stock: (v ?? 'all') as ProductFilters['stock'] })} />
       <PriceFilter min={filters.pmin} max={filters.pmax} onApply={(pmin, pmax) => setParams({ pmin, pmax })} />
       {filtered && <button type="button" className="btn quiet sm" onClick={() => { setQ(''); navigate(() => router.replace(path, { scroll: false })); }}>Clear filters</button>}
     </>
@@ -170,6 +182,8 @@ export default function ProductsTable({ rows, categories, filters, canWrite, bul
       {filters.q && <Chip name="Search" value={`“${filters.q}”`} onRemove={() => { setQ(''); setParams({ q: '' }); }} />}
       {filters.category && <Chip name="Category" value={catLabel(filters.category)} onRemove={() => setParams({ category: '' })} />}
       {filters.status !== 'all' && <Chip name="Status" value={STATUS_FILTERS.find(s => s.value === filters.status)?.label ?? ''} onRemove={() => setParams({ status: 'all' })} />}
+      {filters.collection && <Chip name="Collection" value={colLabel(filters.collection)} onRemove={() => setParams({ collection: '' })} />}
+      {filters.stock !== 'all' && <Chip name="Availability" value={STOCK_FILTERS.find(s => s.value === filters.stock)?.label ?? ''} onRemove={() => setParams({ stock: 'all' })} />}
       {(filters.pmin || filters.pmax) && <Chip name="Price" value={`${filters.pmin ? `₹${filters.pmin}` : 'any'} – ${filters.pmax ? `₹${filters.pmax}` : 'any'}`} onRemove={() => setParams({ pmin: '', pmax: '' })} />}
     </div>
   ) : null;

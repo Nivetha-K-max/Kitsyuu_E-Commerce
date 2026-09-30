@@ -11,7 +11,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 
 type View =
   | { notFound: true; title: string; text: string }
-  | { notFound?: false; title: string; list: Product[]; trail: { label: string; href?: string }[]; sub: string | null; aside: string; tabs: { label: string; items: Tab[]; current: string } | null; isNew: boolean; base: string };
+  | { notFound?: false; seoTitle?: string | null; seoDescription?: string | null; title: string; list: Product[]; trail: { label: string; href?: string }[]; sub: string | null; aside: string; tabs: { label: string; items: Tab[]; current: string } | null; isNew: boolean; base: string };
 
 function resolve(idx: Index, catId: string, colId: string): View {
   const trail: { label: string; href?: string }[] = [{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }];
@@ -19,7 +19,7 @@ function resolve(idx: Index, catId: string, colId: string): View {
     const col = idx.collection(colId);
     if (!col) return { notFound: true, title: 'Collection not found', text: 'This collection is not part of the KITSYUU catalogue.' };
     return { title: col.label, list: col.products, trail: [...trail, { label: col.label }], sub: null, isNew: colId === 'new-arrivals', tabs: null, base: 'Collection order',
-      aside: '' };
+      aside: '', seoTitle: col.seoTitle ?? null, seoDescription: col.seoDescription ?? null };
   }
   if (catId) {
     const cat = idx.cats.get(catId);
@@ -35,7 +35,9 @@ function resolve(idx: Index, catId: string, colId: string): View {
 
 export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
   const q = await searchParams, v = resolve(indexCatalogue(await getCatalogue()), one(q.category), one(q.collection));
-  return { title: v.title, description: 'Browse the KITSYUU catalogue: tops, bottoms and outerwear.' };
+  // A collection's own search-engine text when staff entered it (Collections → SEO); otherwise the defaults.
+  const seo = v.notFound ? null : v;
+  return { title: seo?.seoTitle || v.title, description: seo?.seoDescription || 'Browse the KITSYUU catalogue: tops, bottoms and outerwear.' };
 }
 
 export default async function Shop({ searchParams }: { searchParams: SP }) {

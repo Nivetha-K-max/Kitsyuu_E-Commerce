@@ -112,7 +112,7 @@ export async function createInvoiceForOrder(db: Db, actor: StaffPrincipal, input
   requirePermission(actor, 'finance.manage');
   return db.transaction().execute(async tx => {
     const o = await tx.selectFrom('orders').select(['id', 'order_number', 'status', 'customer_id', 'subtotal_paise', 'discount_paise', 'shipping_paise', 'tax_paise', 'total_paise',
-      'prices_include_tax', 'pricing', 'contact', 'shipping_address', 'created_at']).where('id', '=', input.orderId).forUpdate().executeTakeFirst();
+      'prices_include_tax', 'pricing', 'contact', 'shipping_address', 'billing_address', 'created_at']).where('id', '=', input.orderId).forUpdate().executeTakeFirst();
     if (!o) throw new NotFoundError('Order not found.');
     if (!(SOLD as readonly string[]).includes(o.status)) throw new ConflictError('An invoice can be issued for a paid order only.');
     if (await tx.selectFrom('invoices').select('id').where('order_id', '=', o.id).where('status', '=', 'issued').executeTakeFirst()) throw new ConflictError('This order already has an invoice. Void it first to issue a new one.');
@@ -149,7 +149,9 @@ export async function createInvoiceForOrder(db: Db, actor: StaffPrincipal, input
       id: sql<string>`gen_random_uuid()` as unknown as string, invoice_number: number, status: 'issued', order_id: o.id, customer_id: o.customer_id, financial_year: fy, issued_at: sql<Date>`now()` as unknown as Date,
       subtotal_paise: o.subtotal_paise, tax_paise: o.tax_paise, total_paise: o.total_paise, prices_include_tax: o.prices_include_tax,
       discount_paise: o.discount_paise, shipping_paise: o.shipping_paise, place_of_supply: placeOfSupply,
-      billing_address: JSON.stringify({ name: contact.name ?? ship.name ?? null, email: contact.email ?? null, phone: contact.phone ?? ship.phone ?? null, ...ship }),
+      // The billing address the customer gave at checkout, else the delivery address (client change request).
+      billing_address: JSON.stringify({ name: contact.name ?? ship.name ?? null, email: contact.email ?? null, phone: contact.phone ?? ship.phone ?? null, ...ship,
+        ...((o.billing_address ?? {}) as Record<string, unknown>) }),
       shipping_address: JSON.stringify(ship), seller_details: JSON.stringify({ ...seller, state: sellerState }), tax_split: JSON.stringify(split), created_by: actor.staffId,
     } as never).returning('id').executeTakeFirstOrThrow() as { id: string };
     await tx.insertInto('invoice_items').values(lines.map((l, idx) => ({ invoice_id: inv.id, order_item_id: l.it.id, position: idx, description: `${l.it.name} (size ${l.it.size})`,
@@ -178,7 +180,8 @@ export async function getInvoice(db: Db, actor: StaffPrincipal, invoiceId: strin
   requirePermission(actor, 'finance.read');
   const inv = await db.selectFrom('invoices as i').leftJoin('orders as o', 'o.id', 'i.order_id')
     .select(['i.id', 'i.invoice_number', 'i.status', 'i.issued_at', 'i.financial_year', 'i.subtotal_paise', 'i.discount_paise', 'i.shipping_paise', 'i.tax_paise', 'i.total_paise',
-      'i.prices_include_tax', 'i.place_of_supply', 'i.tax_split', 'i.billing_address', 'i.shipping_address', 'i.seller_details', 'i.void_reason', 'i.voided_at', 'o.order_number', 'o.id as order_id'])
+      'i.prices_include_tax', 'i.place_of_supply', 'i.tax_split', 'i.billing_address', 'i.shipping_address', 'i.seller_details', 'i.void_reason', 'i.voided_at', 'o.order_number', 'o.id as order_id',
+      'o.payment_method', 'o.payment_status', 'o.status as order_status', 'o.loyalty_points_used', 'o.loyalty_discount_paise', 'o.contact'])
     .where('i.id', '=', invoiceId).executeTakeFirst();
   if (!inv) throw new NotFoundError('Invoice not found.');
   const [items, notes] = await Promise.all([

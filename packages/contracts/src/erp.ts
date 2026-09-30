@@ -311,3 +311,66 @@ export const notificationListQuery = z.object({
 export const markNotificationsInput = z.object({
   ids: z.array(z.string().regex(/^\d{1,18}$/)).max(200).optional().transform(v => v ?? []), all: checkbox,
 }).superRefine((v, ctx) => { if (!v.all && !v.ids.length) ctx.addIssue({ code: 'custom', message: 'Nothing chosen.' }); });
+
+// ============================== client change request, first pass ==============================
+export const BULK_ACTIONS = ['publish', 'draft', 'archive', 'category', 'collection_add', 'collection_remove', 'attribute_add', 'attribute_remove', 'sale_percent', 'sale_clear'] as const;
+export const bulkEditInput = z.object({
+  productIds: z.array(productId).min(1, 'Select at least one product.').max(200, 'Select at most 200 products.'),
+  action: z.enum(BULK_ACTIONS, { message: 'Choose what to change.' }),
+  category: z.string().trim().max(130).optional(),        // "<categoryId>" or "<categoryId>/<subcategoryId>"
+  collectionId: z.string().trim().max(64).optional(),
+  attributeValue: z.string().trim().max(130).optional(), // "<attributeId>:<slug>"
+  /** Tag pickers: several collections / attribute values in one change (the single fields above still work). */
+  collectionIds: ids(z.string().trim().max(64), 50), attributeValues: ids(z.string().trim().max(130), 100),
+  percent: z.string().trim().max(6).optional(),
+  startsAt: dateTime(), endsAt: dateTime(),
+}).transform((v, ctx) => {
+  const fail = (path: string, message: string) => { ctx.addIssue({ code: 'custom', path: [path], message }); return z.NEVER; };
+  switch (v.action) {
+    case 'category': {
+      const [categoryId, subcategoryId] = (v.category ?? '').split('/');
+      if (!categoryId) return fail('category', 'Choose a category.');
+      return { productIds: v.productIds, action: v.action, categoryId, subcategoryId: subcategoryId || null } as const;
+    }
+    case 'collection_add': case 'collection_remove': {
+      const collectionIds = [...new Set([...v.collectionIds, ...(v.collectionId ? [v.collectionId] : [])])];
+      if (!collectionIds.length) return fail('collectionIds', 'Choose at least one collection.');
+      return { productIds: v.productIds, action: v.action, collectionIds } as const;
+    }
+    case 'attribute_add': case 'attribute_remove': {
+      const values = [...new Set([...v.attributeValues, ...(v.attributeValue ? [v.attributeValue] : [])])].map(x => x.split(':'));
+      if (!values.length || values.some(([a, s]) => !a || !s)) return fail('attributeValues', 'Choose at least one attribute value.');
+      return { productIds: v.productIds, action: v.action, values: values.map(([attributeId, slug]) => ({ attributeId, slug })) } as const;
+    }
+    case 'sale_percent': {
+      const pct = Number(v.percent);
+      if (!/^\d{1,2}(\.\d)?$/.test(v.percent ?? '') || pct <= 0 || pct >= 100) return fail('percent', 'Enter a percentage off, e.g. 10.');
+      if (v.startsAt && v.endsAt && v.endsAt <= v.startsAt) return fail('endsAt', 'The sale must end after it starts.');
+      return { productIds: v.productIds, action: v.action, percent: pct, startsAt: v.startsAt, endsAt: v.endsAt } as const;
+    }
+    default:
+      return { productIds: v.productIds, action: v.action } as const;
+  }
+});
+export const productSaleInput = z.object({
+  productId, variantId: optUuid, salePrice: money({ optional: true }), startsAt: dateTime(), endsAt: dateTime(),
+}).superRefine((v, ctx) => { if (v.startsAt && v.endsAt && v.endsAt <= v.startsAt) ctx.addIssue({ code: 'custom', path: ['endsAt'], message: 'The sale must end after it starts.' }); });
+export const newsletterSignupInput = z.object({
+  email: z.string().trim().toLowerCase().max(254).pipe(z.email({ message: 'Enter a valid email address.' })),
+  consent: z.literal('on', { message: 'Tick the box to agree to receive our emails.' }),
+  source: z.string().regex(/^[a-z][a-z_]{1,31}$/).optional().transform(v => v ?? 'store'),
+});
+export const subscriberIdInput = z.object({ subscriberId: uuid });
+export const sizeChartInput = z.object({
+  chartId: optUuid, name: reqText(1, 80, 'Enter a name, e.g. Tops.'), unit: z.enum(['cm', 'in']), table: z.string().max(4000),
+  notes: optText(500), active: checkbox, categoryIds: ids(categoryId, 200), productIds: ids(productId, 500),
+});
+export const raiseProductionPoInput = z.object({
+  productionOrderId: uuid, vendorId: uuid, notes: optText(300),
+  materialIds: ids(uuid, 50), qtys: z.array(z.string().max(20)).max(50).optional().transform(v => v ?? []),
+}).transform((v, ctx) => {
+  if (v.materialIds.length !== v.qtys.length) { ctx.addIssue({ code: 'custom', message: 'Check the quantities.' }); return z.NEVER; }
+  const lines = v.materialIds.map((materialId, i) => ({ materialId, qty: Number(v.qtys[i] || 0) }));
+  if (lines.some(l => !Number.isFinite(l.qty) || l.qty < 0 || l.qty > 1e9)) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Quantities must be numbers of 0 or more.' }); return z.NEVER; }
+  return { productionOrderId: v.productionOrderId, vendorId: v.vendorId, notes: v.notes, lines };
+});

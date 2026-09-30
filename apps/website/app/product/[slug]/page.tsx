@@ -33,16 +33,27 @@ export default async function ProductPage({ params }: { params: Params }) {
       <article className="st-pdp" aria-labelledby="st-pdp-title">
         <Gallery p={p} images={imgs} caption={caption} />
         <div className="st-info">
-          <p className="st-pdp-meta"><b>{idx.categoryPath(p)}</b><br />SKU {p.sku}</p>
+          <p className="st-pdp-meta"><b>{idx.categoryPath(p)}</b></p>
           <h1 id="st-pdp-title">{p.name}</h1>
           <p className="st-pdp-price">{formatMoney(p.price)}{p.compareAt ? <s className="st-was" aria-label={`was ${formatMoney(p.compareAt)}`}>{formatMoney(p.compareAt)}</s> : null}</p>
           <p className="st-colour"><i style={{ background: p.colour?.swatches?.[0] || 'transparent' }} aria-hidden="true"></i>Colour <b>{p.colour?.label}</b></p>
           <p className="st-desc">{p.description}</p>
           <BuyForm productId={p.id} />
+          {p.sizeChart && (
+            <details className="st-size-chart" data-size-chart>
+              <summary>Size chart</summary>
+              <div className="st-table-wrap"><table>
+                <caption className="sr-only">{p.sizeChart.name} size chart, in {p.sizeChart.unit === 'in' ? 'inches' : 'centimetres'}</caption>
+                <thead><tr><th scope="col">Size</th>{p.sizeChart.headers.map(h => <th key={h} scope="col">{h} ({p.sizeChart!.unit})</th>)}</tr></thead>
+                <tbody>{p.sizeChart.rows.map(r => <tr key={r.size}><th scope="row">{r.size}</th>{r.values.map((v, i) => <td key={i}>{v}</td>)}</tr>)}</tbody>
+              </table></div>
+              {p.sizeChart.notes && <p className="st-note">{p.sizeChart.notes}</p>}
+            </details>
+          )}
           <div className="st-details">
             {p.features?.length > 0 && <details open><summary>Details</summary><ul>{p.features.map(f => <li key={f}>{f}</li>)}</ul></details>}
             <details><summary>Material &amp; care</summary><p>{[p.material, p.care, p.origin].some(Boolean) ? [p.material, p.care, p.origin].filter(Boolean).map((t, i) => <span key={i}>{i > 0 && <br />}{t}</span>) : 'Material, care and origin details have not been supplied yet.'}</p></details>
-            <details><summary>Product data</summary><dl><dt>SKU</dt><dd>{p.sku}</dd><dt>Catalogue ref</dt><dd>{p.catalogueRef}</dd><dt>Category</dt><dd>{idx.categoryPath(p)}</dd></dl></details>
+            <details><summary>Product data</summary><dl><dt>Catalogue ref</dt><dd>{p.catalogueRef}</dd><dt>Category</dt><dd>{idx.categoryPath(p)}</dd></dl></details>
           </div>
         </div>
       </article>

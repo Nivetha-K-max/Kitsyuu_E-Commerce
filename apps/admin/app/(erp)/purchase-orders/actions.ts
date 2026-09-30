@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createPurchaseOrderInput, poLineInput, poStatusInput, receiveGoodsInput, removePoLineInput, type ActionState } from '@kitsyuu/contracts';
-import { createPurchaseOrder, receiveGoods, removePoLine, setPoLine, setPurchaseOrderStatus } from '@kitsyuu/core';
+import { createPurchaseOrderInput, purchaseOrderWithLinesInput, poLineInput, poStatusInput, receiveGoodsInput, removePoLineInput, type ActionState } from '@kitsyuu/contracts';
+import { createPurchaseOrder, createPurchaseOrderWithLines, receiveGoods, removePoLine, setPoLine, setPurchaseOrderStatus } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -12,6 +12,14 @@ export async function createPurchaseOrderAction(_: ActionState, form: FormData):
   const actor = await requireActor();
   let id = '';
   const r = await handle(createPurchaseOrderInput, form, async input => { id = (await createPurchaseOrder(db(), actor, input, await requestContext())).id; });
+  if (id) { refresh(); redirect(`/purchase-orders/${id}`); }
+  return r;
+}
+/** One vendor, several materials, one purchase order (client change request). */
+export async function createPurchaseOrderWithLinesAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  let id = '';
+  const r = await handle(purchaseOrderWithLinesInput, form, async input => { id = (await createPurchaseOrderWithLines(db(), actor, input, await requestContext())).id; });
   if (id) { refresh(); redirect(`/purchase-orders/${id}`); }
   return r;
 }

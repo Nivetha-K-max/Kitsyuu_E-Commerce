@@ -12,15 +12,17 @@ export const metadata: Metadata = { title: 'Orders' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
+const VIEWS = [{ id: 'all', label: 'All' }, { id: 'active', label: 'Active' }, { id: 'draft', label: 'Draft' }, { id: 'abandoned', label: 'Abandoned' }] as const;
+
 export default async function OrdersPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'orders.read')) return <><PageHead section="Commerce" title="Orders" /><Forbidden permission="orders.read" /></>;
   const sp = await searchParams;
-  const parsed = orderListQuery.safeParse({ q: one(sp.q), status: one(sp.status), payment: one(sp.payment), from: one(sp.from), to: one(sp.to), page: one(sp.page) });
-  const query: OrderListQuery = parsed.success ? parsed.data : { status: 'all', payment: 'all', page: 1, q: undefined, from: undefined, to: undefined };
-  const { rows, hasNext } = await listOrders(db(), actor, query);
+  const parsed = orderListQuery.safeParse({ q: one(sp.q), status: one(sp.status), payment: one(sp.payment), from: one(sp.from), to: one(sp.to), page: one(sp.page), view: one(sp.view) });
+  const query: OrderListQuery = parsed.success ? parsed.data : { status: 'all', payment: 'all', page: 1, q: undefined, from: undefined, to: undefined, view: 'all' };
+  const { rows, hasNext, abandonHours } = await listOrders(db(), actor, query);
   const filtered = !!(query.q || query.status !== 'all' || query.payment !== 'all' || query.from || query.to);
-  const link = (page: number) => `/orders?${new URLSearchParams({ ...Object.fromEntries(Object.entries({ q: query.q, status: query.status, payment: query.payment, from: query.from, to: query.to })
+  const link = (page: number) => `/orders?${new URLSearchParams({ ...Object.fromEntries(Object.entries({ q: query.q, status: query.status, payment: query.payment, from: query.from, to: query.to, view: query.view })
     .filter(([, v]) => v && v !== 'all') as [string, string][]), page: String(page) })}`;
   return (
     <>
@@ -31,6 +33,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
             .filter(([, v]) => v && v !== 'all') as [string, string][])}`}>Export CSV</a>
       </PageHead>
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
+      {/* Client change request: one order list, split into views (no copies of orders). */}
+      <nav className="tabs actions" aria-label="Order views" data-order-views>
+        {VIEWS.map(v => <Link key={v.id} className={`btn sm ${query.view === v.id ? '' : 'ghost'}`} href={v.id === 'all' ? '/orders' : `/orders?view=${v.id}`}
+          aria-current={query.view === v.id ? 'page' : undefined} data-order-view={v.id}>{v.label}</Link>)}
+      </nav>
+      {query.view !== 'all' && <p className="note" data-order-view-note>{query.view === 'active' ? 'Confirmed orders not yet delivered: paid, being packed or shipped.'
+        : query.view === 'draft' ? `Placed but not paid yet, less than ${abandonHours} hours ago. They are not confirmed orders.`
+        : <>Still unpaid {abandonHours} hours after they were placed (the abandoned-checkout time in Settings). Reminder emails are handled under <Link href="/carts/checkouts">Carts → Abandoned checkouts</Link>.</>}</p>}
       <FilterForm className="actions" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>
         <input id="o-q" name="q" className="input" placeholder="Order no., email, name, phone or SKU" defaultValue={query.q ?? ''} />
@@ -57,7 +67,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
         </Empty>
       ) : (
         <div className="table-wrap"><table data-orders-table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Placed (IST)</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th><th className="num">Action</th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Placed (IST)</th><th className="num">Items</th><th className="num">Total</th><th>Payment</th><th>Status</th>{query.view === 'abandoned' && <><th>Last activity</th><th>Reminder</th></>}<th className="num">Action</th></tr></thead>
           <tbody>{rows.map(o => (
             <tr key={o.id} data-order-row={o.order_number}>
               <td className="mono nowrap"><Link className="row-link" href={`/orders/${o.id}`}>{o.order_number}</Link></td>
@@ -66,7 +76,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
               <td className="num">{o.units}<div className="note">{o.lines} line{o.lines === 1 ? '' : 's'}</div></td>
               <td className="num money" data-total>₹{paiseToRupees(o.total_paise)}</td>
               <td>{o.payment_status ? <StatusBadge status={o.payment_status} /> : <span className="note">—</span>}</td>
-              <td><StatusBadge status={o.status} /></td>
+              <td><StatusBadge status={o.status} />{o.payment_method === 'cod' && <div className="note">cash on delivery</div>}</td>
+              {query.view === 'abandoned' && <><td className="nowrap">{formatDateTime(o.updated_at)}</td><td>{o.reminder ? o.reminder : <span className="note">not sent</span>}</td></>}
               <td className="num"><Link className="btn ghost sm" href={`/orders/${o.id}`} aria-label={`View order ${o.order_number}`}>View</Link></td>
             </tr>))}
           </tbody>

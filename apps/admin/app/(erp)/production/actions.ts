@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { consumeMaterialInput, createProductionOrderInput, productionInputInput, productionStatusInput, qualityCheckInput, type ActionState } from '@kitsyuu/contracts';
-import { consumeMaterial, createProductionOrder, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
+import { consumeMaterialInput, createProductionOrderInput, productionInputInput, productionStatusInput, qualityCheckInput, raiseProductionPoInput, type ActionState } from '@kitsyuu/contracts';
+import { consumeMaterial, createProductionOrder, raisePurchaseOrderForProduction, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -49,5 +49,14 @@ export async function qualityCheckAction(_: ActionState, form: FormData): Promis
     return { ok: true, message: input.passed > 0 ? `Completed. ${input.passed} piece(s) added to stock (now ${res.stockAfter}).` : 'Completed. No pieces passed, so stock is unchanged.' };
   });
   if (r.ok) refresh(String(form.get('productionOrderId')));
+  return r;
+}
+
+/** Client change request: raise a draft purchase order for this production order's material shortfall (linked to it). */
+export async function raiseProductionPoAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  let poId = '';
+  const r = await handle(raiseProductionPoInput, form, async input => { poId = (await raisePurchaseOrderForProduction(db(), actor, input, await requestContext())).id; });
+  if (poId) { refresh(String(form.get('productionOrderId') ?? '')); revalidatePath('/purchase-orders'); redirect(`/purchase-orders/${poId}`); }
   return r;
 }

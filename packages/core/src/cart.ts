@@ -5,7 +5,8 @@
 import { sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
 import { cartLineInput, ConflictError, MAX_LINES_PER_REQUEST, MAX_QTY_PER_LINE, NotFoundError, type CartLineInput } from '@kitsyuu/contracts';
 import type { CustomerPrincipal } from '@kitsyuu/auth';
-import { priceOrder, type CartTotals, type CommerceConfig, type ShipTo } from './pricing.ts';
+import { priceOrder, type CartTotals, type CommerceConfig, type PaymentChoice, type ShipTo } from './pricing.ts';
+import { basePriceSql, effectivePriceSql } from './sale.ts';
 
 export type LineProblem = 'unavailable' | 'out_of_stock' | 'insufficient_stock';
 export interface PricedLine {
@@ -25,12 +26,12 @@ export const lineProblemText = (l: PricedLine) => (l.problem ? PROBLEM_TEXT[l.pr
 
 type VariantRow = {
   variant_id: string; product_id: string; slug: string; size: string; sku: string; name: string; stock_qty: number; is_active: boolean;
-  unit_paise: number; image_path: string | null;
+  unit_paise: number; base_paise: number; image_path: string | null;
 };
 /** Sizes of products on sale, with the price that applies (a size may override its product's price). */
 export const variantQuery = (q: Queryable) => q.selectFrom('product_variants as v').innerJoin('products as p', 'p.id', 'v.product_id')
   .select(['v.id as variant_id', 'v.product_id', 'p.slug', 'v.size', 'v.sku', 'p.name', 'v.stock_qty', 'v.is_active',
-    sql<number>`coalesce(v.price_paise, p.price_paise)`.as('unit_paise'),
+    effectivePriceSql.as('unit_paise'), basePriceSql.as('base_paise'),   // the sale price while a sale runs (client change request)
     sql<string | null>`(select i.storage_path from public.product_images i where i.product_id = p.id order by i.is_primary desc, i.sort_order limit 1)`.as('image_path')])
   .where('p.status', '=', 'active');           // the website role only sees active products anyway (RLS)
 
@@ -61,7 +62,7 @@ export async function lockActiveCart(tx: Tx, customerId: string): Promise<string
 
 /** The lines of a cart priced from the database. Lines whose product is no longer on sale are removed (and counted).
     Lines with a problem are shown but not counted in the totals. */
-export async function priceCart(q: Queryable, cartId: string | null, opts: { config?: CommerceConfig; customerId?: string | null; shipTo?: ShipTo | null } = {}): Promise<PricedCart> {
+export async function priceCart(q: Queryable, cartId: string | null, opts: { config?: CommerceConfig; customerId?: string | null; shipTo?: ShipTo | null; payment?: PaymentChoice | null } = {}): Promise<PricedCart> {
   const items = cartId ? await q.selectFrom('cart_items').select(['id', 'variant_id', 'qty']).where('cart_id', '=', cartId).orderBy('created_at').orderBy('id').execute() : [];
   const rows = items.length ? await variantQuery(q).where('v.id', 'in', items.map(i => i.variant_id)).execute() : [];
   const byVariant = new Map(rows.map(r => [r.variant_id, r]));
@@ -72,8 +73,8 @@ export async function priceCart(q: Queryable, cartId: string | null, opts: { con
   return { lines, totals, canCheckout: lines.length > 0 && lines.every(l => !l.problem), removed: gone.length };
 }
 
-export async function getCustomerCart(db: Db, p: CustomerPrincipal, config?: CommerceConfig, shipTo?: ShipTo | null): Promise<PricedCart> {
-  return priceCart(db, await activeCartId(db, p.customerId), { config, customerId: p.customerId, shipTo: shipTo ?? null });
+export async function getCustomerCart(db: Db, p: CustomerPrincipal, config?: CommerceConfig, shipTo?: ShipTo | null, payment?: PaymentChoice | null): Promise<PricedCart> {
+  return priceCart(db, await activeCartId(db, p.customerId), { config, customerId: p.customerId, shipTo: shipTo ?? null, payment: payment ?? null });
 }
 
 const onlyLeft = (v: VariantRow) => `Only ${v.stock_qty} of ${v.name}, size ${v.size}, ${v.stock_qty === 1 ? 'is' : 'are'} available.`;
@@ -146,4 +147,14 @@ export async function mergeGuestCart(db: Db, p: CustomerPrincipal, raw: unknown[
     }
     return { merged, skipped };
   });
+}
+
+/** Client change request: how often the store re-syncs a cart that has items with the server (current prices, sale prices,
+    stock), from Settings → Checkout → "Cart refresh interval". The client asked for 30 minutes. A refresh never removes or
+    reserves anything. */
+export const CART_REFRESH_DEFAULT_MINUTES = 30;
+export async function cartRefreshMinutes(q: Queryable): Promise<number> {
+  const r = await q.selectFrom('settings').select('value').where('key', '=', 'checkout.cart_refresh_minutes').executeTakeFirst();
+  const n = Number(r?.value);
+  return Number.isInteger(n) && n >= 5 && n <= 1440 ? n : CART_REFRESH_DEFAULT_MINUTES;
 }

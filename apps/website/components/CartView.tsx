@@ -69,7 +69,7 @@ export default function CartView() {
                   <Link className="st-line-media" href={href} tabIndex={-1} aria-hidden="true"><LineImage line={l} /></Link>
                   <div className="st-line-info">
                     <h2 className="st-line-name"><Link href={href}>{l.name}</Link></h2>
-                    <p className="st-line-meta">SKU {l.sku}<br />Size <b>{l.size}</b></p>
+                    <p className="st-line-meta">Size <b>{l.size}</b></p>
                     <p className="st-line-unit">{formatMoney(l.price)} <small>each</small></p>
                     {l.problem && <p className="st-line-problem" role="alert" data-line-problem>{l.problem}</p>}
                   </div>

@@ -355,6 +355,72 @@ try {
   ok('[expiry] the daily job (Vercel Cron, GET + CRON_SECRET) cancels the expired order and returns its stock', run.status === 200 && result.expired >= 1
     && (await q(`select status from orders where id = $1`, [held.id]))[0].status === 'cancelled' && (await stock(P2.vid)) === stockHeld + 1, JSON.stringify(result));
 
+  // ---------- client second pass: cash on delivery and loyalty points at checkout (local test settings, restored after) ----------
+  {
+    const cid = await customerId('buyer.mobile@test.local');
+    const setKey = (k, v) => q(`insert into settings (key, value, description) values ($1, $2::jsonb, 'browser test') on conflict (key) do update set value = excluded.value`, [k, JSON.stringify(v)]);
+    const prevMethod = (await q(`select value from settings where key = 'shipping.method'`))[0]?.value;
+    const states = (await q(`select array_agg(distinct state) s from addresses where customer_id = $1`, [cid]))[0].s;
+    const [z] = await q(`insert into shipping_zones (name, states, pin_prefixes) values ('E2E COD zone', $1, '{}') returning id`, [states]);
+    await q(`insert into shipping_rates (zone_id, name, amount_paise, cod_allowed, cod_fee_paise) values ($1, 'Standard', 5000, true, 4000)`, [z.id]);
+    await setKey('shipping.method', 'zones');
+    await setStock(P3.vid, 5);
+
+    // COD off (the default): no payment choice is shown.
+    await addToCart(BASE, P3, 1);
+    await go('/checkout', '!!document.querySelector("#st-checkout-form")');
+    ok('[cod] off by default: no cash-on-delivery choice at checkout', !(await exists('[data-payment-methods]')));
+    await setKey('payments.cod_enabled', 'on');
+    await go('/checkout', '!!document.querySelector("#st-checkout-form")');
+    ok('[cod] switched on: offered where the delivery rate allows it', await exists('[data-payment-methods] input[value=cod]:not([disabled])'), (await text('main')).slice(0, 300));
+    await click('[data-payment-methods] input[value=cod]');
+    ok('[cod] choosing it adds the delivery rate’s COD fee to the total', await until(`location.search.includes('pay=cod') && !!document.querySelector('[data-cod-fee]')`) && /40/.test(await text('[data-cod-fee]')));
+    const start = await ev('location.href');
+    await ev(`(document.querySelector('#st-checkout-form button[type=submit]').click(),true)`);
+    const placed = await until(`location.href !== ${JSON.stringify(start)} && location.pathname.startsWith('/checkout/complete/')`, 20000);
+    ok('[cod] placed without an online payment; the confirmation says cash on delivery', placed && /Cash on delivery/.test(await text('[data-payment-status]')), await loc());
+    const codNumber = decodeURIComponent((await ev('location.pathname')).split('/').pop());
+    const [co] = await q(`select status, payment_method, cod_status, cod_fee_paise from orders where order_number = $1`, [codNumber]);
+    ok('[cod] stored as a COD order going straight to packing, cash to collect', co?.status === 'processing' && co.payment_method === 'cod' && co.cod_status === 'to_collect' && co.cod_fee_paise === 4000, JSON.stringify(co));
+    ok('[cod] one confirmation email, saying to pay in cash on delivery', mailsAbout(SERVER_LOG, codNumber) === 1 && /in cash when it is delivered/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
+    await go(`/account/orders/${encodeURIComponent(codNumber)}`, '!!document.querySelector("main h1")');
+    ok('[cod] the order page says what to pay on delivery', /Cash on delivery · pay ₹/.test(await text('[data-payment-method=cod]')));
+    await setKey('payments.cod_enabled', 'off');
+
+    // Loyalty points: the customer has 200 points (a staff adjustment); ₹1 per point (test values).
+    await q(`insert into loyalty_accounts (customer_id, balance) values ($1, 200)`, [cid]);
+    await q(`insert into loyalty_transactions (customer_id, points, kind, reason, remaining) values ($1, 200, 'adjust', 'browser test', 200)`, [cid]);
+    await setKey('loyalty.enabled', 'on'); await setKey('loyalty.point_value_paise', 100);
+    await addToCart(BASE, P3, 1);
+    await go('/checkout', '!!document.querySelector("#st-checkout-form")');
+    ok('[points] checkout offers the customer’s points and their value', /Use 200 of my 200 points \(₹200/.test(await text('[data-points]')), await text('[data-points]'));
+    const before = await text('[data-total]');
+    await click('[data-points] input[name=usePoints]');
+    ok('[points] using them takes their value off the total (priced on the server)', await until(`location.search.includes('points=1') && document.querySelector('[data-total]')?.innerText !== ${JSON.stringify(before)}`)
+      && /Loyalty points \(200\)/.test(await text('.st-summary')));
+    // Place it from this page (points applied); a fresh /checkout would not use them.
+    const at = await ev('location.href');
+    await ev(`(document.querySelector('#st-checkout-form button[type=submit]').click(),true)`);
+    await until(`location.href !== ${JSON.stringify(at)} && location.pathname.startsWith('/checkout/pay/')`, 20000);
+    const pointsOrder = decodeURIComponent((await ev('location.pathname')).split('/').pop());
+    const [po] = await q(`select loyalty_points_used, loyalty_discount_paise from orders where order_number = $1`, [pointsOrder]);
+    ok('[points] the order records the points used; the balance is spent', po?.loyalty_points_used === 200 && po.loyalty_discount_paise === 20000
+      && (await q(`select balance from loyalty_accounts where customer_id = $1`, [cid]))[0].balance === 0, JSON.stringify(po));
+    await go('/account/points', '!!document.querySelector("main h1")');
+    ok('[points] the account shows the balance and history', /0/.test(await text('[data-points-balance]')) && /Used on an order/.test(await text('[data-points-history]')));
+    ok('[points] Points is in the account menu', /points/i.test(await text('.st-account-nav')));
+    await b.viewport(390, 844, true);
+    await go('/account/points', '!!document.querySelector("main h1")');
+    ok('[points] the points page fits a phone', (await overflow()) <= 1);
+    await b.viewport(1440, 900);
+
+    // Restore the local test settings for the rest of the run.
+    await q(`delete from settings where key in ('payments.cod_enabled', 'loyalty.enabled', 'loyalty.point_value_paise')`);
+    if (prevMethod === undefined) await q(`delete from settings where key = 'shipping.method'`); else await setKey('shipping.method', prevMethod);
+    await q(`update shipping_zones set is_active = false where id = $1`, [z.id]);
+    check();
+  }
+
   // ---------- database unavailable ----------
   await go(`${DOWN_BASE}/checkout`, '!!document.querySelector("main h1")');
   await until(`/not available right now/i.test(document.body.innerText)`);

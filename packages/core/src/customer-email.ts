@@ -13,6 +13,7 @@ export const CUSTOMER_EMAILS = {
   'refund.processed': 'notifications.refund_processed',
   'support.reply': 'notifications.support_reply',
   'cart.reminder': 'notifications.abandoned_cart',
+  'checkout.reminder': 'notifications.abandoned_checkout',
 } as const;
 export type CustomerEmailEvent = keyof typeof CUSTOMER_EMAILS;
 

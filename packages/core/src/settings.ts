@@ -10,7 +10,7 @@ import type { MutationContext } from './staff.ts';
 import { ALERT_KINDS } from './alerts.ts';
 
 export type SettingType =
-  | { kind: 'integer'; min: number; max: number; unit?: string }
+  | { kind: 'integer'; min: number; max: number; unit?: string; /** may be cleared (stored as null) */ optional?: boolean }
   | { kind: 'text'; maxLength?: number; pattern?: string; patternHint?: string; multiline?: boolean; optional?: boolean }
   | { kind: 'choice'; options: readonly { value: string; label: string }[] }
   /** Rupees in the form, stored as integer paise. Optional money settings may be cleared (stored as null). */
@@ -66,7 +66,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('shipping.flat_rate_paise', 'Flat delivery charge', 'Shipping', 'Charged once per order when the flat rate is chosen.', { kind: 'money' }),
   // M12: when a purchase counts as "bought" for reviews. Not decided yet, so it starts closed (no reviews can be written).
   def('reviews.eligibility', 'Who can review', 'Reviews', 'Customers can review an item once their order reaches this point. Reviews are always checked by staff before they appear.',
-    { kind: 'choice', options: [{ value: 'off', label: 'Closed (no reviews yet)' }, { value: 'paid', label: 'After payment' }, { value: 'delivered', label: 'After delivery' }] }),
+    { kind: 'choice', options: [{ value: 'off', label: 'Closed (no reviews yet)' }, { value: 'paid', label: 'Customers who bought it, after payment' }, { value: 'delivered', label: 'Customers who bought it, after delivery' }] }),
   // M17: which customer emails are sent is the business's choice; each starts off.
   def('notifications.order_shipped', 'Email when an order ships', 'Customer emails', 'Sends the customer an email (with the tracking number, if entered) when an order is marked shipped.',
     { kind: 'choice', options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }] }),
@@ -88,7 +88,29 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('notifications.return_status', 'Emails about return requests', 'Customer emails', 'Sends the customer an email when their return request is approved, rejected, needs information, or is completed.', ON_OFF),
   def('notifications.refund_processed', 'Email when a refund is made', 'Customer emails', 'Sends the customer an email when a refund is recorded as processed.', ON_OFF),
   def('notifications.support_reply', 'Email when staff reply to a ticket', 'Customer emails', 'Sends the customer an email when staff reply to their support ticket (internal notes are never sent).', ON_OFF),
+  // Client change request, first pass.
+  def('pricing.max_sale_discount_percent', 'Maximum sale discount', 'Discounts', 'Staff cannot set a sale price more than this % below the price (staff with the sale override permission can). With no value there is no limit.',
+    { kind: 'integer', min: 1, max: 99, unit: '%' }),
+  def('checkout.cart_refresh_minutes', 'Cart refresh interval', 'Checkout', 'While a customer has items in the cart, the store re-checks the cart with the server this often (current prices, sale prices, sold-out sizes). The client asked for 30 minutes, which is used until a value is set here. Nothing is removed or reserved.',
+    { kind: 'integer', min: 5, max: 1440, unit: 'minutes' }),
+  def('checkout.abandoned_after_hours', 'Abandoned checkout after', 'Checkout', 'An order still unpaid this long after it was placed counts as an abandoned checkout. The client asked for 24 hours, which is used until a value is set here.',
+    { kind: 'integer', min: 1, max: 720, unit: 'hours' }),
+  def('notifications.abandoned_checkout', 'Abandoned-checkout reminder email', 'Customer emails', 'Sends one reminder to a customer whose order is still unpaid after the abandoned-checkout time. Only sent when an email provider is configured.', ON_OFF),
   def('notifications.abandoned_cart', 'Abandoned-cart reminder emails', 'Customer emails', 'Allows staff to send a reminder email for an abandoned cart (never sent automatically).', ON_OFF),
+  // Client change request, second pass: cash on delivery and loyalty points. Everything starts off / empty.
+  def('payments.cod_enabled', 'Cash on delivery', 'Payments', 'When on, customers can choose to pay in cash on delivery where the delivery rate allows it (Shipping → Zones and rates: "Cash on delivery allowed" and its COD fee). The order goes straight to packing; staff record the cash when it is collected.', ON_OFF),
+  def('payments.cod_discount', 'Cash on delivery discount', 'Payments', 'An amount taken off orders paid in cash on delivery. Leave empty for none. (A COD fee is set per delivery rate.)', { kind: 'money', optional: true }),
+  def('payments.cod_min_order', 'Cash on delivery from', 'Payments', 'Cash on delivery is offered for orders of at least this value (items after discounts). Leave empty for no minimum.', { kind: 'money', optional: true }),
+  def('payments.cod_max_order', 'Cash on delivery up to', 'Payments', 'Cash on delivery is offered for orders up to this value (items after discounts). Leave empty for no maximum.', { kind: 'money', optional: true }),
+  def('loyalty.enabled', 'Loyalty points', 'Loyalty', 'Master switch. When off, customers do not earn or use points (balances are kept, and staff can still adjust them).', ON_OFF),
+  def('loyalty.earn_points_per_100', 'Points earned per ₹100', 'Loyalty', 'Points a customer earns for every ₹100 of items they pay for (after discounts; not delivery or fees). Leave empty: no points are earned.',
+    { kind: 'integer', min: 1, max: 10_000, unit: 'points', optional: true }),
+  def('loyalty.earn_when', 'Points are earned', 'Loyalty', 'When an order earns its points. A cancelled order gives back the points it used and loses the points it earned.',
+    { kind: 'choice', options: [{ value: '', label: 'Not set (no points are earned)' }, { value: 'paid', label: 'When the order is paid' }, { value: 'delivered', label: 'When the order is delivered' }] }),
+  def('loyalty.point_value_paise', 'Value of one point', 'Loyalty', 'What one point takes off an order at checkout. Leave empty: points cannot be used yet.', { kind: 'money', optional: true }),
+  def('loyalty.min_redeem_points', 'Fewest points per order', 'Loyalty', 'The fewest points a customer can use on one order. Leave empty for no minimum.', { kind: 'integer', min: 1, max: 1_000_000, unit: 'points', optional: true }),
+  def('loyalty.max_redeem_points', 'Most points per order', 'Loyalty', 'The most points a customer can use on one order. Leave empty for no maximum (points can never take off more than the items cost).', { kind: 'integer', min: 1, max: 1_000_000, unit: 'points', optional: true }),
+  def('loyalty.expiry_months', 'Points expire after', 'Loyalty', 'Unused points expire this many months after they were added. Leave empty: points never expire.', { kind: 'integer', min: 1, max: 120, unit: 'months', optional: true }),
   ...Object.entries(ALERT_KINDS).map(([kind, k]) => def(`alerts.${kind}`, k.label, 'Staff alerts',
     `Show "${k.label}" in the staff notification centre (seen by staff with ${k.permission}). On unless switched off.`,
     { kind: 'choice', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] })),
@@ -101,7 +123,7 @@ export const POLICY_NOTES = [
   { label: 'Payment provider', value: 'Configured per deployment (off by default).', source: 'Website environment (PAYMENT_PROVIDER). Not set from the admin.' },
   { label: 'Shipping charges', value: 'Set under Shipping above.', source: 'Chosen by the business; until then nothing is charged and the store says "Not set up yet".' },
   { label: 'Discounts', value: 'None at launch: off unless "Discounts and coupons" is switched on.', source: 'Business decision (2026-09-27). Discounts are set up under Pricing.' },
-  { label: 'Cash on delivery', value: 'Not offered at checkout.', source: 'Rates can record whether COD is allowed and its fee, but COD checkout needs a business decision before it is switched on.' },
+  { label: 'Cash on delivery', value: 'Off until switched on under Payments above.', source: 'Where it is offered and its fee come from each delivery rate (Shipping → Zones and rates); a discount and an order value range are set above.' },
 ] as const;
 
 export interface SettingRow extends SettingDef { value: unknown; updatedAt: Date | null; updatedBy: string | null; canEdit: boolean }
@@ -142,6 +164,7 @@ function parseValue(d: SettingDef, raw: string): unknown {
     return Math.round(Number(v) * 100);
   }
   if (d.type.kind === 'integer') {
+    if (!raw.trim() && d.type.optional) return null;
     if (!/^\d{1,9}$/.test(raw)) throw new DomainError('invalid', 'Enter a whole number.');
     const n = Number(raw);
     if (n < d.type.min || n > d.type.max) throw new DomainError('invalid', `Enter a number from ${d.type.min} to ${d.type.max}.`);

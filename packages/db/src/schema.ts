@@ -412,7 +412,7 @@ export interface StaffNotificationReadsTable { notification_id: string; staff_us
 
 // 1 — pricing & discounts
 export interface PriceHistoryTable {
-  id: Generated<string>; product_id: string; variant_id: string | null; field: 'price' | 'compare_at'; old_paise: number | null; new_paise: number | null;
+  id: Generated<string>; product_id: string; variant_id: string | null; field: 'price' | 'compare_at' | 'sale'; old_paise: number | null; new_paise: number | null;
   source: 'manual' | 'bulk' | 'scheduled'; change_id: string | null; staff_user_id: string | null; created_at: Generated<Timestamp>;
 }
 export type PriceChangeStatus = 'scheduled' | 'applied' | 'cancelled' | 'failed';
@@ -536,3 +536,54 @@ export interface Database {
   finance_notes: FinanceNotesTable; expense_categories: ExpenseCategoriesTable; expenses: ExpensesTable; vendor_payments: VendorPaymentsTable;
   cart_recovery: CartRecoveryTable;
 }
+
+// ============================== client change request, first pass (migration 20261001003700) ==============================
+export interface ProductsTable { sale_price_paise: number | null; sale_starts_at: Timestamp | null; sale_ends_at: Timestamp | null; size_chart_id: string | null }
+export interface ProductVariantsTable { sale_price_paise: number | null }
+export interface CategoriesTable { size_chart_id: string | null }
+export interface OrdersTable { billing_address: ColumnType<unknown, string | null | undefined, never> }
+export interface CheckoutRemindersTable {
+  order_id: string; status: 'sending' | 'sent' | 'failed'; recipient: string; error: string | null; created_at: Generated<Timestamp>; sent_at: Timestamp | null;
+}
+export interface NewsletterSubscribersTable {
+  id: Generated<string>; email: string; status: Generated<'subscribed' | 'unsubscribed'>; consent_text: string; consented_at: Generated<Timestamp>;
+  source: Generated<string>; customer_id: string | null; unsubscribe_token_hash: Buffer; unsubscribed_at: Timestamp | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface SizeChartsTable {
+  id: Generated<string>; name: string; unit: Generated<'cm' | 'in'>; headers: string[]; rows: JsonWithDefault; notes: string | null; is_active: Generated<boolean>;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ProductionPurchaseOrdersTable { production_order_id: string; purchase_order_id: string; created_by: string | null; created_at: Generated<Timestamp> }
+export interface Database {
+  checkout_reminders: CheckoutRemindersTable; newsletter_subscribers: NewsletterSubscribersTable; size_charts: SizeChartsTable;
+  production_purchase_orders: ProductionPurchaseOrdersTable;
+}
+
+// ============================== client change request, second pass (migration 20261002003800) ==============================
+export type PaymentMethod = 'online' | 'cod';
+export type CodStatus = 'to_collect' | 'collected' | 'refused';
+export interface OrdersTable {
+  payment_method: ColumnType<PaymentMethod, PaymentMethod | undefined, never>; cod_status: CodStatus | null;
+  cod_fee_paise: ColumnType<number, number | undefined, never>;
+  loyalty_points_used: ColumnType<number, number | undefined, never>; loyalty_discount_paise: ColumnType<number, number | undefined, never>;
+}
+export type LoyaltyKind = 'earn' | 'redeem' | 'adjust' | 'import' | 'restore' | 'reverse' | 'expire';
+export interface LoyaltyAccountsTable { customer_id: string; balance: Generated<number>; updated_at: Generated<Timestamp> }
+export interface LoyaltyTransactionsTable {
+  id: Generated<string>; customer_id: string; points: number; kind: LoyaltyKind; order_id: string | null; reverses_id: string | null;
+  reason: string | null; staff_id: string | null; remaining: number | null; expires_at: Timestamp | null; created_at: Generated<Timestamp>;
+}
+export interface OrderEditsTable {
+  id: Generated<string>; order_id: string; staff_id: string | null; note: string; before: unknown; after: unknown;
+  total_before: number; total_after: number; refund_due_paise: Generated<number>; refund_id: string | null; created_at: Generated<Timestamp>;
+}
+export interface Database { loyalty_accounts: LoyaltyAccountsTable; loyalty_transactions: LoyaltyTransactionsTable; order_edits: OrderEditsTable }
+
+// ============================== collections grouped + attributes as tags (migration 20261003003900) ==============================
+export interface CollectionGroupsTable { id: string; label: string; sort_order: Generated<number>; created_at: Generated<Timestamp> }
+export interface CollectionsTable { group_id: string | null; seo_title: string | null; seo_description: string | null }
+export type AttributeSelection = 'single' | 'multi';
+export interface AttributesTable { selection: Generated<AttributeSelection> }
+export interface AttributeValuesTable { is_active: Generated<boolean>; swatch: string | null }
+export interface Database { collection_groups: CollectionGroupsTable }

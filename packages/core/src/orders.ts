@@ -11,6 +11,8 @@ import { applyOrderTransition, closeUnpaidPayments } from './order-state.ts';
 import { getShipment, recordShipmentForTransition } from './fulfilment.ts';
 import { listActiveCarriers } from './fulfilment/carrier.ts';
 import { cancelledOrderPaymentState, listPaymentExceptions } from './payments-admin.ts';
+import { earnForOrder, reverseOrderPoints } from './loyalty.ts';
+import { abandonedCheckoutHours } from './checkout-reminders.ts';
 
 export const ORDER_PAGE_SIZE = 50;
 const OPEN_STATUSES: OrderStatus[] = ['pending_payment', 'paid', 'processing', 'shipped'];
@@ -18,8 +20,15 @@ const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** The list filters, shared by the order list and the CSV export so both always select the same orders. */
-function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query: Omit<OrderListQuery, 'page'>): QB {
+function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query: Omit<OrderListQuery, 'page'>, abandonHours = 24): QB {
   let r = q as SelectQueryBuilder<any, any, any>;
+  // Views (client change request). Draft / Abandoned split the unpaid orders by the abandoned-checkout delay (Settings).
+  const view = query.view ?? 'all';
+  if (view === 'active') r = r.where('o.status', 'in', ['paid', 'processing', 'shipped']);
+  if (view === 'draft' || view === 'abandoned') {
+    r = r.where('o.status', 'in', ['pending_payment', 'payment_failed'])
+      .where('o.created_at', view === 'draft' ? '>' : '<=', sql<Date>`now() - make_interval(hours => ${abandonHours})`);
+  }
   if (query.q) {
     const like = `%${query.q.replace(/[\\%_]/g, m => '\\' + m)}%`;
     const term = query.q;
@@ -44,14 +53,16 @@ function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query
 
 export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderListQuery) {
   requirePermission(actor, 'orders.read');
+  const hours = await abandonedCheckoutHours(db);
   const q = filterOrders(db.selectFrom('orders as o')
-    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at',
+    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at', 'o.updated_at', 'o.payment_method',
+      sql<string | null>`(select r.status from public.checkout_reminders r where r.order_id = o.id)`.as('reminder'),
       sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
       sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
-      sql<number>`(select count(*)::int from public.order_items i where i.order_id = o.id)`.as('lines')]), query);
+      sql<number>`(select count(*)::int from public.order_items i where i.order_id = o.id)`.as('lines')]), query, hours);
   const rows = await q.orderBy('o.created_at', 'desc').orderBy('o.id', 'desc')
     .limit(ORDER_PAGE_SIZE + 1).offset((query.page - 1) * ORDER_PAGE_SIZE).execute();
-  return { rows: rows.slice(0, ORDER_PAGE_SIZE), hasNext: rows.length > ORDER_PAGE_SIZE };
+  return { rows: rows.slice(0, ORDER_PAGE_SIZE), hasNext: rows.length > ORDER_PAGE_SIZE, abandonHours: hours };
 }
 
 export const ORDER_EXPORT_MAX_ROWS = 5000;
@@ -68,7 +79,7 @@ export async function exportOrders(db: Db, actor: StaffPrincipal, query: Omit<Or
     .select(['o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.paid_at', 'o.total_paise', 'o.currency',
       sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
       sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
-      'sh.carrier_code', 'sh.tracking_number', 'sh.shipped_at', 'sh.delivered_at']), query)
+      'sh.carrier_code', 'sh.tracking_number', 'sh.shipped_at', 'sh.delivered_at']), query, await abandonedCheckoutHours(db))
     .orderBy('o.created_at', 'desc').orderBy('o.id', 'desc').limit(ORDER_EXPORT_MAX_ROWS + 1).execute();
   const truncated = rows.length > ORDER_EXPORT_MAX_ROWS;
   const head = ['Order', 'Placed', 'Status', 'Payment', 'Paid at', 'Total', 'Currency', 'Customer', 'Email', 'Units', 'Courier', 'Tracking', 'Shipped', 'Delivered'];
@@ -130,10 +141,15 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
     order: {
       id: o.id, orderNumber: o.order_number, status: o.status, paymentStatus: o.payment_status, currency: o.currency,
       subtotalPaise: o.subtotal_paise, totalPaise: o.total_paise, paidAt: o.paid_at, createdAt: o.created_at, updatedAt: o.updated_at,
+      // Second pass: how it is paid, the COD fee and the points used; the amounts that make up the total.
+      paymentMethod: o.payment_method, codStatus: o.cod_status, codFeePaise: o.cod_fee_paise, loyaltyPointsUsed: o.loyalty_points_used,
+      loyaltyDiscountPaise: o.loyalty_discount_paise, discountPaise: o.discount_paise, shippingPaise: o.shipping_paise, taxPaise: o.tax_paise, pricesIncludeTax: o.prices_include_tax,
       razorpayOrderId: o.razorpay_order_id, razorpayPaymentId: o.razorpay_payment_id,
     },
     contact: { name: text(contact.name), email: text(contact.email), phone: text(contact.phone) },
     shipping: { name: text(ship.full_name ?? ship.name), line1: text(ship.line1), line2: text(ship.line2), city: text(ship.city), state: text(ship.state), pin: text(ship.pin), country: text(ship.country) },
+    // Client change request: a separate billing address (null = same as the delivery address).
+    billingAddress: o.billing_address ? (b => ({ name: text(b.name), line1: text(b.line1), line2: text(b.line2), city: text(b.city), state: text(b.state), pin: text(b.pin), country: text(b.country) }))(o.billing_address as Record<string, unknown>) : null,
     items, history, integrity, customer, billing, stock, shipment, payment,
     allowedTransitions: can(actor, 'orders.update_status') ? [...ORDER_TRANSITIONS[o.status]] : [],
     carriers: (await listActiveCarriers(db)).map(c => ({ code: c.code, label: c.label })),
@@ -167,12 +183,15 @@ export async function updateOrderStatus(db: Db, actor: StaffPrincipal, input: Up
     }
     const h = { id: (await applyOrderTransition(tx, o, input.toStatus, { actor: 'staff', note: input.note })).historyId };
     if (input.toStatus === 'cancelled') await closeUnpaidPayments(tx, o.id);
+    // Second pass: loyalty points follow the order (given back / taken back on cancellation; earned on delivery if chosen).
+    const points = input.toStatus === 'cancelled' ? await reverseOrderPoints(tx, o.id, `Order ${o.order_number} cancelled`)
+      : input.toStatus === 'delivered' ? { earned: await earnForOrder(tx, o.id, 'delivered') } : null;
     // Shipped / delivered: the shipment details are written in this same transaction (M8 fulfilment).
     const shipment = await recordShipmentForTransition(tx, o.id, input.toStatus,
       { carrierCode: input.carrierCode, trackingNumber: input.trackingNumber }, actor.staffId);
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.status_update', entityType: 'orders', entityId: o.id,
       before: { status: o.status }, after: { status: input.toStatus },
-      metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released, ...(shipment ? { shipment } : {}) }, ...auditCtx(ctx) });
+      metadata: { order_number: o.order_number, history_id: h.id, note: input.note, stock_released: released, ...(shipment ? { shipment } : {}), ...(points ? { points } : {}) }, ...auditCtx(ctx) });
     return { orderNumber: o.order_number, from: o.status, to: input.toStatus, historyId: h.id, released };
   });
 }

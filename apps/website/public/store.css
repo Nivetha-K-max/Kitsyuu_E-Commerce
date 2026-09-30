@@ -628,7 +628,9 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 
 /* ---------- Shop the rotation ---------- */
 .ch-rot .st-hero-img{transform:scale(1.08) translateY(calc((var(--p,.5) - .5) * -7%));will-change:transform}
-.ch-rot-frames{position:absolute;inset:0;pointer-events:none}
+.ch-rot-frames{position:absolute;inset:0;pointer-events:none;z-index:2}
+.ch-rot-frame{pointer-events:auto;cursor:pointer}
+.st-media-link{position:absolute;inset:0;z-index:1}
 .ch-rot-frame{position:absolute;display:grid;place-items:center;aspect-ratio:4/5;box-shadow:0 0 0 1px #ffffff14}
 .ch-rot-frame img{width:auto;height:auto;max-width:78%;max-height:84%;object-fit:contain}
 .ch-rot-frame-1{right:clamp(16px,4vw,72px);top:11%;width:clamp(150px,14vw,240px);transform:translateY(calc((var(--p,.5) - .5) * -160px))}

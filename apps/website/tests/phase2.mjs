@@ -60,7 +60,7 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   let cartView = await ev(`[...document.querySelectorAll('.st-line')].map(l=>({k:l.dataset.line,name:l.querySelector('.st-line-name').textContent,meta:l.querySelector('.st-line-meta').innerText.replace(/\\s+/g,' '),qty:l.querySelector('[data-line-qty]').value,unit:l.querySelector('.st-line-unit').textContent,total:l.querySelector('.st-line-total').textContent,img:l.querySelector('img').src}))`);
   const sub = await ev(`document.querySelector('.st-summary dl dd').textContent`);
   const expectSub = hood.price * 11 + jeans.price;
-  ok(`[${tag}] cart page shows actual contents after navigation`, cartView.length === 3 && cartView[0].meta.toUpperCase().includes('SKU KTS-TOP-006') && cartView[0].meta.toUpperCase().includes('SIZE M') && cartView[2].meta.toUpperCase().includes('SIZE 32') && cartView.every(v => v.img.includes('/storage/v1/object/public/product-images/products/')), JSON.stringify(cartView.map(v => `${v.name} ${v.meta} q${v.qty} ${v.total}`)));
+  ok(`[${tag}] cart page shows actual contents after navigation`, cartView.length === 3 && !cartView[0].meta.toUpperCase().includes('SKU') && cartView[0].meta.toUpperCase().includes('SIZE M') && cartView[2].meta.toUpperCase().includes('SIZE 32') && cartView.every(v => v.img.includes('/storage/v1/object/public/product-images/products/')), JSON.stringify(cartView.map(v => `${v.name} ${v.meta} q${v.qty} ${v.total}`)));
   ok(`[${tag}] subtotal correct`, sub.replace(/[^0-9]/g, '') === String(expectSub), `${sub} vs ${expectSub}`);
   await ev('location.reload()'); await w(900); await b.eval(R);
   const afterReload = await ev(`document.querySelectorAll('.st-line').length`); c = await ev(counts);

@@ -46,7 +46,8 @@ async function anon(sqlText) {
 let manager, support, P;
 
 test('migration 2200: existing collections stay active and visible; nothing else changed', async () => {
-  assert.deepEqual(await q(`select id, is_active from collections order by id`), [{id: 'new-arrivals', is_active: true}]);
+  // (Men, Women and Sale were added hidden and empty by the client change request; the store still sees only New Arrivals.)
+  assert.deepEqual(await q(`select id, is_active from collections order by id`), [{id: 'men', is_active: false}, {id: 'new-arrivals', is_active: true}, {id: 'sale', is_active: false}, {id: 'women', is_active: false}]);
   assert.deepEqual((await anon(`select id from collections`)).map(r => r.id), ['new-arrivals']);
   assert.ok((await anon(`select count(*)::int n from collection_products`))[0].n > 0);
   assert.deepEqual(await q(`select count(*)::int n from products where seo_title is not null or seo_description is not null`), [{n: 0}]);
@@ -69,7 +70,7 @@ test('collections: created hidden, invisible to the store until shown with an ac
   await moveCollectionMember(db, manager, {collectionId: 'monsoon-edit', productId: P[2], direction: 'up'}, ctx);
   assert.deepEqual((await getCollection(db, manager, 'monsoon-edit')).members.map(m => m.id), [P[0], P[2], P[1]]);
   await moveCollection(db, manager, {collectionId: 'monsoon-edit', direction: 'up'}, ctx);
-  assert.deepEqual((await listCollections(db, manager)).map(c => c.id), ['monsoon-edit', 'new-arrivals']);
+  assert.deepEqual((await listCollections(db, manager)).map(c => c.id), ['new-arrivals', 'men', 'women', 'monsoon-edit', 'sale']);
   await updateCollection(db, manager, {collectionId: 'monsoon-edit', label: 'Monsoon', expectedLabel: 'Monsoon Edit'}, ctx);
   await assert.rejects(updateCollection(db, manager, {collectionId: 'monsoon-edit', label: 'X', expectedLabel: 'Monsoon Edit'}, ctx), ConflictError);
   const acts = (await q(`select action from audit_logs where entity_type = 'collections' and entity_id = 'monsoon-edit' order by id`)).map(r => r.action);

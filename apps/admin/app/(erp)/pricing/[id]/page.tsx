@@ -6,9 +6,9 @@ import { getProductPricing } from '@kitsyuu/core';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise } from '@/lib/format';
-import { rupeesField } from '@/lib/erp';
+import { istLocal, rupeesField } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
-import { cancelPriceChangeAction, schedulePriceAction, setPricingAction } from '../actions';
+import { cancelPriceChangeAction, schedulePriceAction, setPricingAction, setSaleAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Product pricing' };
 
@@ -55,22 +55,42 @@ export default async function ProductPricingPage({ params }: { params: Promise<{
           ) : <p className="note">You can view scheduled changes; changing them needs pricing.manage.</p>}
         </section>
       </div>
+      <section className="card" aria-labelledby="sale-h" data-section="sale-price">
+        <h2 id="sale-h">Sale price</h2>
+        <p className="note">The price above stays as it is; while a sale runs, customers pay the sale price and see the price as the “was” price.
+          {p.sale_price_paise ? ` Current sale: ${formatPaise(p.sale_price_paise)}${p.sale_starts_at ? ` from ${formatDateTime(p.sale_starts_at as Date)}` : ''}${p.sale_ends_at ? ` until ${formatDateTime(p.sale_ends_at as Date)}` : ''}.` : ' No sale is set.'}</p>
+        {manage && (
+          <ActionForm action={setSaleAction} submitLabel="Save sale" id="product-sale-form" label="Sale price">
+            <Hidden name="productId" value={p.id} />
+            <Field name="salePrice" label="Sale price (₹)" defaultValue={rupeesField(p.sale_price_paise)} hint="Empty ends the sale. Must be below the price." />
+            <div className="cols">
+              <Field name="startsAt" label="Starts (India time, optional)" type="datetime-local" defaultValue={istLocal(p.sale_starts_at as Date | null)} />
+              <Field name="endsAt" label="Ends (India time, optional)" type="datetime-local" defaultValue={istLocal(p.sale_ends_at as Date | null)} />
+            </div>
+          </ActionForm>
+        )}
+      </section>
       <section className="card" aria-labelledby="sz-h" data-section="size-prices">
         <h2 id="sz-h">Sizes</h2>
         <p className="note">A size with no price of its own sells at the product price.</p>
         <div className="table-wrap"><table data-size-prices>
-          <thead><tr><th>Size</th><th>SKU</th><th className="num">Own price</th><th className="num">Compare-at</th>{manage && <th>Edit</th>}</tr></thead>
+          <thead><tr><th>Size</th><th>SKU</th><th className="num">Own price</th><th className="num">Compare-at</th><th className="num">Sale</th>{manage && <th>Edit</th>}</tr></thead>
           <tbody>{variants.map(v => (
             <tr key={v.id} data-size={v.size}>
               <td>{v.size}{!v.is_active && <span className="badge inactive">inactive</span>}</td><td className="mono">{v.sku}</td>
               <td className="num money">{v.price_paise === null ? <span className="muted">product price</span> : formatPaise(v.price_paise)}</td>
               <td className="num money">{money(v.compare_at_paise)}</td>
+              <td className="num money">{v.price_paise === null ? <span className="muted">product sale</span> : money(v.sale_price_paise)}</td>
               {manage && <td><details className="row-edit"><summary className="btn ghost sm">Edit</summary>
                 <ActionForm action={setPricingAction} submitLabel="Save" className="form compact row-edit-form" id={`size-price-${v.id}`} label={`Price of size ${v.size}`}>
                   <Hidden name="productId" value={p.id} /><Hidden name="variantId" value={v.id} />
                   <Field name="price" label="Own price (₹)" defaultValue={rupeesField(v.price_paise)} hint="Empty = the product price." />
                   <Field name="compareAt" label="Compare-at (₹)" defaultValue={rupeesField(v.compare_at_paise)} />
-                </ActionForm></details></td>}
+                </ActionForm>
+                {v.price_paise !== null && <ActionForm action={setSaleAction} submitLabel="Save sale" className="form compact row-edit-form" id={`size-sale-${v.id}`} label={`Sale price of size ${v.size}`}>
+                  <Hidden name="productId" value={p.id} /><Hidden name="variantId" value={v.id} />
+                  <Field name="salePrice" label="Sale price for this size (₹)" defaultValue={rupeesField(v.sale_price_paise)} hint="Applies while the product's sale runs. Empty = none." />
+                </ActionForm>}</details></td>}
             </tr>
           ))}</tbody>
         </table></div>

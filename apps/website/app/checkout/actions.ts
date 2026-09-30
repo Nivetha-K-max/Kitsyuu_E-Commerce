@@ -13,13 +13,18 @@ import { db, requestContext, requireCustomer } from '@/lib/server';
 
 export async function placeOrderAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireCustomer('/checkout');
-  if (!paymentProvider()) return { ok: false, message: 'Online payment is not set up yet, so orders cannot be placed.' };
+  // Cash on delivery needs no online payment (second pass); the server decides whether it is available for this order.
+  const cod = form.get('paymentMethod') === 'cod';
+  if (!paymentProvider() && !cod) return { ok: false, message: 'Online payment is not set up yet, so orders cannot be placed.' };
   // M9: abuse limit in front of checkout (the M7 checkout itself is unchanged).
   if (!(await checkoutRateLimit(db(), me.customerId)).allowed) return { ok: false, message: 'Too many orders were started from this account in the last hour. Please try again later.' };
-  let orderNumber = '';
+  let orderNumber = '', placedCod = false;
   const result = await handle(placeOrderInput, form, async input => {
-    orderNumber = (await placeOrder(db(), me, input, await requestContext(), commerceConfig())).orderNumber;
+    const r = await placeOrder(db(), me, input, await requestContext(), commerceConfig());
+    orderNumber = r.orderNumber; placedCod = r.cod;
+    if (r.cod && !r.reused) await sendOrderConfirmation(r.orderNumber);    // a COD order is confirmed now (nothing to pay online)
   });
+  if (orderNumber && placedCod) { revalidatePath('/account', 'layout'); redirect(`/checkout/complete/${encodeURIComponent(orderNumber)}`); }
   if (orderNumber) redirect(`/checkout/pay/${encodeURIComponent(orderNumber)}`);
   return result;
 }

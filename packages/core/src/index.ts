@@ -13,7 +13,7 @@ export { assertAdministrationRemains, assertHoldsAll, assertOutranksOrEqual } fr
 export { createProduct, setNewArrival, moveNewArrival, NEW_ARRIVALS } from './products.ts';
 export { addVariant, updateVariant, moveVariant } from './variants.ts';
 export {
-  listAttributes, createAttribute, updateAttribute, setAttributeActive, moveAttribute, addAttributeValue, renameAttributeValue, moveAttributeValue,
+  listAttributes, createAttribute, updateAttribute, setAttributeActive, setAttributeValueActive, moveAttribute, addAttributeValue, renameAttributeValue, moveAttributeValue,
   deleteAttributeValue, getProductAttributes, setProductAttributes, type AttributeRow,
 } from './attributes.ts';
 export { listCategoryTree, createCategory, updateCategory, setCategoryActive, moveCategory } from './categories.ts';
@@ -28,7 +28,7 @@ export {
 export { applyOrderTransition, lockOrder, releaseOrderStock } from './order-state.ts';
 export {
   priceOrder, currentTaxRate, unconfiguredShipping, defaultCommerceConfig,
-  type CartTotals, type CommerceConfig, type ShippingProvider, type ShippingQuote, type DiscountRule, type DiscountLine, type TaxRate, type ShipTo,
+  type CartTotals, type CommerceConfig, type ShippingProvider, type ShippingQuote, type DiscountRule, type DiscountLine, type TaxRate, type ShipTo, type DeliveryOption,
 } from './pricing.ts';
 export {
   getCustomerCart, addCartLine, setCartLineQty, removeCartLine, mergeGuestCart, priceCart, lineProblemText,
@@ -57,7 +57,7 @@ export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_P
 export { settingsShipping, readShippingSettings, quoteFromSettings, SHIPPING_KEYS, type ShippingSettings } from './shipping.ts';
 // ---------- M11: merchandising ----------
 export {
-  listCollections, getCollection, createCollection, updateCollection, setCollectionActive, moveCollection, setCollectionMember, moveCollectionMember,
+  listCollections, listCollectionGroups, createCollectionGroup, getProductCollections, setProductCollections, getCollection, createCollection, updateCollection, setCollectionActive, moveCollection, setCollectionMember, moveCollectionMember,
   listRelated, setRelated, moveRelated, bulkSetProductStatus, MAX_RELATED,
 } from './merchandising.ts';
 // ---------- M12: reviews ----------
@@ -68,7 +68,7 @@ export {
 // ---------- M13: vendors, materials, purchasing ----------
 export {
   listVendors, saveVendor, setVendorActive, listMaterials, saveMaterial, adjustMaterialStock, materialLedger, materialMovements,
-  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, setPoLine, removePoLine, setPurchaseOrderStatus, receiveGoods, PO_TRANSITIONS, type PoStatus,
+  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, createPurchaseOrderWithLines, setPoLine, removePoLine, setPurchaseOrderStatus, receiveGoods, PO_TRANSITIONS, type PoStatus,
 } from './procurement.ts';
 // ---------- M14: production and quality control ----------
 export {
@@ -137,3 +137,23 @@ export {
 } from './finance.ts';
 // ---------- ERP module 7: carts and wishlists ----------
 export { abandonAfterHours, listCarts, getCart, setCartRecovery, sendCartReminder, wishlistReport, listWishlists, CART_PAGE_SIZE } from './carts-admin.ts';
+// ---------- client change request, first pass ----------
+export { effectivePrice, effectivePriceSql, basePriceSql, saleRunningSql, setProductSale, maxSaleDiscountPercent, type SaleInput } from './sale.ts';
+export { bulkEditProducts, BULK_MAX_PRODUCTS, type BulkAction } from './bulk-products.ts';
+export { setProductCategory } from './products.ts';
+export { abandonedCheckoutHours, listAbandonedCheckouts, sendAbandonedCheckoutReminders, ABANDONED_CHECKOUT_DEFAULT_HOURS, type ReminderRun } from './checkout-reminders.ts';
+export {
+  subscribeNewsletter, unsubscribeByToken, rotateUnsubscribeToken, listSubscribers, unsubscribeSubscriber, exportSubscribers, NEWSLETTER_CONSENT, SUBSCRIBER_PAGE_SIZE,
+} from './newsletter.ts';
+export { parseSizeChartTable, sizeChartTableText, listSizeCharts, saveSizeChart, sizeChartForProduct, type SizeChart, type SizeChartRow } from './size-charts.ts';
+export { productionMaterialNeeds, procurementStatus, type ProcurementStatus, purchaseOrderProduction, raisePurchaseOrderForProduction } from './production-purchasing.ts';
+export { BRAND_COPY_KEY, BRAND_COPY_FIELDS, BRAND_COPY_DEFAULTS, mergeBrandCopy, getBrandCopyAdmin, saveBrandCopy, type BrandCopy, type BrandCopyKey } from './site-copy.ts';
+export { cartRefreshMinutes, CART_REFRESH_DEFAULT_MINUTES } from './cart.ts';
+// ---------- client change request, second pass ----------
+export { readCodSettings, codQuote, codQuoteFrom, recordCodCollected, cancelCodOrder, orderCodState, COD_KEYS, type CodQuote, type CodSettings } from './cod.ts';
+export {
+  readLoyaltySettings, quoteLoyalty, pointsForAmount, loyaltyBalance, adjustLoyaltyPoints, parseLoyaltyImport, importLoyaltyPoints, expireLoyaltyPoints,
+  getMyLoyalty, getCustomerLoyalty, listLoyaltyAccounts, LOYALTY_KEYS, LOYALTY_KIND_LABELS, LOYALTY_IMPORT_MAX_LINES, type LoyaltyQuote, type LoyaltySettings,
+} from './loyalty.ts';
+export { editOrder, orderEditBlocker, orderEditOptions, listOrderEdits, refundOrderEdit } from './order-edit.ts';
+export type { PaymentChoice } from './pricing.ts';

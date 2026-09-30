@@ -74,7 +74,13 @@ try {
       : f === 'm17-engagement.test.mjs' ? {customers: 1, orders: 2}              // M17: email fixtures (no stock moved)
       // ERP modules: 2 customers, 5 checkout orders (sold, cancelled, returned); 1 unit restocked from a return and 1 sent
       // out as an exchange, all through the ledger (ledger_mismatch must stay 0).
-      : f === 'erp-modules.test.mjs' ? {customers: 2, orders: 5, units: 1095, everySizeTen: false} : {};
+      : f === 'erp-modules.test.mjs' ? {customers: 2, orders: 5, units: 1095, everySizeTen: false}
+      // Client first pass: 2 customers, 4 checkout orders (stock held by the unpaid ones, all through the ledger).
+      : f === 'client-first-pass.test.mjs' ? {customers: 2, orders: 4, units: 1095, everySizeTen: false}
+      // Client second pass: 3 customers, 8 orders (COD, points, edits; one size counted down to 0), all through the ledger.
+      : f === 'client-second-pass.test.mjs' ? {customers: 3, orders: 8, units: 1088, everySizeTen: false}
+      // Purchase + production + orders: 4 customers with one order each (4 units taken), all through the ledger.
+      : f === 'operations-orders.test.mjs' ? {customers: 4, orders: 4, units: 1096, everySizeTen: false} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 
@@ -145,7 +151,8 @@ try {
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
   // M8 browser tests move no stock (packing, shipping and delivery do not change stock; no order is cancelled).
-  if (!(await dbCheck('after all browser tests', env, {orders: 8, customers: 2, units: 1100 - 11 + 3 + 6, products: 23, variants: 111, images: 23}))) failed = true;
+  // ERP browser tests (client second pass) add 1 customer to give loyalty points to.
+  if (!(await dbCheck('after all browser tests', env, {orders: 8, customers: 3, units: 1100 - 11 + 3 + 6, products: 23, variants: 111, images: 23}))) failed = true;
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;
 } finally {

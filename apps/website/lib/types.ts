@@ -45,14 +45,16 @@ export type Product = {
   rating: { average: number; count: number } | null;
   /** ERP module 1: the compare-at ("was") price in rupees when it is above the price; otherwise null. */
   compareAt?: number | null;
+  /** Client change request: the size chart for this product (its own, else its category's), or null. */
+  sizeChart?: SizeChartView | null;
 };
 
 /** A product attribute the store can filter by (defined in the admin); only active attributes reach the store. */
-export type Attribute = { id: string; label: string; values: { slug: string; label: string }[] };
+export type Attribute = { id: string; label: string; values: { slug: string; label: string; swatch?: string | null }[] };
 
 export type Category = { id: string; label: string; parent: string | null };
 
-export type Collection = { id: string; label: string; dataStatus: string; productIds: string[] };
+export type Collection = { id: string; label: string; dataStatus: string; productIds: string[]; seoTitle?: string | null; seoDescription?: string | null };
 
 export type NavEntry = { label: string; collection?: string; category?: string; all?: boolean };
 
@@ -88,3 +90,6 @@ export type StoreCart = {
 export type CustomerStore = { cart: StoreCart; wishlist: string[] };
 /** Result of a cart / wishlist change made by a signed-in customer. */
 export type StoreResult = { ok: boolean; message?: string; store?: CustomerStore; capped?: boolean; qty?: number };
+
+/** A size chart as shown on a product page (client change request). */
+export type SizeChartView = { name: string; unit: string; headers: string[]; rows: { size: string; values: string[] }[]; notes: string | null };

@@ -18,17 +18,21 @@ export const colourKeys = (p: Product) =>
 export const inStock = (p: Product) => p.variants.some(v => v.available);
 
 export function facetsFor(idx: Index): Facet[] {
+  // Colour: once the business sets up the Colour attribute (id "colour") in the admin, it is the one source for the colour
+  // filter; until then the filter reads each product's colour name, as before.
+  const colourAttribute = idx.c.attributes.some(a => a.id === 'colour');
   return [
     { id: 'type', label: 'Type', values: p => [p.subcategory || p.category], labelOf: v => idx.catLabel(v) || v },
     { id: 'size', label: 'Size', values: p => p.variants.map(v => v.size), order: (a, b) => sizeRank(a) - sizeRank(b) },
-    { id: 'colour', label: 'Colour', values: colourKeys, labelOf: titleCase },
+    ...(colourAttribute ? [] : [{ id: 'colour', label: 'Colour', values: colourKeys, labelOf: titleCase }]),
     // Customer rating (M12): a product rated 4.3 matches "4★ & up", "3★ & up"… so choosing one keeps that rating or better.
     { id: 'rating', label: 'Customer rating', values: p => p.rating ? [4, 3, 2, 1].filter(n => p.rating!.average >= n).map(String) : [],
       labelOf: v => `${v}★ & up`, order: (a, b) => Number(b) - Number(a) },
     // Admin-managed attributes (Fabric, Sleeve length, Occasion, …), in the order set in the admin.
     ...idx.c.attributes.map((a): Facet => {
       const pos = new Map(a.values.map((v, i) => [v.slug, i])), label = new Map(a.values.map(v => [v.slug, v.label]));
-      return { id: a.id, label: a.label, values: p => p.attrs[a.id] ?? [], labelOf: v => label.get(v) ?? v, order: (x, y) => (pos.get(x) ?? 999) - (pos.get(y) ?? 999) };
+      // Only values still offered (a deactivated value stays on the product but is not a filter option).
+      return { id: a.id, label: a.label, values: p => (p.attrs[a.id] ?? []).filter(v => pos.has(v)), labelOf: v => label.get(v) ?? v, order: (x, y) => (pos.get(x) ?? 999) - (pos.get(y) ?? 999) };
     })
   ];
 }

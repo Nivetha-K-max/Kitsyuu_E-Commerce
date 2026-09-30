@@ -24,6 +24,7 @@ import type { CommerceConfig } from './pricing.ts';
 import type { PaymentProvider, ProviderPayment } from './payments/provider.ts';
 import { raiseAlertSafely } from './alerts.ts';
 import { recordDiscountRedemptions } from './discounts.ts';
+import { earnForOrder, lockLoyaltyAccount, redeemForOrder, reverseOrderPoints } from './loyalty.ts';
 
 type Order = NonNullable<Awaited<ReturnType<typeof lockOrder>>>;
 const ctxAudit = (ctx?: RequestContext) => ({ ip: ctx?.ip ?? null, userAgent: ctx?.userAgent ?? null, requestId: ctx?.requestId ?? null });
@@ -55,8 +56,9 @@ async function cancelUnpaid(tx: Tx, o: Order, actor: 'system' | 'customer', note
   const t = await applyOrderTransition(tx, o, 'cancelled', { actor, note });
   await closeUnpaidPayments(tx, o.id);
   const released = await releaseOrderStock(tx, o.id, `Order ${o.order_number}: ${note}`);
+  const points = await reverseOrderPoints(tx, o.id, `Order ${o.order_number} cancelled`);
   await recordAudit(tx, { actorType: actor, customerId: audit.customerId ?? null, action: audit.action, entityType: 'orders', entityId: o.id,
-    before: { status: t.from }, after: { status: 'cancelled' }, metadata: { order_number: o.order_number, units_released: released, note }, ...ctxAudit(audit.ctx) });
+    before: { status: t.from }, after: { status: 'cancelled' }, metadata: { order_number: o.order_number, units_released: released, note, ...(points.restored || points.reversed ? { points } : {}) }, ...ctxAudit(audit.ctx) });
   return released;
 }
 
@@ -74,25 +76,36 @@ export function customerOrderActions(o: { status: string; customer_id: string | 
 // ======================= order creation =======================
 
 export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrderInput, ctx: RequestContext, config?: CommerceConfig)
-  : Promise<{ orderNumber: string; reused: boolean }> {
+  : Promise<{ orderNumber: string; reused: boolean; cod: boolean }> {
   await expireUnpaidOrders(db, {}, { customerId: p.customerId }).catch(e => console.error('[checkout] expiry sweep failed', e));
   const { paymentWindowMinutes } = await checkoutSettings(db);
   try {
     const placed = await db.transaction().execute(async tx => {
       const cartId = await lockActiveCart(tx, p.customerId);          // one checkout at a time per customer
-      const same = await tx.selectFrom('orders').select('order_number')
+      const same = await tx.selectFrom('orders').select(['order_number', 'payment_method'])
         .where('customer_id', '=', p.customerId).where('idempotency_key', '=', input.idempotencyKey).executeTakeFirst();
-      if (same) return { orderNumber: same.order_number, reused: true };
+      if (same) return { orderNumber: same.order_number, reused: true, cod: same.payment_method === 'cod' };
 
       const address = await tx.selectFrom('addresses').select(['full_name', 'phone', 'line1', 'line2', 'city', 'state', 'pin', 'country'])
         .where('id', '=', input.addressId!).where('customer_id', '=', p.customerId).executeTakeFirst();
       if (!address) throw new NotFoundError('Choose one of your delivery addresses.');
-      const cart = await priceCart(tx, cartId, { config, customerId: p.customerId, shipTo: { state: address.state, pin: address.pin, country: address.country } });
+      if (input.usePoints) await lockLoyaltyAccount(tx, p.customerId);          // the points priced below cannot be spent twice
+      const cart = await priceCart(tx, cartId, { config, customerId: p.customerId,
+        shipTo: { state: address.state, pin: address.pin, country: address.country, deliveryRateId: input.deliveryRateId ?? null },
+        payment: { method: input.paymentMethod, usePoints: input.usePoints } });
+      // Billing: the delivery address unless the customer chose another of their addresses (stored as a snapshot).
+      const billing = input.billingSame || !input.billingAddressId || input.billingAddressId === input.addressId ? null
+        : await tx.selectFrom('addresses').select(['full_name', 'phone', 'line1', 'line2', 'city', 'state', 'pin', 'country'])
+          .where('id', '=', input.billingAddressId).where('customer_id', '=', p.customerId).executeTakeFirst();
+      if (!input.billingSame && input.billingAddressId && input.billingAddressId !== input.addressId && !billing) throw new NotFoundError('Choose one of your addresses for billing.');
       if (!cart.lines.length) throw new ConflictError('Your cart is empty.');
       const problems = cart.lines.filter(l => l.problem).map(lineProblemText);
       if (problems.length) throw new ConflictError(`${problems.join(' ')} Update your cart and try again.`);
       const t = cart.totals;
       if (t.shipping.unavailable) throw new ConflictError(t.shipping.unavailable);
+      const cod = input.paymentMethod === 'cod';
+      if (cod && t.payment?.method !== 'cod') throw new ConflictError(t.payment?.cod.reason ?? 'Cash on delivery is not available for this order.');
+      const pointsUsed = t.payment?.loyalty?.usedPoints ?? 0, pointsValue = t.payment?.loyalty?.discountPaise ?? 0;
       if (t.totalPaise !== input.expectedTotalPaise)
         throw new ConflictError('Prices or quantities in your cart changed since this page was opened. Review your order and try again.');
       const me = await tx.selectFrom('customers').select(['email', 'full_name', 'phone']).where('id', '=', p.customerId).executeTakeFirstOrThrow();
@@ -111,11 +124,15 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
         status: 'pending_payment', payment_status: 'pending', currency: 'INR',
         subtotal_paise: t.subtotalPaise, discount_paise: t.discountPaise, shipping_paise: t.shippingPaise, tax_paise: t.taxPaise,
         total_paise: t.totalPaise, prices_include_tax: t.pricesIncludeTax,
-        pricing: JSON.stringify({ tax: t.tax, shipping: t.shipping, discounts: t.discounts }),
+        pricing: JSON.stringify({ tax: t.tax, shipping: t.shipping, discounts: t.discounts, ...(cod ? { cod: { feePaise: t.codFeePaise } } : {}) }),
+        payment_method: cod ? 'cod' : 'online', cod_status: cod ? 'to_collect' : null, cod_fee_paise: t.codFeePaise,
+        loyalty_points_used: pointsUsed, loyalty_discount_paise: pointsValue,
+        billing_address: billing ? JSON.stringify({ name: billing.full_name, phone: billing.phone, line1: billing.line1, line2: billing.line2,
+          city: billing.city, state: billing.state, pin: billing.pin, country: billing.country }) : null,
         contact: JSON.stringify({ name: me.full_name ?? address.full_name, email: me.email, phone: me.phone ?? address.phone }),
         shipping_address: JSON.stringify({ name: address.full_name, phone: address.phone, line1: address.line1, line2: address.line2,
           city: address.city, state: address.state, pin: address.pin, country: address.country }),
-        payment_expires_at: paymentWindowMinutes ? sql<Date>`now() + make_interval(mins => ${paymentWindowMinutes})` : null,
+        payment_expires_at: paymentWindowMinutes && !cod ? sql<Date>`now() + make_interval(mins => ${paymentWindowMinutes})` : null,
       }).returning(['id', 'order_number']).executeTakeFirstOrThrow();
       await tx.insertInto('order_items').values(cart.lines.map(l => ({
         order_id: order.id, product_id: l.productId, variant_id: l.variantId, sku: l.sku, name: l.name, size: l.size,
@@ -124,16 +141,23 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
       await tx.insertInto('order_status_history').values({ order_id: order.id, from_status: null, to_status: 'pending_payment', note: 'Order placed' }).execute();
       await recordDiscountRedemptions(tx, order.id, p.customerId, t.discounts);
       await sql`select public.reserve_order_stock(${order.id}::uuid)`.execute(tx);
+      if (pointsUsed > 0) await redeemForOrder(tx, p.customerId, order.id, pointsUsed, order.order_number);
+      if (cod) {
+        // Cash on delivery: nothing to pay online, so the order goes straight to fulfilment; the cash is collected on delivery.
+        await applyOrderTransition(tx, { id: order.id, order_number: order.order_number, status: 'pending_payment' }, 'processing',
+          { actor: 'system', cod: true, note: 'Cash on delivery: confirmed for fulfilment', set: { payment_status: 'unpaid' } });
+        await tx.updateTable('carts').set({ status: 'converted' }).where('id', '=', cartId).where('status', '=', 'active').execute();
+      }
       await recordAudit(tx, { actorType: 'customer', customerId: p.customerId, action: 'order.placed', entityType: 'orders', entityId: order.id,
-        after: { status: 'pending_payment', total_paise: t.totalPaise },
-        metadata: { order_number: order.order_number, lines: cart.lines.length, units: t.units }, ...ctxAudit(ctx) });
-      return { orderNumber: order.order_number, reused: false, orderId: order.id, totalPaise: t.totalPaise };
+        after: { status: cod ? 'processing' : 'pending_payment', total_paise: t.totalPaise, payment_method: cod ? 'cod' : 'online' },
+        metadata: { order_number: order.order_number, lines: cart.lines.length, units: t.units, ...(pointsUsed ? { points_used: pointsUsed } : {}) }, ...ctxAudit(ctx) });
+      return { orderNumber: order.order_number, reused: false, orderId: order.id, totalPaise: t.totalPaise, cod };
     });
     if (!placed.reused && placed.orderId && placed.totalPaise !== undefined) {
-      await raiseAlertSafely(db, { kind: 'order.placed', title: `New order ${placed.orderNumber}`, body: `₹${(placed.totalPaise / 100).toFixed(2)} · awaiting payment`,
+      await raiseAlertSafely(db, { kind: 'order.placed', title: `New order ${placed.orderNumber}`, body: `₹${(placed.totalPaise / 100).toFixed(2)} · ${placed.cod ? 'cash on delivery: ready to pack' : 'awaiting payment'}`,
         entityType: 'orders', entityId: placed.orderId, link: `/orders/${placed.orderId}`, dedupeKey: `order.placed:${placed.orderId}` });
     }
-    return { orderNumber: placed.orderNumber, reused: placed.reused };
+    return { orderNumber: placed.orderNumber, reused: placed.reused, cod: !!placed.cod };
   } catch (e) {
     // adjust_stock refused (another customer bought the last units a moment ago): nothing was written.
     if ((e as { code?: string })?.code === '23514') throw new ConflictError('Part of your order just sold out. Review your cart and try again.');
@@ -224,6 +248,7 @@ export async function applyPaymentResult(tx: Tx, o: Order, providerCode: string,
     if (pay.amountPaise !== o.total_paise || pay.currency !== o.currency) { if (isNew) await audit('payment.amount_mismatch', { expected_paise: o.total_paise }); return 'amount_mismatch'; }
     if (canTransitionAs('system', o.status, 'paid')) {
       await applyOrderTransition(tx, o, 'paid', { actor: 'system', note: `Payment ${pay.id} confirmed by ${providerCode}`, set: { payment_status: 'paid', paid_at: new Date() } });
+      await earnForOrder(tx, o.id, 'paid');
       if (o.cart_id) await tx.updateTable('carts').set({ status: 'converted' }).where('id', '=', o.cart_id).where('status', '=', 'active').execute();
       await audit('payment.captured');
       return 'paid';

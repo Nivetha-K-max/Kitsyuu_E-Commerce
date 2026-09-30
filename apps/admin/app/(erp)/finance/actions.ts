@@ -10,7 +10,7 @@ import {
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
-const done = (r: ActionState) => { if (r.ok) revalidatePath('/finance', 'layout'); return r; };
+const done = (r: ActionState) => { if (r.ok) { revalidatePath('/finance', 'layout'); revalidatePath('/orders', 'layout'); } return r; };
 
 export async function createInvoiceAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();

@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, uuid } from '@kitsyuu/contracts';
-import { customerBasket, getCustomer, listCustomerNotes } from '@kitsyuu/core';
+import { customerBasket, getCustomer, getCustomerLoyalty, listCustomerNotes, LOYALTY_KIND_LABELS } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { addCustomerNoteAction, setCustomerStatusAction, updateCustomerContactAction } from '../actions';
+import { adjustPointsAction } from '../../loyalty/actions';
 
 export const metadata: Metadata = { title: 'Customer' };
 type Params = Promise<{ id: string }>;
@@ -22,7 +23,8 @@ export default async function CustomerPage({ params }: { params: Params }) {
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const d = await getCustomer(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
-  const [notes, basket] = await Promise.all([listCustomerNotes(db(), actor, id), customerBasket(db(), actor, id)]);
+  const [notes, basket, loyalty] = await Promise.all([listCustomerNotes(db(), actor, id), customerBasket(db(), actor, id),
+    can(actor, 'loyalty.read') ? getCustomerLoyalty(db(), actor, id) : Promise.resolve(null)]);
   const c = d.customer;
   const activeSessions = d.sessions.filter(s => s.active).length;
   const disabling = c.status === 'active';
@@ -149,6 +151,33 @@ export default async function CustomerPage({ params }: { params: Params }) {
             : <p className="empty">The wishlist is empty.</p>}
         </section>
       </div>
+
+      {loyalty && (
+        <section className="card" id="loyalty" aria-labelledby="loy-h" data-section="loyalty">
+          <h2 id="loy-h">Loyalty points</h2>
+          <p data-loyalty-balance><b>{formatNumber(loyalty.balance)}</b> points</p>
+          {loyalty.rows.length === 0 ? <p className="empty">No point changes yet.</p> : (
+            <div className="table-wrap"><table data-loyalty-history>
+              <thead><tr><th>When</th><th>Change</th><th className="num">Points</th><th>Details</th></tr></thead>
+              <tbody>{loyalty.rows.map(t => (
+                <tr key={t.id}><td className="nowrap">{formatDateTime(t.created_at as Date)}</td><td>{LOYALTY_KIND_LABELS[t.kind] ?? t.kind}</td>
+                  <td className="num">{t.points > 0 ? `+${t.points}` : t.points}</td>
+                  <td>{t.order_number && <Link href={`/orders/${t.order_id}`}>{t.order_number}</Link>}{t.reason && <span className="note"> {t.reason}</span>}
+                    {t.staff_email && <span className="note"> · {t.staff_email}</span>}{t.expires_at && (t.remaining ?? 0) > 0 && <span className="note"> · {t.remaining} expire {formatDateTime(t.expires_at as Date)}</span>}</td></tr>
+              ))}</tbody>
+            </table></div>
+          )}
+          {can(actor, 'loyalty.adjust') && (
+            <ActionForm action={adjustPointsAction} submitLabel="Save" id="loyalty-adjust-form" label="Add or remove points" className="form spaced" resetOnSuccess>
+              <Hidden name="customerId" value={id} />
+              <div className="cols">
+                <Field name="points" label="Points" hint="e.g. 100 to add, -50 to remove" required />
+                <Field name="reason" label="Reason" required hint="Kept in the points history" />
+              </div>
+            </ActionForm>
+          )}
+        </section>
+      )}
 
       <section className="card" aria-labelledby="aud-h" data-section="audit">
         <h2 id="aud-h">Audit</h2>

@@ -76,7 +76,7 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
     const r = await b.eval(`(()=>{const m=document.querySelector('#st-main-img');return{h1:document.querySelector('#st-pdp-title')?.textContent,src:m?.src,ok:m?m.complete&&m.naturalWidth>0:!!document.querySelector('.st-gallery-stage .st-soon[role=img]'),held:!!document.querySelector('.st-gallery-main.is-held .st-soon'),zoom:document.querySelector('.st-gallery').dataset.zoom,sizes:document.querySelectorAll('.st-size input').length,sku:document.querySelector('.st-pdp-meta').textContent,title:document.title,ov:${overflow},imgs:${imgs}}})()`);
     const held = p.media.status === 'held';
     const expectSrc = held ? undefined : `/storage/v1/object/public/product-images/products/${p.id}.webp`; // Phase 4.3: images come from Supabase Storage (product-images bucket)
-    const pass = r.h1 === p.name && (held ? r.src === undefined : r.src.endsWith(expectSrc)) && r.ok && r.held === held && r.zoom === 'false' && r.sizes === p.variants.length && r.sku.includes(p.sku) && r.ov <= 0 && r.imgs.every(i => i.ok) && b.errors.length === 0;
+    const pass = r.h1 === p.name && (held ? r.src === undefined : r.src.endsWith(expectSrc)) && r.ok && r.held === held && r.zoom === 'false' && r.sizes === p.variants.length && !/SKU/i.test(r.sku) && !r.sku.includes(p.sku) && r.ov <= 0 && r.imgs.every(i => i.ok) && b.errors.length === 0;
     if (!pass) pdpFails.push(`${p.sku}: ${JSON.stringify({...r, imgs: undefined})} ${b.errors.join('; ')}`);
     if (p.sku === 'KTS-TOP-006' || p.sku === 'KTS-OUT-002') await b.shot(`${tag}-pdp-${p.sku}.png`, true);
   }

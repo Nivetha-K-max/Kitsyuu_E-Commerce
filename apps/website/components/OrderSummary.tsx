@@ -23,10 +23,11 @@ export function OrderSums({ o }: { o: CustomerOrderDetail }) {
   return (
     <dl className="st-order-sums">
       <dt>Subtotal</dt><dd data-subtotal>{rupees(o.subtotalPaise)}</dd>
-      {o.discountPaise > 0 && <><dt>Discount</dt><dd>−{rupees(o.discountPaise)}</dd></>}
+      {o.discountPaise > 0 && <><dt>{o.pointsUsed > 0 ? `Discount (incl. ${o.pointsUsed} points)` : 'Discount'}</dt><dd>−{rupees(o.discountPaise)}</dd></>}
       {o.shippingPaise > 0 && <><dt>Shipping</dt><dd>{rupees(o.shippingPaise)}</dd></>}
+      {o.codFeePaise > 0 && <><dt>Cash on delivery fee</dt><dd>{rupees(o.codFeePaise)}</dd></>}
       <dt>Taxes</dt><dd>{o.pricesIncludeTax ? (o.taxPaise > 0 ? `Included (${rupees(o.taxPaise)})` : 'Included in the prices') : rupees(o.taxPaise)}</dd>
-      <dt className="st-order-grand">Total</dt><dd className="st-order-grand" data-total>{rupees(o.totalPaise)}</dd>
+      <dt className="st-order-grand">{o.paymentMethod === 'cod' && o.codStatus === 'to_collect' && o.status !== 'cancelled' ? 'To pay on delivery' : 'Total'}</dt><dd className="st-order-grand" data-total>{rupees(o.totalPaise)}</dd>
     </dl>
   );
 }

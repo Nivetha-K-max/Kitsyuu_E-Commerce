@@ -2,11 +2,16 @@
    products with them; the storefront turns each active attribute into a filter. Nothing is pre-filled by the platform.
    Attribute ids and value slugs never change once created (the store uses them in links: /shop?fabric=cotton).
    Definitions need categories.write (they shape the catalogue like categories do); tagging a product needs products.write.
-   Every change: permission check → row locks → stale check → change + audit record in ONE transaction. */
+   Every change: permission check → row locks → stale check → change + audit record in ONE transaction.
+   Client change request (tags): values are managed like tags. Names are unique per attribute ignoring case ("Black",
+   "black" and "BLACK" are one value); an attribute takes one value per product (single) or several (multi); a value is
+   deactivated instead of deleted once products use it (they keep it; it is no longer offered in the store filters or for
+   new tagging). Colour is one of these attributes (id "colour"), so the store's colour filter and, later, colour variants
+   use the same values instead of a second list. */
 import { recordAudit, sql, type Db } from '@kitsyuu/db';
 import {
   ConflictError, DomainError, NotFoundError, type AddAttributeValueInput, type CreateAttributeInput, type RenameAttributeValueInput,
-  type SetAttributeActiveInput, type SetProductAttributesInput, type UpdateAttributeInput
+  type SetAttributeActiveInput, type SetAttributeValueActiveInput, type SetProductAttributesInput, type UpdateAttributeInput
 } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
@@ -18,53 +23,66 @@ const audit = (actor: StaffPrincipal, ctx: MutationContext) => ({ actorType: 'st
 export const slugify = (label: string) => label.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
 
 export type AttributeRow = {
-  id: string; label: string; description: string; isActive: boolean; sortOrder: number;
-  values: { slug: string; label: string; products: number }[]; products: number;
+  id: string; label: string; description: string; isActive: boolean; sortOrder: number; selection: 'single' | 'multi';
+  values: { slug: string; label: string; products: number; isActive: boolean; swatch: string | null }[]; products: number;
 };
 
 /** All attributes with their values and how many products use each (for the admin). */
 export async function listAttributes(db: Db, actor: StaffPrincipal): Promise<AttributeRow[]> {
   if (!can(actor, 'categories.read') && !can(actor, 'products.read')) requirePermission(actor, 'categories.read');
   const [attrs, values] = await Promise.all([
-    db.selectFrom('attributes as a').select(['a.id', 'a.label', 'a.description', 'a.is_active', 'a.sort_order',
+    db.selectFrom('attributes as a').select(['a.id', 'a.label', 'a.description', 'a.is_active', 'a.sort_order', 'a.selection',
       sql<number>`(select count(distinct pav.product_id)::int from public.product_attribute_values pav where pav.attribute_id = a.id)`.as('products')])
       .orderBy('a.sort_order').orderBy('a.id').execute(),
-    db.selectFrom('attribute_values as v').select(['v.attribute_id', 'v.slug', 'v.label',
+    db.selectFrom('attribute_values as v').select(['v.attribute_id', 'v.slug', 'v.label', 'v.is_active', 'v.swatch',
       sql<number>`(select count(*)::int from public.product_attribute_values pav where pav.attribute_id = v.attribute_id and pav.value_slug = v.slug)`.as('products')])
       .orderBy('v.sort_order').orderBy('v.slug').execute()
   ]);
   return attrs.map(a => ({
-    id: a.id, label: a.label, description: a.description, isActive: a.is_active, sortOrder: a.sort_order, products: a.products,
-    values: values.filter(v => v.attribute_id === a.id).map(v => ({ slug: v.slug, label: v.label, products: v.products }))
+    id: a.id, label: a.label, description: a.description, isActive: a.is_active, sortOrder: a.sort_order, products: a.products, selection: a.selection,
+    values: values.filter(v => v.attribute_id === a.id).map(v => ({ slug: v.slug, label: v.label, products: v.products, isActive: v.is_active, swatch: v.swatch }))
   }));
 }
 
 export async function createAttribute(db: Db, actor: StaffPrincipal, input: CreateAttributeInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');
+  const id = input.id ?? slugify(input.label).replace(/^[^a-z]+/, '');
+  if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw new DomainError('invalid', 'This name cannot be used as a link id. Use Latin letters, or enter an id.');
   return db.transaction().execute(async tx => {
     // Ids that the shop page already uses as query parameters cannot become attribute ids.
-    if (RESERVED.has(input.id)) throw new DomainError('invalid', `"${input.id}" is used by the store itself. Choose another id.`);
-    if (await tx.selectFrom('attributes').select('id').where('id', '=', input.id).executeTakeFirst()) throw new ConflictError(`An attribute with the id "${input.id}" already exists.`);
+    if (RESERVED.has(id)) throw new DomainError('invalid', `"${id}" is used by the store itself. Choose another name or id.`);
+    if (await tx.selectFrom('attributes').select('id').where('id', '=', id).executeTakeFirst()) throw new ConflictError(`An attribute with the id "${id}" already exists.`);
+    if (await tx.selectFrom('attributes').select('id').where(sql<string>`lower(label)`, '=', input.label.toLowerCase()).executeTakeFirst())
+      throw new ConflictError(`An attribute called "${input.label}" already exists.`);
     const { max } = await tx.selectFrom('attributes').select(sql<number>`coalesce(max(sort_order), -1)::int`.as('max')).executeTakeFirstOrThrow();
-    const row = { id: input.id, label: input.label, description: input.description, sort_order: max + 1, is_active: true };
+    const row = { id, label: input.label, description: input.description, sort_order: max + 1, is_active: true, selection: input.selection };
     await tx.insertInto('attributes').values(row).execute();
-    await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.create', entityType: 'attributes', entityId: input.id, after: row });
-    return { id: input.id };
+    await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.create', entityType: 'attributes', entityId: id, after: row });
+    return { id };
   });
 }
-const RESERVED = new Set(['category', 'collection', 'sort', 'type', 'size', 'colour', 'color', 'min', 'max', 'stock', 'q', 'page', 'rating']);
+const RESERVED = new Set(['category', 'collection', 'sort', 'type', 'size', 'color', 'min', 'max', 'stock', 'q', 'page', 'rating']);
 
 export async function updateAttribute(db: Db, actor: StaffPrincipal, input: UpdateAttributeInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');
   return db.transaction().execute(async tx => {
-    const a = await tx.selectFrom('attributes').select(['label', 'description']).where('id', '=', input.attributeId).forUpdate().executeTakeFirst();
+    const a = await tx.selectFrom('attributes').select(['label', 'description', 'selection']).where('id', '=', input.attributeId).forUpdate().executeTakeFirst();
     if (!a) throw new NotFoundError('Attribute not found.');
     if (a.label !== input.expectedLabel) throw new ConflictError('This attribute was changed by someone else since you opened the page. Reload and try again.');
-    const changed = (['label', 'description'] as const).filter(k => a[k] !== input[k]);
+    const selection = input.selection ?? a.selection;               // not sent: unchanged
+    const next = { label: input.label, description: input.description, selection };
+    const changed = (['label', 'description', 'selection'] as const).filter(k => a[k] !== next[k]);
     if (!changed.length) return { changed: 0 };
-    await tx.updateTable('attributes').set({ label: input.label, description: input.description }).where('id', '=', input.attributeId).execute();
+    if (a.label.toLowerCase() !== input.label.toLowerCase() && await tx.selectFrom('attributes').select('id').where('id', '!=', input.attributeId)
+      .where(sql<string>`lower(label)`, '=', input.label.toLowerCase()).executeTakeFirst()) throw new ConflictError(`An attribute called "${input.label}" already exists.`);
+    if (selection === 'single' && a.selection !== 'single') {
+      const { n } = await tx.selectFrom(eb => eb.selectFrom('product_attribute_values').select('product_id').where('attribute_id', '=', input.attributeId)
+        .groupBy('product_id').having(sql<number>`count(*)`, '>', 1).as('x')).select(sql<number>`count(*)::int`.as('n')).executeTakeFirstOrThrow();
+      if (n > 0) throw new ConflictError(`${n} product${n === 1 ? ' has' : 's have'} more than one ${a.label} value. Leave one value on ${n === 1 ? 'it' : 'each'} first.`);
+    }
+    await tx.updateTable('attributes').set(next).where('id', '=', input.attributeId).execute();
     await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.update', entityType: 'attributes', entityId: input.attributeId,
-      before: Object.fromEntries(changed.map(k => [k, a[k]])), after: Object.fromEntries(changed.map(k => [k, input[k]])) });
+      before: Object.fromEntries(changed.map(k => [k, a[k]])), after: Object.fromEntries(changed.map(k => [k, next[k]])) });
     return { changed: changed.length };
   });
 }
@@ -101,10 +119,12 @@ export async function addAttributeValue(db: Db, actor: StaffPrincipal, input: Ad
   return db.transaction().execute(async tx => {
     const a = await tx.selectFrom('attributes').select('id').where('id', '=', input.attributeId).forUpdate().executeTakeFirst();
     if (!a) throw new NotFoundError('Attribute not found.');
-    if (await tx.selectFrom('attribute_values').select('slug').where('attribute_id', '=', a.id).where('slug', '=', slug).executeTakeFirst())
-      throw new ConflictError(`This attribute already has a value with the id "${slug}".`);
+    // One value per name, whatever the letter case ("Black", "black", "BLACK"); the name keeps the case staff typed.
+    const same = await tx.selectFrom('attribute_values').select(['slug', 'label', 'is_active']).where('attribute_id', '=', a.id)
+      .where(eb => eb.or([eb('slug', '=', slug), eb(sql<string>`lower(label)`, '=', input.label.toLowerCase())])).executeTakeFirst();
+    if (same) throw new ConflictError(`"${same.label}" already exists${same.is_active ? '' : ' (deactivated: reactivate it instead)'}.`);
     const { max } = await tx.selectFrom('attribute_values').select(sql<number>`coalesce(max(sort_order), -1)::int`.as('max')).where('attribute_id', '=', a.id).executeTakeFirstOrThrow();
-    const row = { attribute_id: a.id, slug, label: input.label, sort_order: max + 1 };
+    const row = { attribute_id: a.id, slug, label: input.label, sort_order: max + 1, swatch: input.swatch ?? null };
     await tx.insertInto('attribute_values').values(row).execute();
     await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.value_add', entityType: 'attributes', entityId: a.id, after: { slug, label: input.label } });
     return { slug };
@@ -114,12 +134,15 @@ export async function addAttributeValue(db: Db, actor: StaffPrincipal, input: Ad
 export async function renameAttributeValue(db: Db, actor: StaffPrincipal, input: RenameAttributeValueInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');
   return db.transaction().execute(async tx => {
-    const v = await tx.selectFrom('attribute_values').select('label').where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).forUpdate().executeTakeFirst();
+    const v = await tx.selectFrom('attribute_values').select(['label', 'swatch']).where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).forUpdate().executeTakeFirst();
     if (!v) throw new NotFoundError('Value not found.');
-    if (v.label === input.label) return { changed: 0 };
-    await tx.updateTable('attribute_values').set({ label: input.label }).where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).execute();
+    const swatch = input.swatch === undefined ? v.swatch : input.swatch;
+    if (v.label === input.label && v.swatch === swatch) return { changed: 0 };
+    if (await tx.selectFrom('attribute_values').select('slug').where('attribute_id', '=', input.attributeId).where('slug', '!=', input.slug)
+      .where(sql<string>`lower(label)`, '=', input.label.toLowerCase()).executeTakeFirst()) throw new ConflictError(`"${input.label}" already exists.`);
+    await tx.updateTable('attribute_values').set({ label: input.label, swatch }).where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).execute();
     await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.value_rename', entityType: 'attributes', entityId: input.attributeId,
-      before: { slug: input.slug, label: v.label }, after: { slug: input.slug, label: input.label } });
+      before: { slug: input.slug, label: v.label, swatch: v.swatch }, after: { slug: input.slug, label: input.label, swatch } });
     return { changed: 1 };
   });
 }
@@ -133,6 +156,21 @@ export async function moveAttributeValue(db: Db, actor: StaffPrincipal, input: {
       await tx.updateTable('attribute_values').set({ sort_order: sort }).where('attribute_id', '=', input.attributeId).where('slug', '=', k).execute();
     }, (a, b) => recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.value_reorder', entityType: 'attributes', entityId: input.attributeId,
       metadata: { slug: a.key, swapped_with: b.key, direction: input.direction } }));
+  });
+}
+
+/** Deactivates / reactivates a value. Products keep it either way; an inactive value is not offered in the store filters or for
+    new tagging. This is how a value in use is retired (it is never deleted while products have it). */
+export async function setAttributeValueActive(db: Db, actor: StaffPrincipal, input: SetAttributeValueActiveInput, ctx: MutationContext) {
+  requirePermission(actor, 'categories.write');
+  return db.transaction().execute(async tx => {
+    const v = await tx.selectFrom('attribute_values').select(['label', 'is_active']).where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).forUpdate().executeTakeFirst();
+    if (!v) throw new NotFoundError('Value not found.');
+    if (v.is_active === input.active) return { changed: 0 };
+    await tx.updateTable('attribute_values').set({ is_active: input.active }).where('attribute_id', '=', input.attributeId).where('slug', '=', input.slug).execute();
+    await recordAudit(tx, { ...audit(actor, ctx), action: 'attribute.value_status_update', entityType: 'attributes', entityId: input.attributeId,
+      before: { slug: input.slug, label: v.label, is_active: v.is_active }, after: { slug: input.slug, is_active: input.active } });
+    return { changed: 1 };
   });
 }
 
@@ -164,14 +202,24 @@ export async function setProductAttributes(db: Db, actor: StaffPrincipal, input:
     const p = await tx.selectFrom('products').select('id').where('id', '=', input.productId).forUpdate().executeTakeFirst();
     if (!p) throw new NotFoundError('Product not found.');
     const want = new Set(input.values.map(v => `${v.attributeId}:${v.slug}`));
+    let inactive: { attribute_id: string; slug: string; label: string }[] = [];
     if (want.size) {
       // FOR SHARE: a value cannot be deleted while it is being assigned here.
-      const known = await tx.selectFrom('attribute_values').select(['attribute_id', 'slug'])
-        .where(eb => eb.or(input.values.map(v => eb.and([eb('attribute_id', '=', v.attributeId), eb('slug', '=', v.slug)])))).forShare().execute();
+      const known = await tx.selectFrom('attribute_values as v').innerJoin('attributes as a', 'a.id', 'v.attribute_id')
+        .select(['v.attribute_id', 'v.slug', 'v.label', 'v.is_active', 'a.label as attribute_label', 'a.selection'])
+        .where(eb => eb.or(input.values.map(v => eb.and([eb('v.attribute_id', '=', v.attributeId), eb('v.slug', '=', v.slug)])))).forShare('v').execute();
       if (known.length !== want.size) throw new DomainError('invalid', 'One of the selected values no longer exists. Reload and try again.');
+      for (const a of new Set(known.filter(k => k.selection === 'single').map(k => k.attribute_id))) {
+        const picked = known.filter(k => k.attribute_id === a);
+        if (picked.length > 1) throw new DomainError('invalid', `${picked[0].attribute_label} takes one value. Choose one of: ${picked.map(k => k.label).join(', ')}.`);
+      }
+      inactive = known.filter(k => !k.is_active);
     }
     const have = new Set((await tx.selectFrom('product_attribute_values').select(['attribute_id', 'value_slug']).where('product_id', '=', p.id).execute())
       .map(r => `${r.attribute_id}:${r.value_slug}`));
+    // A deactivated value the product already has may stay; it cannot be given to it anew.
+    const newlyInactive = inactive.filter(k => !have.has(`${k.attribute_id}:${k.slug}`));
+    if (newlyInactive.length) throw new DomainError('invalid', `${newlyInactive.map(k => k.label).join(', ')} ${newlyInactive.length === 1 ? 'is' : 'are'} deactivated and cannot be added.`);
     const added = [...want].filter(k => !have.has(k)), removed = [...have].filter(k => !want.has(k));
     if (!added.length && !removed.length) return { changed: 0 };
     for (const k of removed) {

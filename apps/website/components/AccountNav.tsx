@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/account/wishlist', label: 'Wishlist' },
   { href: '/account/reviews', label: 'Reviews' },
   { href: '/account/returns', label: 'Returns' },
+  { href: '/account/points', label: 'Points' },
   { href: '/account/support', label: 'Help & support' },
   { href: '/account/security', label: 'Security' },
 ];

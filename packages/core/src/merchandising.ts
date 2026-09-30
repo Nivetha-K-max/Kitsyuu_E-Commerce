@@ -1,14 +1,18 @@
 /* M11: merchandising. Collections (curated product lists such as New Arrivals; new ones start hidden), "Complete the
    look" links between products (product_relations, kind styled_with), and bulk status changes. Collections need
    categories.write (they shape the catalogue like categories); product links and status need products.write.
-   Every change: permission check → row locks → stale check → change + audit record in ONE transaction. */
+   Every change: permission check → row locks → stale check → change + audit record in ONE transaction.
+   Client change request: collections are grouped for staff (Men, Women, Sale; more groups can be added). A group only
+   organises the admin; a product can be in any number of collections (collection_products), and its category is a
+   separate thing. The Sale collection is merchandising, not the sale price: products are added to it by staff. */
 import { recordAudit, sql, type Db, type Tx } from '@kitsyuu/db';
 import {
   ConflictError, DomainError, NotFoundError, type BulkProductStatusInput, type CreateCollectionInput, type SetCollectionActiveInput,
-  type UpdateCollectionInput,
+  type ProductCollectionsInput, type UpdateCollectionInput,
 } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { setProductStatus } from './products.ts';
+import { slugify } from './attributes.ts';
 import type { MutationContext } from './staff.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -20,15 +24,57 @@ export const MAX_RELATED = 8;
 export async function listCollections(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'categories.read');
   const cols = await db.selectFrom('collections as c')
-    .select(['c.id', 'c.label', 'c.is_active', 'c.sort_order',
-      sql<number>`(select count(*)::int from public.collection_products x where x.collection_id = c.id)`.as('products')])
+    .select(['c.id', 'c.label', 'c.is_active', 'c.sort_order', 'c.group_id',
+      sql<number>`(select count(*)::int from public.collection_products x where x.collection_id = c.id)`.as('products'),
+      sql<number>`(select count(*)::int from public.collection_products x join public.products p on p.id = x.product_id where x.collection_id = c.id and p.status = 'active')`.as('active'),
+      sql<number>`(select count(*)::int from public.collection_products x join public.products p on p.id = x.product_id where x.collection_id = c.id and p.status = 'draft')`.as('draft')])
     .orderBy('c.sort_order').orderBy('c.id').execute();
-  return cols.map(c => ({ id: c.id, label: c.label, isActive: c.is_active, products: c.products }));
+  return cols.map(c => ({ id: c.id, label: c.label, isActive: c.is_active, products: c.products, activeProducts: c.active, draftProducts: c.draft, groupId: c.group_id }));
+}
+
+/** The collection groups (Men, Women, Sale, …) in their order. */
+export async function listCollectionGroups(db: Db, actor: StaffPrincipal) {
+  requirePermission(actor, 'categories.read');
+  return db.selectFrom('collection_groups').select(['id', 'label']).orderBy('sort_order').orderBy('id').execute();
+}
+
+export async function createCollectionGroup(db: Db, actor: StaffPrincipal, input: { label: string }, ctx: MutationContext) {
+  requirePermission(actor, 'categories.write');
+  const id = slugify(input.label).replace(/^[^a-z]+/, '');
+  if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw new DomainError('invalid', 'Use a name with Latin letters (at least 2).');
+  return db.transaction().execute(async tx => {
+    if (await tx.selectFrom('collection_groups').select('id').where(eb => eb.or([eb('id', '=', id), eb(sql<string>`lower(label)`, '=', input.label.toLowerCase())])).executeTakeFirst())
+      throw new ConflictError(`A group called "${input.label}" already exists.`);
+    const { max } = await tx.selectFrom('collection_groups').select(sql<number>`coalesce(max(sort_order), -1)::int`.as('max')).executeTakeFirstOrThrow();
+    await tx.insertInto('collection_groups').values({ id, label: input.label, sort_order: max + 1 }).execute();
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'collection_group.create', entityType: 'collection_groups', entityId: id, after: { id, label: input.label } });
+    return { id };
+  });
+}
+
+/** The collections a product is in (product page). */
+export async function getProductCollections(db: Db, actor: StaffPrincipal, productId: string): Promise<string[]> {
+  requirePermission(actor, 'products.read');
+  return (await db.selectFrom('collection_products').select('collection_id').where('product_id', '=', productId).execute()).map(r => r.collection_id);
+}
+
+/** Sets exactly which collections a product is in (the product page's picker). Each change is one membership change,
+    audited like the collection page's add / remove; order within a collection is kept for existing members. */
+export async function setProductCollections(db: Db, actor: StaffPrincipal, input: ProductCollectionsInput, ctx: MutationContext) {
+  requirePermission(actor, 'categories.write');
+  const want = new Set(input.collectionIds);
+  const known = want.size ? (await db.selectFrom('collections').select('id').where('id', 'in', [...want]).execute()).map(r => r.id) : [];
+  if (known.length !== want.size) throw new DomainError('invalid', 'One of the chosen collections no longer exists. Reload and try again.');
+  const have = new Set(await getProductCollections(db, actor, input.productId));
+  let added = 0, removed = 0;
+  for (const id of want) if (!have.has(id)) added += (await setCollectionMember(db, actor, { collectionId: id, productId: input.productId, member: true }, ctx)).changed ? 1 : 0;
+  for (const id of have) if (!want.has(id)) removed += (await setCollectionMember(db, actor, { collectionId: id, productId: input.productId, member: false }, ctx)).changed ? 1 : 0;
+  return { added, removed };
 }
 
 export async function getCollection(db: Db, actor: StaffPrincipal, collectionId: string) {
   requirePermission(actor, 'categories.read');
-  const c = await db.selectFrom('collections').select(['id', 'label', 'is_active']).where('id', '=', collectionId).executeTakeFirst();
+  const c = await db.selectFrom('collections').select(['id', 'label', 'is_active', 'group_id', 'seo_title', 'seo_description']).where('id', '=', collectionId).executeTakeFirst();
   if (!c) throw new NotFoundError('Collection not found.');
   const members = await db.selectFrom('collection_products as m').innerJoin('products as p', 'p.id', 'm.product_id')
     .select(['p.id', 'p.sku', 'p.name', 'p.status', 'm.position']).where('m.collection_id', '=', collectionId).orderBy('m.position').orderBy('p.id').execute();
@@ -36,32 +82,45 @@ export async function getCollection(db: Db, actor: StaffPrincipal, collectionId:
     ? await db.selectFrom('products').select(['id', 'sku', 'name', 'status']).where('status', '!=', 'archived')
         .where('id', 'not in', db.selectFrom('collection_products').select('product_id').where('collection_id', '=', collectionId)).orderBy('sku').execute()
     : [];
-  return { collection: { id: c.id, label: c.label, isActive: c.is_active }, members, candidates };
+  return { collection: { id: c.id, label: c.label, isActive: c.is_active, groupId: c.group_id, seoTitle: c.seo_title, seoDescription: c.seo_description }, members, candidates };
 }
 
 export async function createCollection(db: Db, actor: StaffPrincipal, input: CreateCollectionInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');
+  const id = input.id ?? slugify(input.label);
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) throw new DomainError('invalid', 'This name cannot be used as a link id. Use Latin letters or digits, or enter an id.');
   return db.transaction().execute(async tx => {
-    if (await tx.selectFrom('collections').select('id').where('id', '=', input.id).executeTakeFirst()) throw new ConflictError(`A collection with the id "${input.id}" already exists.`);
+    if (await tx.selectFrom('collections').select('id').where('id', '=', id).executeTakeFirst()) throw new ConflictError(`A collection with the id "${id}" already exists.`);
+    if (await tx.selectFrom('collections').select('id').where(sql<string>`lower(label)`, '=', input.label.toLowerCase()).executeTakeFirst())
+      throw new ConflictError(`A collection called "${input.label}" already exists.`);
+    if (input.groupId && !(await tx.selectFrom('collection_groups').select('id').where('id', '=', input.groupId).executeTakeFirst())) throw new DomainError('invalid', 'Choose one of the groups.');
     const { max } = await tx.selectFrom('collections').select(sql<number>`coalesce(max(sort_order), -1)::int`.as('max')).executeTakeFirstOrThrow();
     // New collections start hidden: the store menu lists every active collection, so staff fill it before showing it.
-    const row = { id: input.id, label: input.label, data_status: 'official', note: null, is_active: false, sort_order: max + 1 };
+    const row = { id, label: input.label, data_status: 'official', note: null, is_active: false, sort_order: max + 1, group_id: input.groupId };
     await tx.insertInto('collections').values(row).execute();
-    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'collection.create', entityType: 'collections', entityId: input.id, after: row });
-    return { id: input.id };
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'collection.create', entityType: 'collections', entityId: id, after: row });
+    return { id };
   });
 }
 
 export async function updateCollection(db: Db, actor: StaffPrincipal, input: UpdateCollectionInput, ctx: MutationContext) {
   requirePermission(actor, 'categories.write');
   return db.transaction().execute(async tx => {
-    const c = await tx.selectFrom('collections').select('label').where('id', '=', input.collectionId).forUpdate().executeTakeFirst();
+    const c = await tx.selectFrom('collections').select(['label', 'group_id', 'seo_title', 'seo_description']).where('id', '=', input.collectionId).forUpdate().executeTakeFirst();
     if (!c) throw new NotFoundError('Collection not found.');
     if (c.label !== input.expectedLabel) throw new ConflictError('This collection was changed by someone else since you opened the page. Reload and try again.');
-    if (c.label === input.label) return { changed: 0 };
-    await tx.updateTable('collections').set({ label: input.label }).where('id', '=', input.collectionId).execute();
-    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'collection.update', entityType: 'collections', entityId: input.collectionId, before: { label: c.label }, after: { label: input.label } });
-    return { changed: 1 };
+    // A field the caller did not send stays as it is.
+    const keep = <T,>(v: T | undefined, cur: T) => (v === undefined ? cur : v);
+    const next = { label: input.label, group_id: keep(input.groupId, c.group_id), seo_title: keep(input.seoTitle, c.seo_title), seo_description: keep(input.seoDescription, c.seo_description) };
+    const changed = (Object.keys(next) as (keyof typeof next)[]).filter(k => c[k] !== next[k]);
+    if (!changed.length) return { changed: 0 };
+    if (next.group_id && !(await tx.selectFrom('collection_groups').select('id').where('id', '=', next.group_id).executeTakeFirst())) throw new DomainError('invalid', 'Choose one of the groups.');
+    if (c.label.toLowerCase() !== input.label.toLowerCase() && await tx.selectFrom('collections').select('id').where('id', '!=', input.collectionId)
+      .where(sql<string>`lower(label)`, '=', input.label.toLowerCase()).executeTakeFirst()) throw new ConflictError(`A collection called "${input.label}" already exists.`);
+    await tx.updateTable('collections').set(next).where('id', '=', input.collectionId).execute();
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'collection.update', entityType: 'collections', entityId: input.collectionId,
+      before: Object.fromEntries(changed.map(k => [k, c[k]])), after: Object.fromEntries(changed.map(k => [k, next[k]])) });
+    return { changed: changed.length };
   });
 }
 

@@ -5,7 +5,7 @@ import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
 
 /* The KITSYUU column links to the brand landing sections at the top of the homepage. Links to `/` are plain <a> (full page
    loads) because the landing runs its own script. */
-export default function Footer({ catalogue, policy = RETURNS_POLICY }: { catalogue: Catalogue; policy?: string }) {
+export default function Footer({ catalogue, policy = RETURNS_POLICY, tagline = 'JAPANESE STREETWEAR.\nINDIAN STREETS.' }: { catalogue: Catalogue; policy?: string; tagline?: string }) {
   const idx = indexCatalogue(catalogue);
   const items = idx.c.navigation.map(n => n.all ? { label: 'All products', href: url.shop() }
     : n.collection ? { label: n.label, href: url.shop({ collection: n.collection }) }
@@ -20,7 +20,7 @@ export default function Footer({ catalogue, policy = RETURNS_POLICY }: { catalog
               <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} loading="lazy" /></span>
               <span className="st-wordmark" aria-hidden="true">KITSYUU</span>
             </a>
-            <p>JAPANESE STREETWEAR.<br />INDIAN STREETS.</p>
+            <p data-brand-tagline>{tagline.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}</p>
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
           <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/our-story">The story</a></li><li><a href="/our-story#edit">Style studies</a></li><li><a href="/our-story#about">Our world</a></li></ul></nav>

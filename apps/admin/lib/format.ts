@@ -2,6 +2,12 @@
 const dt = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' });
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
 const num = new Intl.NumberFormat('en-IN');
+/** A calendar date (a Postgres date column, returned as a Date at midnight server time) as YYYY-MM-DD. */
+export const formatDay = (v: unknown): string => {
+  if (!v) return '—';
+  if (v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+  return String(v).slice(0, 10);
+};
 
 export const formatDateTime = (d: Date | string | null | undefined) => (d ? dt.format(new Date(d)) : '—');
 export const formatPaise = (paise: number) => inr.format(paise / 100);

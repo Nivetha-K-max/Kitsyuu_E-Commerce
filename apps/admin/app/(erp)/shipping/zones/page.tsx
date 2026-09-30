@@ -42,7 +42,7 @@ function RateFields({ zoneId, r }: { zoneId: string; r?: Rate }) {
         <Field name="maxOrder" label="Only for orders below (₹)" defaultValue={rupeesField(r?.max_order_paise)} />
         <Field name="estMin" label="Delivery days from" defaultValue={r?.est_days_min?.toString() ?? ''} />
         <Field name="estMax" label="Delivery days to" defaultValue={r?.est_days_max?.toString() ?? ''} />
-        <Field name="codFee" label="COD fee (₹)" defaultValue={rupeesField(r?.cod_fee_paise)} hint="Recorded only: cash on delivery is not offered at checkout." />
+        <Field name="codFee" label="COD fee (₹)" defaultValue={rupeesField(r?.cod_fee_paise)} hint="Charged when the customer pays cash on delivery (Settings → Payments → Cash on delivery). Leave empty for no fee." />
       </div>
       <Checkbox name="codAllowed" label="Cash on delivery allowed in this zone" defaultChecked={r?.cod_allowed ?? false} />
       <Checkbox name="active" label="Active" defaultChecked={r?.is_active ?? true} />

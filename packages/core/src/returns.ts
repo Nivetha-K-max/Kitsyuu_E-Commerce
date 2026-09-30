@@ -161,7 +161,7 @@ export async function listReturns(db: Db, actor: StaffPrincipal, query: { q?: st
 }
 
 /** Money on the order that can still be refunded: captured payments minus refunds that are processed or still pending. */
-async function refundable(q: Queryable, orderId: string) {
+export async function refundable(q: Queryable, orderId: string) {
   const pays = await q.selectFrom('payments').select(['id', 'provider', 'provider_payment_id', 'amount_paise', 'currency', 'status'])
     .where('order_id', '=', orderId).where('status', 'in', ['captured', 'partially_refunded', 'refunded']).orderBy('created_at').execute();
   const refunded = await q.selectFrom('refunds').select(['payment_id', sql<number>`coalesce(sum(amount_paise), 0)::int`.as('n')])
@@ -296,7 +296,7 @@ export async function updateReturnItem(db: Db, actor: StaffPrincipal, input: { r
   });
 }
 
-async function markPaymentRefunded(tx: Tx, orderId: string, paymentId: string) {
+export async function markPaymentRefunded(tx: Tx, orderId: string, paymentId: string) {
   const [p] = await refundable(tx, orderId).then(ps => ps.filter(x => x.id === paymentId));
   const processed = await tx.selectFrom('refunds').select(sql<number>`coalesce(sum(amount_paise), 0)::int`.as('n')).where('payment_id', '=', paymentId).where('status', '=', 'processed').executeTakeFirstOrThrow();
   if (!p) return;

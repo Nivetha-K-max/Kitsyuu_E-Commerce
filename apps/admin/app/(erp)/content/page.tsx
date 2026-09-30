@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { can } from '@kitsyuu/auth';
-import { getAnnouncementAdmin } from '@kitsyuu/core';
-import { ActionForm, Field, Select } from '@/components/forms';
+import { BRAND_COPY_FIELDS, getAnnouncementAdmin, getBrandCopyAdmin } from '@kitsyuu/core';
+import { ActionForm, Field, Select, TextArea } from '@/components/forms';
 import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { saveAnnouncementAction, unpublishAnnouncementAction } from './actions';
+import { saveAnnouncementAction, saveBrandCopyAction, unpublishAnnouncementAction } from './actions';
 
 export const metadata: Metadata = { title: 'Store content' };
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Store content' };
 export default async function ContentPage() {
   const actor = await requireActor();
   if (!can(actor, 'content.manage')) return <><PageHead section="Commerce" title="Store content" /><Forbidden permission="content.manage" /></>;
-  const a = await getAnnouncementAdmin(db(), actor);
+  const [a, brand] = await Promise.all([getAnnouncementAdmin(db(), actor), getBrandCopyAdmin(db(), actor)]);
   const current = a.draft ?? a.published;
   return (
     <>
@@ -37,6 +37,16 @@ export default async function ContentPage() {
           </> : <p className="note" data-no-announcement>Nothing is shown. Save with “publish now” to show the announcement.</p>}
         </section>
       </div>
+      <section className="card form-panel" aria-labelledby="brand-h" data-section="brand-copy">
+        <SectionTitle id="brand-h">Brand wording</SectionTitle>
+        <p className="note">The lines that describe the brand’s origin (they mention Japan and India today). Each box shows the wording the store uses now; change it and publish. An empty box goes back to the original wording.
+          {brand.updatedAt ? ` Last published ${formatDateTime(brand.updatedAt)}.` : ' Nothing has been changed yet.'}</p>
+        <ActionForm action={saveBrandCopyAction} submitLabel="Publish wording" id="brand-copy-form" label="Brand wording" confirmText="Publish this wording to the store?">
+          {BRAND_COPY_FIELDS.map(f => f.max > 80 || f.key === 'footerTagline'
+            ? <TextArea key={f.key} name={f.key} label={f.label} rows={f.key === 'footerTagline' ? 2 : 3} defaultValue={brand.copy[f.key]} hint={`${f.where} · up to ${f.max} characters`} />
+            : <Field key={f.key} name={f.key} label={f.label} defaultValue={brand.copy[f.key]} hint={`${f.where} · up to ${f.max} characters`} />)}
+        </ActionForm>
+      </section>
     </>
   );
 }

@@ -69,7 +69,7 @@ export default async function SettingsPage() {
 /** The form field for one editable setting, by type. Validation happens on the server (core/settings.ts). */
 function SettingInput({ s }: { s: SettingRow }) {
   const t = s.type;
-  if (t.kind === 'integer') return <Field name="value" label={`${s.label}${t.unit ? ` (${t.unit})` : ''}`} type="number" defaultValue={String(s.value ?? '')} hint={`${t.min}–${t.max}`} />;
+  if (t.kind === 'integer') return <Field name="value" label={`${s.label}${t.unit ? ` (${t.unit})` : ''}`} type="number" defaultValue={String(s.value ?? '')} hint={`${t.min}–${t.max}${t.optional ? ' · Leave empty to clear.' : ''}`} />;
   if (t.kind === 'choice') return <Select name="value" label={s.label} defaultValue={String(s.value ?? t.options[0].value)} options={t.options.map(o => ({ value: o.value, label: o.label }))} />;
   if (t.kind === 'money') return <Field name="value" label={`${s.label} (₹)`} defaultValue={typeof s.value === 'number' ? String(s.value / 100) : ''} hint={t.optional ? 'Leave empty to clear.' : undefined} />;
   if (t.kind === 'text' && t.multiline) return <TextArea name="value" label={s.label} defaultValue={String(s.value ?? '')} rows={3} hint={t.optional ? 'Leave empty to clear.' : undefined} />;

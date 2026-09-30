@@ -92,7 +92,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -102,8 +102,9 @@ try {
   ok('M9 sign-in history page opens (filters + list or empty state)', await ev(`!!document.querySelector('[data-signin-filters]') && !!document.querySelector('[data-signins-table],[data-empty]')`));
   const health = await ev(`fetch('/api/health').then(async r=>({s:r.status,j:await r.json()}))`);
   // ---------- M11: collections, bulk status, product merchandising sections ----------
-  await visit('/collections', '!!document.querySelector("[data-collections-table]")');
-  ok('M11 collections: New Arrivals listed and in the store', /New Arrivals/.test(await text('[data-collections-table]')) && /in store/i.test(await text('[data-collection="new-arrivals"]')));
+  await visit('/collections', '!!document.querySelector("[data-group-tabs]")');
+  ok('M11 collections: New Arrivals listed and in the store', /New Arrivals/.test(await text('[data-collection="new-arrivals"]')) && /in store/i.test(await text('[data-collection="new-arrivals"]')));
+  ok('collections are grouped Men / Women / Sale (client change request)', /Men[\s\S]*Women[\s\S]*Sale/.test(await text('[data-group-tabs]')) && await exists('[data-collection="men"]'));
   await fill('#create-collection-form input[name=label]', 'E2E Edit'); await fill('#create-collection-form input[name=id]', 'e2e-edit');
   await submit('#create-collection-form');
   await until(`location.pathname === '/collections/e2e-edit'`, 15000);
@@ -194,7 +195,7 @@ try {
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit;
   // ERP modules add read access to shipping, returns, carts and support (and the notification centre everyone has).
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Inventory|Stock counts|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

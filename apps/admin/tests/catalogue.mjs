@@ -67,7 +67,7 @@ try {
 
   // ================= super admin =================
   ok('super admin signs in', await signIn('root', 'M4 Root'));
-  ok('menu has Categories under Catalogue', /Products\|Categories\|Collections\|Attributes\|Inventory/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
+  ok('menu has Categories under Catalogue', /Products\|Categories\|Collections\|Attributes\|Size charts\|Inventory/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
 
   // ---------- create product ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');

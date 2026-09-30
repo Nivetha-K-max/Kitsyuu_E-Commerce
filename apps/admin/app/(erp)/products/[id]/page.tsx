@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, productId as productIdSchema } from '@kitsyuu/contracts';
-import { getProduct, getProductAttributes, listAdjustmentReasons, listAttributes, listCategories, listRelated } from '@kitsyuu/core';
+import { getProduct, getProductAttributes, getProductCollections, listAdjustmentReasons, listAttributes, listCategories, listCollections, listRelated } from '@kitsyuu/core';
+import TagPicker from '@/components/TagPicker';
+import { setProductCollectionsAction } from '../../collections/actions';
 import { ActionForm, Checkbox, DropzoneField, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { PriceForm, StockAdjustForm } from '@/components/CatalogueForms';
 import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
@@ -40,11 +42,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     .catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const write = can(actor, 'products.write'), adjust = can(actor, 'inventory.adjust'), catWrite = can(actor, 'categories.write');
   const created = (await searchParams).notice === 'created';
-  const [categories, reasons, attributes, tagged] = await Promise.all([
+  const [categories, reasons, attributes, tagged, collections, inCollections] = await Promise.all([
     write ? listCategories(db(), actor) : Promise.resolve([]),
     adjust ? listAdjustmentReasons(db(), actor) : Promise.resolve([]),
     listAttributes(db(), actor),
     getProductAttributes(db(), actor, id),
+    can(actor, 'categories.read') ? listCollections(db(), actor) : Promise.resolve([]),
+    getProductCollections(db(), actor, id),
   ]);
   const looks = await listRelated(db(), actor, id);
   const hasTag = new Set(tagged);
@@ -109,6 +113,21 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               ) : <p className="note" data-readonly="new-arrivals">Changing New Arrivals needs the categories.write permission.</p>}
             </section>
           )}
+
+          <section className="card" aria-labelledby="col-h" data-section="collections">
+            <SectionTitle id="col-h">Collections</SectionTitle>
+            <p className="note">Men, Women, Sale and other curated lists. The category stays as it is; the Sale collection is separate from the sale price.</p>
+            {catWrite && collections.length ? (
+              <ActionForm action={setProductCollectionsAction} submitLabel="Save collections" id="product-collections-form" label="Collections">
+                <Hidden name="productId" value={p.id} />
+                <TagPicker name="collectionIds[]" label="In collections" addLabel="+ Add collection" selected={inCollections}
+                  options={collections.map(c => ({ value: c.id, label: c.isActive ? c.label : `${c.label} (hidden)` }))} />
+              </ActionForm>
+            ) : (
+              <p data-product-collections>{inCollections.length ? collections.filter(c => inCollections.includes(c.id)).map(c => c.label).join(', ') || inCollections.join(', ') : 'In no collection.'}
+                {!catWrite && <span className="note"> Changing collections needs the categories.write permission.</span>}</p>
+            )}
+          </section>
         </aside>
 
         <div className="product-main">
@@ -167,14 +186,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               <ActionForm action={setProductAttributesAction} submitLabel="Save store filters" id="attributes-form" label="Store filters" className="form record-form">
                 <Hidden name="productId" value={p.id} />
                 {attributes.map(a => (
-                  <fieldset className="block attr-pick" key={a.id} data-attribute={a.id}>
-                    <legend>{a.label}{!a.isActive && <span className="note"> (hidden from the store)</span>}</legend>
-                    {a.values.length ? <div className="chip-checks">{a.values.map(v => (
-                      <label key={v.slug} className="chip-check">
-                        <input type="checkbox" name="values[]" value={`${a.id}:${v.slug}`} defaultChecked={hasTag.has(`${a.id}:${v.slug}`)} /><span>{v.label}</span>
-                      </label>
-                    ))}</div> : <p className="note">No values yet{catWrite && <> — add them under <Link href="/attributes">Attributes</Link></>}.</p>}
-                  </fieldset>
+                  <div className="block attr-pick" key={a.id} data-attribute={a.id}>
+                    {a.values.length ? (
+                      <TagPicker name="values[]" label={`${a.label}${a.isActive ? '' : ' (hidden from the store)'}`} single={a.selection === 'single'} addLabel={`+ Add ${a.label.toLowerCase()}`}
+                        selected={a.values.filter(v => hasTag.has(`${a.id}:${v.slug}`)).map(v => `${a.id}:${v.slug}`)}
+                        options={a.values.map(v => ({ value: `${a.id}:${v.slug}`, label: v.label, swatch: v.swatch, inactive: !v.isActive }))} />
+                    ) : <p className="note"><b>{a.label}</b>: no values yet{catWrite && <> — add them under <Link href="/attributes">Attributes</Link></>}.</p>}
+                  </div>
                 ))}
               </ActionForm>
             ) : (

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { getPurchaseOrder, listMaterials } from '@kitsyuu/core';
+import { getPurchaseOrder, listMaterials, purchaseOrderProduction } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import { Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
@@ -22,6 +22,7 @@ export default async function PurchaseOrderPage({ params }: { params: Params }) 
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const d = await getPurchaseOrder(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const forProduction = await purchaseOrderProduction(db(), actor, id);   // client change request: production ↔ purchasing
   const o = d.order;
   const manage = can(actor, 'procurement.manage'), receive = can(actor, 'procurement.receive');
   const draft = o.status === 'draft', open = o.status === 'ordered' || o.status === 'partially_received';
@@ -29,8 +30,10 @@ export default async function PurchaseOrderPage({ params }: { params: Params }) 
   return (
     <>
       <PageHead section="Supply" title={o.po_number} crumbs={crumbs} eyebrow={`${o.vendor} · created ${formatDateTime(o.created_at as Date)}${o.created_by ? ` by ${o.created_by}` : ''}`}>
+        <Link className="btn ghost sm" href={`/purchase-orders/${o.id}/print`} data-link="print-po">Print PO</Link>
         <StatusBadge status={o.status} />
       </PageHead>
+      {forProduction.length > 0 && <p className="note" data-po-production>Raised for production: {forProduction.map((x, i) => <span key={x.id}>{i > 0 && ', '}{can(actor, 'production.read') ? <Link href={`/production/${x.id}`}>{x.number}</Link> : x.number}</span>)}</p>}
       <div className="grid two">
         <section className="card" aria-labelledby="l-h" data-section="lines">
           <SectionTitle id="l-h">Materials</SectionTitle>

@@ -5,15 +5,20 @@
    - discounts: DiscountRule[] (no rules exist yet).
    A snapshot of how the amounts were worked out is stored on the order (orders.pricing). */
 import { sql, type Queryable } from '@kitsyuu/db';
+import { codQuote, type CodQuote } from './cod.ts';
+import { loyaltyBalance, quoteLoyalty, readLoyaltySettings, type LoyaltyQuote } from './loyalty.ts';
 
 export interface PriceableLine { productId: string; variantId: string; qty: number; unitPaise: number; lineTotalPaise: number }
-export interface ShipTo { state: string; pin: string; country: string }
+export interface ShipTo { state: string; pin: string; country: string; /** the delivery option the customer chose (a zone rate id) */ deliveryRateId?: string | null }
 
 export interface ShippingQuote {
   amountPaise: number; method: string; label: string; configured: boolean;
   /** Set when the order cannot be delivered to this address with the configured rates (checkout is refused with this text). */
   unavailable?: string; estimate?: string | null;
+  /** Client change request: the delivery options the customer can choose from (e.g. Standard, Express) and which one applies. */
+  options?: DeliveryOption[]; rateId?: string | null;
 }
+export interface DeliveryOption { rateId: string; label: string; amountPaise: number; estimate: string | null }
 /** Works out the shipping charge for an order. Real carriers / rate tables plug in here. */
 export interface ShippingProvider {
   readonly code: string;
@@ -61,9 +66,16 @@ export interface CartTotals {
   pricesIncludeTax: boolean;
   shipping: ShippingQuote; discounts: DiscountLine[]; tax: (TaxRate & { configured: true }) | { configured: false };
   coupon?: CouponState | null;
+  /** Second pass: the cash-on-delivery fee (0 unless the customer chose COD and it applies). */
+  codFeePaise: number;
+  /** Second pass: present when the caller priced a checkout choice (payment method and points). */
+  payment?: { method: PaymentChoice['method']; cod: CodQuote; loyalty: LoyaltyQuote | null };
 }
 
-export async function priceOrder(q: Queryable, lines: PriceableLine[], opts: { config?: CommerceConfig; customerId?: string | null; shipTo?: ShipTo | null; cartId?: string | null } = {}): Promise<CartTotals> {
+/** How the customer wants to pay (second pass). The server decides whether COD or points can be used and what they cost. */
+export interface PaymentChoice { method: 'online' | 'cod'; usePoints: boolean }
+
+export async function priceOrder(q: Queryable, lines: PriceableLine[], opts: { config?: CommerceConfig; customerId?: string | null; shipTo?: ShipTo | null; cartId?: string | null; payment?: PaymentChoice | null } = {}): Promise<CartTotals> {
   const config = opts.config ?? defaultCommerceConfig;
   const subtotalPaise = lines.reduce((n, l) => n + l.lineTotalPaise, 0);
   const discounts: DiscountLine[] = [];
@@ -77,16 +89,35 @@ export async function priceOrder(q: Queryable, lines: PriceableLine[], opts: { c
     for (const d of r.discounts) if (d.amountPaise > 0) discounts.push({ ...d, amountPaise: Math.floor(d.amountPaise) });
     coupon = r.coupon;
   }
-  const discountPaise = Math.min(subtotalPaise, discounts.reduce((n, d) => n + d.amountPaise, 0));
+  let discountPaise = Math.min(subtotalPaise, discounts.reduce((n, d) => n + d.amountPaise, 0));
   const shipping = await config.shipping.quote({ lines, subtotalPaise, shipTo: opts.shipTo ?? null });
+  // Second pass: cash on delivery (its discount and fee) and loyalty points, in that order, on the goods after discounts.
+  let codFeePaise = 0, payment: CartTotals['payment'];
+  if (opts.payment) {
+    const cod = await codQuote(q, shipping, subtotalPaise - discountPaise);
+    if (opts.payment.method === 'cod' && cod.available) {
+      if (cod.discountPaise > 0) { discounts.push({ code: 'COD', label: 'Cash on delivery discount', amountPaise: cod.discountPaise }); discountPaise += cod.discountPaise; }
+      codFeePaise = cod.feePaise;
+    }
+    let loyalty: LoyaltyQuote | null = null;
+    if (opts.customerId) {
+      loyalty = quoteLoyalty(await readLoyaltySettings(q), await loyaltyBalance(q, opts.customerId), subtotalPaise - discountPaise, opts.payment.usePoints);
+      if (loyalty.discountPaise > 0) {
+        discounts.push({ code: 'LOYALTY', label: `Loyalty points (${loyalty.usedPoints})`, amountPaise: loyalty.discountPaise });
+        discountPaise += loyalty.discountPaise;
+      }
+    }
+    payment = { method: opts.payment.method === 'cod' && cod.available ? 'cod' : 'online', cod, loyalty };
+  }
   const rate = await currentTaxRate(q);
   const taxable = subtotalPaise - discountPaise;            // goods after discounts; how shipping is taxed is not decided yet
   const taxPaise = !rate ? 0 : rate.inclusive ? Math.round(taxable * rate.rateBp / (10_000 + rate.rateBp)) : Math.round(taxable * rate.rateBp / 10_000);
   const pricesIncludeTax = rate ? rate.inclusive : true;
   return {
     units: lines.reduce((n, l) => n + l.qty, 0), subtotalPaise, discountPaise, shippingPaise: shipping.amountPaise, taxPaise,
-    totalPaise: taxable + shipping.amountPaise + (pricesIncludeTax ? 0 : taxPaise), pricesIncludeTax,
+    totalPaise: taxable + shipping.amountPaise + codFeePaise + (pricesIncludeTax ? 0 : taxPaise), pricesIncludeTax,
     shipping, discounts, tax: rate ? { ...rate, configured: true } : { configured: false },
     ...(config.discountSource ? { coupon } : {}),
+    codFeePaise, ...(payment ? { payment } : {}),
   };
 }

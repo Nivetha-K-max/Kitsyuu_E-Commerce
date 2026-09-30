@@ -150,3 +150,14 @@
 .st-promo p{margin:6px 0 0;color:#c9c7c1;max-width:620px;line-height:1.6}
 .st-was{color:var(--muted);text-decoration:line-through;margin-left:8px;font-size:.9em}
 @media (max-width:640px){.st-promo{padding:18px 16px}.st-coupon-form .button{width:100%}}
+/* newsletter consent and states (client change request) */
+.st-news .st-news-consent{display:flex;gap:10px;align-items:flex-start;margin:14px 0 0;font-family:inherit;font-size:13px;line-height:1.55;letter-spacing:0;text-transform:none;color:#f1e7e9}
+.st-news .st-news-consent input{margin-top:3px;flex:none}
+.st-news-msg.is-ok{color:#fff}
+.st-news-msg.is-error{color:#ffd6dc}
+.st-size-chart{margin:18px 0 0;border-top:1px solid var(--line)}
+.st-size-chart summary{cursor:pointer;padding:12px 0;font:12px var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-size-chart table{width:100%;border-collapse:collapse;font-size:13px}
+.st-size-chart th,.st-size-chart td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+.st-size-chart td+td,.st-size-chart th+th{text-align:right}
+.st-size-chart .st-note{margin:10px 0 0}

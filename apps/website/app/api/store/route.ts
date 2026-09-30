@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { currentCustomer } from '@/lib/server';
+import { cartRefreshMinutes } from '@kitsyuu/core';
+import { currentCustomer, db } from '@/lib/server';
 import { customerStore } from '@/lib/store-state';
 
 /* The signed-in customer's cart and wishlist for the store pages (which stay static). Guests get {status: 'guest'}: their
@@ -9,7 +10,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const me = await currentCustomer();
-    const body = me ? { status: 'customer' as const, ...(await customerStore(me)) } : { status: 'guest' as const };
+    // Client change request: how often the store re-syncs a cart that has items (default 30 minutes).
+    const refreshMinutes = await cartRefreshMinutes(db()).catch(() => 30);
+    const body = me ? { status: 'customer' as const, refreshMinutes, ...(await customerStore(me)) } : { status: 'guest' as const, refreshMinutes };
     return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
     console.error('[api/store]', e);

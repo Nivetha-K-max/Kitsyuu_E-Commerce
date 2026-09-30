@@ -27,7 +27,7 @@ export default async function CartsPage({ searchParams }: { searchParams: SP }) 
   return (
     <>
       <PageHead title="Carts & wishlists" eyebrow={list.hours ? `A cart counts as abandoned after ${list.hours} hours without changes.` : 'No abandoned-cart threshold is set (Settings → Carts), so no cart is counted as abandoned.'} />
-      <SubNav label="Carts" current="/carts" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
+      <SubNav label="Carts" current="/carts" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       <dl className="report-kpis" data-cart-kpis>
         <div><dt>Active carts</dt><dd>{formatNumber(s.active)}</dd></div>
         <div><dt>Abandoned carts</dt><dd>{formatNumber(s.abandoned)}<small>{formatPaise(s.abandoned_value)} at today’s prices</small></dd></div>

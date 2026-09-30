@@ -3,10 +3,12 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import {
-  collectionMemberInput, createCollectionInput, moveCollectionInput, moveCollectionMemberInput, setCollectionActiveInput, updateCollectionInput,
-  type ActionState,
+  collectionMemberInput, createCollectionGroupInput, createCollectionInput, moveCollectionInput, moveCollectionMemberInput, productCollectionsInput,
+  setCollectionActiveInput, updateCollectionInput, type ActionState,
 } from '@kitsyuu/contracts';
-import { createCollection, moveCollection, moveCollectionMember, setCollectionActive, setCollectionMember, updateCollection } from '@kitsyuu/core';
+import {
+  createCollection, createCollectionGroup, moveCollection, moveCollectionMember, setCollectionActive, setCollectionMember, setProductCollections, updateCollection,
+} from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -44,5 +46,15 @@ export const addCollectionMemberAction = action(collectionMemberInput, async (in
 export const removeCollectionMemberAction = action(collectionMemberInput, async (input, actor) => {
   await setCollectionMember(db(), actor, { ...input, member: false }, await requestContext());
   return { ok: true, message: 'Removed.' };
+});
+export const createCollectionGroupAction = action(createCollectionGroupInput, async (input, actor) => {
+  await createCollectionGroup(db(), actor, input, await requestContext());
+  return { ok: true, message: `Group "${input.label}" added.` };
+});
+/** The product page's collection picker: exactly the collections ticked there. */
+export const setProductCollectionsAction = action(productCollectionsInput, async (input, actor) => {
+  const r = await setProductCollections(db(), actor, input, await requestContext());
+  revalidatePath(`/products/${input.productId}`);
+  return { ok: true, message: r.added || r.removed ? `Saved: ${r.added} added, ${r.removed} removed.` : 'No changes.' };
 });
 export const moveCollectionMemberAction = action(moveCollectionMemberInput, async (input, actor) => { await moveCollectionMember(db(), actor, input, await requestContext()); return { ok: true }; });

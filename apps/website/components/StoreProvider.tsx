@@ -5,9 +5,12 @@
      every read re-checked against the catalogue. Nothing a guest stores here is trusted: checkout re-prices everything.
    - Signed-in customers (M7): the cart and wishlist are kept in the database. Changes go through server actions, which
      resolve prices and stock on the server; this state only shows what the server returned. On login the guest cart and
-     wishlist are merged into the saved ones once, then cleared from this browser. */
+     wishlist are merged into the saved ones once, then cleared from this browser.
+   - Client change request: while the cart has items it is re-synced every N minutes (Settings → Checkout → 'Cart refresh
+     interval', 30 by default): a signed-in cart is re-loaded from the server (current prices, sale prices, stock); a guest
+     cart is re-checked against a freshly loaded catalogue. Nothing is removed from the cart or reserved by a refresh. */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { Catalogue, CartLine, CustomerStore, Product, StoreCart, StoreResult } from '@/lib/types';
 import { indexCatalogue, MAX_QTY, type Index } from '@/lib/catalogue-utils';
 import { addToCartAction, mergeGuestStoreAction, removeCartLineAction, setCartQtyAction, setWishlistedAction } from '@/app/store-actions';
@@ -54,10 +57,14 @@ export function useStore() {
   return v;
 }
 
-export default function StoreProvider({ catalogue, children }: { catalogue: Catalogue; children: React.ReactNode }) {
+export default function StoreProvider({ catalogue, children, refreshMinutes: initialRefresh = 30 }: { catalogue: Catalogue; children: React.ReactNode; refreshMinutes?: number }) {
   const idx = useMemo(() => indexCatalogue(catalogue), [catalogue]);
   const auth = useAuth();
   const path = usePathname();
+  const router = useRouter();
+  const [refreshMinutes, setRefreshMinutes] = useState(initialRefresh);
+  const [syncTick, setSyncTick] = useState(0);
+  const lastSync = useRef(Date.now());
   const [rawCart, setRawCart] = useState<unknown[]>([]);
   const [rawWish, setRawWish] = useState<unknown[]>([]);
   const [saved, setSaved] = useState<CustomerStore | null>(null);
@@ -104,19 +111,39 @@ export default function StoreProvider({ catalogue, children }: { catalogue: Cata
       }
       if (!store) {
         const res = await fetch('/api/store', { cache: 'no-store', credentials: 'same-origin' }).catch(() => null);
-        const body = res?.ok ? await res.json() as { status: string } & Partial<CustomerStore> : null;
+        const body = res?.ok ? await res.json() as { status: string; refreshMinutes?: number } & Partial<CustomerStore> : null;
         if (body?.status === 'customer' && body.cart) store = { cart: body.cart, wishlist: body.wishlist ?? [] };
+        if (typeof body?.refreshMinutes === 'number' && live) setRefreshMinutes(body.refreshMinutes);
       }
       if (!live) return;
       if (!store && savedStatusRef.current === 'ready') return;          // a reload failed: keep showing the last saved state
       setSaved(store); setSavedStatus(store ? 'ready' : 'failed');
       if (!store && savedStatusRef.current !== 'failed') toast('Your saved cart could not be loaded right now. Items you add are kept in this browser for now.');
       savedStatusRef.current = store ? 'ready' : 'failed';
+      lastSync.current = Date.now();
     })();
     return () => { live = false; };
-  }, [auth.status, path, write, toast]);
+  }, [auth.status, path, write, toast, syncTick]);
+
+  useEffect(() => setRefreshMinutes(initialRefresh), [initialRefresh]);   // the interval comes with the page (no extra request)
 
   const mode: 'guest' | 'customer' = saved ? 'customer' : 'guest';
+  const hasItems = (saved ? saved.cart.lines.length : rawCart.length) > 0;
+  /* Client change request: re-sync a cart with items every refreshMinutes (checked each minute, and when the tab is shown
+     again, because browsers slow timers in background tabs). */
+  useEffect(() => {
+    if (!hasItems) return;
+    lastSync.current = Date.now();          // the interval runs from when the cart has items
+    const due = () => {
+      if (Date.now() - lastSync.current < refreshMinutes * 60_000) return;
+      lastSync.current = Date.now();
+      if (auth.status === 'user') setSyncTick(t => t + 1); else router.refresh();
+    };
+    const timer = setInterval(due, 60_000);
+    const onShow = () => { if (document.visibilityState === 'visible') due(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onShow); };
+  }, [hasItems, refreshMinutes, auth.status, router]);
   const ready = localReady && (auth.status === 'guest' || savedStatus === 'ready' || savedStatus === 'failed');
   const apply = useCallback((r: StoreResult) => { if (r.store) setSaved(r.store); if (!r.ok && r.message) toast(r.message); return r; }, [toast]);
 

@@ -38,6 +38,12 @@ export async function listProducts(db: Db, actor: StaffPrincipal, query: Product
   if (query.category) q = q.where(eb => eb.or([eb('p.category_id', '=', query.category!), eb('p.subcategory_id', '=', query.category!)]));
   if (query.status === 'active') q = q.where('p.status', '=', 'active');
   if (query.status === 'inactive') q = q.where('p.status', '!=', 'active');
+  if (query.status === 'draft' || query.status === 'archived') q = q.where('p.status', '=', query.status);
+  // Client change request: filters combine (collection + category + status + availability).
+  if (query.collection) q = q.where(eb => eb.exists(eb.selectFrom('collection_products as cp').select('cp.product_id').whereRef('cp.product_id', '=', 'p.id').where('cp.collection_id', '=', query.collection!)));
+  if (query.stock === 'in_stock') q = q.where(sql<boolean>`exists (select 1 from public.product_variants v where v.product_id = p.id and v.is_active and v.stock_qty > 0)`);
+  if (query.stock === 'out') q = q.where(sql<boolean>`not exists (select 1 from public.product_variants v where v.product_id = p.id and v.is_active and v.stock_qty > 0)`);
+  if (query.stock === 'low') q = q.where(sql<boolean>`exists (select 1 from public.v_inventory_status s where s.product_id = p.id and s.is_active and s.stock_status <> 'in_stock')`);
   const rows = await q.orderBy('p.sku').execute();
   return rows.map(r => ({
     id: r.id, sku: r.sku, slug: r.slug, name: r.name, status: r.status, categoryId: r.category_id, subcategoryId: r.subcategory_id,
@@ -210,5 +216,21 @@ export async function updateProductPrice(db: Db, actor: StaffPrincipal, input: U
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'product.price_update', entityType: 'products', entityId: input.productId,
       before: { price_paise: p.price_paise }, after: { price_paise: input.price }, ...auditCtx(ctx) });
     return { beforePaise: p.price_paise, afterPaise: input.price, changed: true };
+  });
+}
+
+/** Client change request (bulk editor): moves one product to another category / subcategory. A product in the store must
+    stay in active categories (the same rule as activating it). Audited. */
+export async function setProductCategory(db: Db, actor: StaffPrincipal, input: { productId: string; categoryId: string; subcategoryId: string | null }, ctx: MutationContext) {
+  requirePermission(actor, 'products.write');
+  return db.transaction().execute(async tx => {
+    const p = await tx.selectFrom('products').select(['status', 'category_id', 'subcategory_id']).where('id', '=', input.productId).forUpdate().executeTakeFirst();
+    if (!p) throw new NotFoundError('Product not found.');
+    await assertCategoryPair(tx, input.categoryId, input.subcategoryId ?? undefined, p.status === 'active');
+    if (p.category_id === input.categoryId && (p.subcategory_id ?? null) === input.subcategoryId) return { changed: false };
+    await tx.updateTable('products').set({ category_id: input.categoryId, subcategory_id: input.subcategoryId }).where('id', '=', input.productId).execute();
+    await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'product.category_update', entityType: 'products', entityId: input.productId,
+      before: { category_id: p.category_id, subcategory_id: p.subcategory_id }, after: { category_id: input.categoryId, subcategory_id: input.subcategoryId }, ...auditCtx(ctx) });
+    return { changed: true };
   });
 }

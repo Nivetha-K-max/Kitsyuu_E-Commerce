@@ -24,12 +24,12 @@ function checkCompare(price: number, compareAt: number | null, what: string) {
 
 export async function listProductPrices(db: Db, actor: StaffPrincipal, query: { q?: string; filter?: 'all' | 'sale' | 'scheduled' | 'overrides'; page: number }) {
   requirePermission(actor, 'pricing.read');
-  let q = db.selectFrom('products as p').select(['p.id', 'p.sku', 'p.name', 'p.status', 'p.price_paise', 'p.compare_at_paise',
+  let q = db.selectFrom('products as p').select(['p.id', 'p.sku', 'p.name', 'p.status', 'p.price_paise', 'p.compare_at_paise', 'p.sale_price_paise', 'p.sale_starts_at', 'p.sale_ends_at',
     sql<number>`(select count(*)::int from public.product_variants v where v.product_id = p.id)`.as('sizes'),
     sql<number>`(select count(*)::int from public.product_variants v where v.product_id = p.id and (v.price_paise is not null or v.compare_at_paise is not null))`.as('overrides'),
     sql<number>`(select count(*)::int from public.price_changes c where c.product_id = p.id and c.status = 'scheduled')`.as('scheduled')]);
   if (query.q) { const t = `%${query.q.replace(/[%_\\]/g, m => '\\' + m)}%`; q = q.where(eb => eb.or([eb('p.name', 'ilike', t), eb('p.sku', 'ilike', t)])); }
-  if (query.filter === 'sale') q = q.where(sql<boolean>`p.compare_at_paise > p.price_paise`);
+  if (query.filter === 'sale') q = q.where(sql<boolean>`(p.compare_at_paise > p.price_paise or (p.sale_price_paise is not null and (p.sale_ends_at is null or p.sale_ends_at > now())))`);
   if (query.filter === 'scheduled') q = q.where(sql<boolean>`exists (select 1 from public.price_changes c where c.product_id = p.id and c.status = 'scheduled')`);
   if (query.filter === 'overrides') q = q.where(sql<boolean>`exists (select 1 from public.product_variants v where v.product_id = p.id and (v.price_paise is not null or v.compare_at_paise is not null))`);
   const rows = await q.orderBy('p.name').limit(PRICING_PAGE_SIZE + 1).offset((query.page - 1) * PRICING_PAGE_SIZE).execute();
@@ -38,10 +38,10 @@ export async function listProductPrices(db: Db, actor: StaffPrincipal, query: { 
 
 export async function getProductPricing(db: Db, actor: StaffPrincipal, productId: string) {
   requirePermission(actor, 'pricing.read');
-  const product = await db.selectFrom('products').select(['id', 'sku', 'name', 'status', 'price_paise', 'compare_at_paise']).where('id', '=', productId).executeTakeFirst();
+  const product = await db.selectFrom('products').select(['id', 'sku', 'name', 'status', 'price_paise', 'compare_at_paise', 'sale_price_paise', 'sale_starts_at', 'sale_ends_at']).where('id', '=', productId).executeTakeFirst();
   if (!product) throw new NotFoundError('Product not found.');
   const [variants, changes, history] = await Promise.all([
-    db.selectFrom('product_variants').select(['id', 'size', 'sku', 'price_paise', 'compare_at_paise', 'is_active']).where('product_id', '=', productId).orderBy('sort_order').execute(),
+    db.selectFrom('product_variants').select(['id', 'size', 'sku', 'price_paise', 'compare_at_paise', 'sale_price_paise', 'is_active']).where('product_id', '=', productId).orderBy('sort_order').execute(),
     db.selectFrom('price_changes as c').leftJoin('product_variants as v', 'v.id', 'c.variant_id').leftJoin('staff_users as s', 's.id', 'c.created_by')
       .select(['c.id', 'c.variant_id', 'v.size', 'c.new_price_paise', 'c.new_compare_at_paise', 'c.clear_compare_at', 'c.effective_at', 'c.status', 'c.note',
         'c.failure_reason', 'c.applied_at', 's.email as created_by_email'])
@@ -206,7 +206,7 @@ export async function pricingOverview(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'pricing.read');
   const n = sql<number>`count(*)::int`;
   const [sale, scheduled, active, redeemed] = await Promise.all([
-    db.selectFrom('products').select(n.as('n')).where(sql<boolean>`compare_at_paise > price_paise`).executeTakeFirstOrThrow(),
+    db.selectFrom('products').select(n.as('n')).where(sql<boolean>`compare_at_paise > price_paise or (sale_price_paise is not null and (sale_ends_at is null or sale_ends_at > now()))`).executeTakeFirstOrThrow(),
     db.selectFrom('price_changes').select(n.as('n')).where('status', '=', 'scheduled').executeTakeFirstOrThrow(),
     db.selectFrom('discounts').select(n.as('n')).where('is_active', '=', true).where(eb => eb.or([eb('ends_at', 'is', null), eb('ends_at', '>', sql<Date>`now()`)])).executeTakeFirstOrThrow(),
     db.selectFrom('discount_redemptions as r').innerJoin('orders as o', 'o.id', 'r.order_id')

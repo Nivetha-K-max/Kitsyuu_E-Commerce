@@ -139,7 +139,8 @@ export async function listPurchaseOrders(db: Db, actor: StaffPrincipal, query: {
 export async function getPurchaseOrder(db: Db, actor: StaffPrincipal, id: string) {
   requirePermission(actor, 'procurement.read');
   const p = await db.selectFrom('purchase_orders as p').innerJoin('vendors as v', 'v.id', 'p.vendor_id').leftJoin('staff_users as s', 's.id', 'p.created_by')
-    .select(['p.id', 'p.po_number', 'p.status', 'p.expected_on', 'p.notes', 'p.ordered_at', 'p.created_at', 'p.vendor_id', 'v.name as vendor', 's.email as created_by'])
+    .select(['p.id', 'p.po_number', 'p.status', 'p.expected_on', 'p.notes', 'p.ordered_at', 'p.created_at', 'p.vendor_id', 'v.name as vendor', 's.email as created_by',
+      'v.contact as vendor_contact', 'v.email as vendor_email', 'v.phone as vendor_phone', 'v.gstin as vendor_gstin', 'v.address as vendor_address'])
     .where('p.id', '=', id).executeTakeFirst();
   if (!p) throw new NotFoundError('Purchase order not found.');
   const costs = can(actor, 'costs.read');
@@ -165,6 +166,32 @@ export async function createPurchaseOrder(db: Db, actor: StaffPrincipal, input: 
       .returning('id').executeTakeFirstOrThrow();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'purchase_order.create', entityType: 'purchase_orders', entityId: po.id, after: { po_number: n, vendor_id: v.id } });
     return { id: po.id, poNumber: n };
+  });
+}
+
+/** Creates ONE draft purchase order for ONE vendor with SEVERAL material lines, in one transaction (client change request).
+    Every material must be active; costs are only taken from staff with costs.read. Audited as the order plus each line. */
+export async function createPurchaseOrderWithLines(db: Db, actor: StaffPrincipal,
+  input: { vendorId: string; expectedOn: string | null; notes: string | null; lines: { materialId: string; qty: number; unitCostPaise: number | null }[] }, ctx: MutationContext) {
+  requirePermission(actor, 'procurement.manage');
+  if (!input.lines.length) throw new DomainError('invalid', 'Enter a quantity for at least one material.');
+  const costs = can(actor, 'costs.read');
+  return db.transaction().execute(async tx => {
+    const v = await tx.selectFrom('vendors').select(['id', 'is_active']).where('id', '=', input.vendorId).forShare().executeTakeFirst();
+    if (!v) throw new NotFoundError('Vendor not found.');
+    if (!v.is_active) throw new ConflictError('This vendor is inactive. Activate it first, or choose another.');
+    const mats = await tx.selectFrom('materials').select(['id', 'is_active', 'name']).where('id', 'in', input.lines.map(l => l.materialId)).execute();
+    if (mats.length !== input.lines.length) throw new NotFoundError('One of the materials no longer exists. Reload and try again.');
+    const inactive = mats.filter(m => !m.is_active);
+    if (inactive.length) throw new ConflictError(`Inactive material: ${inactive.map(m => m.name).join(', ')}.`);
+    const { n } = (await sql<{ n: string }>`select public.next_document_number('purchase_order', 'PO') as n`.execute(tx)).rows[0];
+    const po = await tx.insertInto('purchase_orders').values({ po_number: n, vendor_id: v.id, expected_on: input.expectedOn, notes: input.notes, created_by: actor.staffId })
+      .returning('id').executeTakeFirstOrThrow();
+    await tx.insertInto('purchase_order_lines').values(input.lines.map((l, i) => ({ purchase_order_id: po.id, material_id: l.materialId, qty_ordered: String(l.qty),
+      unit_cost_paise: costs ? l.unitCostPaise : null, position: i }))).execute();
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'purchase_order.create', entityType: 'purchase_orders', entityId: po.id,
+      after: { po_number: n, vendor_id: v.id, lines: input.lines.map(l => ({ material_id: l.materialId, qty: l.qty })) }, metadata: { costs_set: costs && input.lines.some(l => l.unitCostPaise !== null) } });
+    return { id: po.id, poNumber: n, lines: input.lines.length };
   });
 }
 

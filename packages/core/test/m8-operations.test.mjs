@@ -235,7 +235,12 @@ test('settings: typed registry, locked business rules, audited edits of safe set
   // M10 added company details and the delivery charge (entered by the business); every rule-bearing setting stays locked.
   // ERP modules 1–8 add business switches that all start off (discounts, returns, emails, alerts) and thresholds with no value.
   const erpKeys = ['carts.abandon_after_hours', 'company.state', 'discounts.enabled', 'discounts.stacking', 'notifications.abandoned_cart', 'notifications.order_delivered',
-    'notifications.refund_processed', 'notifications.return_status', 'notifications.support_reply', 'returns.enabled', 'returns.window_days'];
+    'notifications.refund_processed', 'notifications.return_status', 'notifications.support_reply', 'returns.enabled', 'returns.window_days',
+    // client change request, first pass
+    'checkout.abandoned_after_hours', 'checkout.cart_refresh_minutes', 'notifications.abandoned_checkout', 'pricing.max_sale_discount_percent',
+    // client change request, second pass (cash on delivery and loyalty points: off / empty until the business decides)
+    'payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order', 'loyalty.enabled', 'loyalty.earn_points_per_100',
+    'loyalty.earn_when', 'loyalty.point_value_paise', 'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months'];
   assert.deepEqual(all.filter(i => i.editable && !i.key.startsWith('alerts.')).map(i => i.key).sort(), ['company.address', 'company.gstin', 'company.legal_name', 'company.phone', 'company.support_email',
     'inventory.low_stock_threshold', 'notifications.order_cancelled', 'notifications.order_shipped', 'reviews.eligibility', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method', ...erpKeys].sort(), 'editable settings');
   assert.ok(all.filter(i => i.key.startsWith('alerts.')).every(i => i.editable && i.type.kind === 'choice'), 'staff alert switches');

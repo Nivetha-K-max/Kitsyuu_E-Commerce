@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { bannerInput, campaignInput, deleteSegmentInput, segmentInput, setBannerActiveInput, setCampaignActiveInput, type ActionState } from '@kitsyuu/contracts';
-import { deleteSegment, saveBanner, saveCampaign, saveSegment, setBannerActive, setCampaignActive } from '@kitsyuu/core';
+import { bannerInput, campaignInput, deleteSegmentInput, segmentInput, setBannerActiveInput, setCampaignActiveInput, subscriberIdInput, type ActionState } from '@kitsyuu/contracts';
+import { deleteSegment, saveBanner, saveCampaign, saveSegment, setBannerActive, setCampaignActive, unsubscribeSubscriber } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -33,4 +33,10 @@ export async function saveSegmentAction(_: ActionState, form: FormData): Promise
 export async function deleteSegmentAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();
   return done(await handle(deleteSegmentInput, form, async input => { await deleteSegment(db(), actor, input, await requestContext()); return { ok: true, message: 'Segment deleted.' }; }));
+}
+
+/** Client change request: staff unsubscribe an address (for example when the person asks by email). */
+export async function unsubscribeAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(subscriberIdInput, form, async input => { await unsubscribeSubscriber(db(), actor, input, await requestContext()); return { ok: true, message: 'Unsubscribed.' }; }));
 }

@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
-import { listPurchaseOrders, listVendors } from '@kitsyuu/core';
+import { listMaterials, listPurchaseOrders, listVendors } from '@kitsyuu/core';
+import MaterialLines from '@/components/MaterialLines';
 import { ActionForm, Field, Select, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatDay } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { createPurchaseOrderAction } from './actions';
+import { createPurchaseOrderWithLinesAction } from './actions';
 
 export const metadata: Metadata = { title: 'Purchase orders' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -18,7 +19,9 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
   const s = String((await searchParams).status ?? '');
   const status = (STATUSES as readonly string[]).includes(s) ? s as typeof STATUSES[number] : undefined;
   const manage = can(actor, 'procurement.manage');
-  const [orders, vendors] = await Promise.all([listPurchaseOrders(db(), actor, { status }), manage ? listVendors(db(), actor) : Promise.resolve([])]);
+  const [orders, vendors, materials] = await Promise.all([listPurchaseOrders(db(), actor, { status }), manage ? listVendors(db(), actor) : Promise.resolve([]),
+    manage ? listMaterials(db(), actor) : Promise.resolve([])]);
+  const active = materials.filter(m => m.is_active);
   return (
     <>
       <PageHead section="Supply" title="Purchase orders" eyebrow={status ? `Showing ${status.replace('_', ' ')}` : 'Newest first'} />
@@ -33,7 +36,7 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
             <tr key={o.id} data-po={o.po_number}>
               <td><Link href={`/purchase-orders/${o.id}`} className="row-link mono-strong">{o.po_number}</Link><div className="note">{formatDateTime(o.created_at as Date)}</div></td>
               <td>{o.vendor}</td><td className="num">{o.lines}</td>
-              <td>{o.expected_on ? String(o.expected_on).slice(0, 10) : '—'}</td>
+              <td>{formatDay(o.expected_on)}</td>
               <td><StatusBadge status={o.status} /></td>
             </tr>
           ))}</tbody>
@@ -42,13 +45,20 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
       {manage && (
         <section className="card form-panel" aria-labelledby="npo-h" data-section="new-po">
           <h2 id="npo-h">New purchase order</h2>
-          {vendors.some(v => v.is_active) ? (
-            <ActionForm action={createPurchaseOrderAction} submitLabel="Create draft" id="create-po-form" label="New purchase order">
-              <Select name="vendorId" label="Vendor" options={vendors.filter(v => v.is_active).map(v => ({ value: v.id, label: v.name }))} />
-              <Field name="expectedOn" label="Expected delivery (optional)" type="date" />
-              <TextArea name="notes" label="Notes (optional)" rows={2} />
+          <p className="note">One vendor, as many materials as you need: enter a quantity for each material to order (and its unit price); rows left empty are not ordered.
+            The order is created as a draft; review it, then place it with the vendor.</p>
+          {!vendors.some(v => v.is_active) ? <p className="note">Add a vendor first under <Link href="/vendors">Vendors</Link>.</p>
+            : !active.length ? <p className="note">Add materials first under <Link href="/materials">Materials</Link>.</p> : (
+            <ActionForm action={createPurchaseOrderWithLinesAction} submitLabel="Create purchase order" id="create-po-form" label="New purchase order"
+              confirmText="Create this purchase order as a draft?">
+              <div className="cols">
+                <Select name="vendorId" label="Vendor" options={vendors.filter(v => v.is_active).map(v => ({ value: v.id, label: v.name }))} />
+                <Field name="expectedOn" label="Expected delivery (optional)" type="date" />
+              </div>
+              <MaterialLines materials={active.map(m => ({ id: m.id, code: m.code, name: m.name, unit: m.unit, stock: m.stock }))} showCosts={can(actor, 'costs.read')} />
+              <TextArea name="notes" label="Notes / terms (optional)" rows={2} />
             </ActionForm>
-          ) : <p className="note">Add a vendor first under <Link href="/vendors">Vendors</Link>.</p>}
+          )}
         </section>
       )}
     </>

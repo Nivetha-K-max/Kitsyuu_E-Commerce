@@ -52,6 +52,8 @@ export default async function OrderPage({ params }: { params: Params }) {
           <h2 id="st-ord-pay">Payment</h2>
           <dl className="st-account-dl">
             <dt>Status</dt><dd data-payment-status={o.paymentStatus ?? 'none'}>{o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : 'Not started'}</dd>
+            {o.paymentMethod === 'cod' && <><dt>Method</dt><dd data-payment-method="cod">Cash on delivery{o.codStatus === 'to_collect' && o.status !== 'cancelled' ? ` · pay ${rupees(o.totalPaise)} when it arrives` : o.codStatus === 'collected' ? ' · paid' : ''}</dd></>}
+            {o.pointsUsed > 0 && <><dt>Points used</dt><dd>{o.pointsUsed} ({rupees(o.pointsDiscountPaise)} off)</dd></>}
             <dt>Paid on</dt><dd>{formatDate(o.paidAt)}</dd>
           </dl>
         </section>
@@ -59,6 +61,7 @@ export default async function OrderPage({ params }: { params: Params }) {
           <h2 id="st-ord-ship">Delivery</h2>
           {s.line1 ? <address className="st-address-text">{s.name}<br />{s.line1}{s.line2 && <><br />{s.line2}</>}<br />{[s.city, s.state, s.pin].filter(Boolean).join(', ')}{s.country && <><br />{s.country}</>}{s.phone && <><br />{s.phone}</>}</address>
             : <p>Delivery details will appear here.</p>}
+          {o.billing && <p className="st-note" data-order-billing>Billing address: {[o.billing.name, o.billing.line1, o.billing.line2, o.billing.city, o.billing.state, o.billing.pin].filter(Boolean).join(', ')}</p>}
         </section>
       </div>
 

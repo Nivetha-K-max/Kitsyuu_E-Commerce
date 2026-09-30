@@ -1,9 +1,9 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import {
-  bulkPriceInput, cancelPriceChangeInput, discountInput, productPricingInput, schedulePriceInput, setDiscountActiveInput, type ActionState,
+  bulkPriceInput, cancelPriceChangeInput, discountInput, productPricingInput, productSaleInput, schedulePriceInput, setDiscountActiveInput, type ActionState,
 } from '@kitsyuu/contracts';
-import { bulkUpdatePrices, cancelPriceChange, saveDiscount, schedulePriceChange, setDiscountActive, setProductPricing } from '@kitsyuu/core';
+import { bulkUpdatePrices, cancelPriceChange, saveDiscount, schedulePriceChange, setDiscountActive, setProductPricing, setProductSale } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -54,5 +54,14 @@ export async function setDiscountActiveAction(_: ActionState, form: FormData): P
   return done(await handle(setDiscountActiveInput, form, async input => {
     await setDiscountActive(db(), actor, input, await requestContext());
     return { ok: true, message: input.active ? 'Discount switched on.' : 'Discount switched off.' };
+  }));
+}
+
+/** Client change request: the sale price (separate from the base price, which never changes). */
+export async function setSaleAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(productSaleInput, form, async input => {
+    const r = await setProductSale(db(), actor, input, await requestContext());
+    return { ok: true, message: !r.changed ? 'No change.' : input.salePrice === null ? 'Sale ended: customers pay the price.' : 'Sale price saved. The price itself is unchanged.' };
   }));
 }

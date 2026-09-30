@@ -24,7 +24,7 @@ export default function SearchView() {
     <div className="st-wrap">
       <PageHead label="Search" title="Search" />
       <form className="st-search" role="search" action={url.search()} onSubmit={e => { e.preventDefault(); clearTimeout(timer.current); run(value); }}>
-        <label htmlFor="st-q">Search by product name, SKU or category</label>
+        <label htmlFor="st-q">Search by product name or category</label>
         <div className="st-search-row">
           <input ref={input} id="st-q" name="q" type="search" value={value} autoComplete="off" spellCheck={false} placeholder="Hoodie, KTS-BTM-004, jeans…"
             onChange={e => { const v = e.target.value; setValue(v); clearTimeout(timer.current); timer.current = setTimeout(() => run(v), 160); }} />
@@ -35,7 +35,7 @@ export default function SearchView() {
       <div id="st-results">
         {!q ? <section className="st-search-empty"><h2>Browse categories</h2>{browse}</section>
           : hits.length ? <ProductGrid list={hits} pathOf={idx.categoryPath} opts={{ level: 2 }} />
-          : <section className="st-search-empty"><h2>No products match “{q}”.</h2><p>Check the spelling, try a shorter word, or search by SKU (for example KTS-TOP-004). You can also browse a category:</p>{browse}
+          : <section className="st-search-empty"><h2>No products match “{q}”.</h2><p>Check the spelling or try a shorter word. You can also browse a category:</p>{browse}
               <button className="st-clear" type="button" data-clear-search="" onClick={() => { setValue(''); run(''); input.current?.focus(); }}>Clear search</button></section>}
       </div>
     </div>

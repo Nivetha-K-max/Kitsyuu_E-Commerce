@@ -3,13 +3,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, uuid } from '@kitsyuu/contracts';
-import { getOrder } from '@kitsyuu/core';
-import { ActionForm, Field, Hidden, Select } from '@/components/forms';
+import { getOrder, listOrderEdits, orderCodState, orderEditOptions } from '@kitsyuu/core';
+import { INDIAN_STATES } from '@kitsyuu/contracts';
+import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import OrderStatusForm from '@/components/OrderStatusForm';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, STATUS_LABEL } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { setPackingStateAction, updateOrderStatusAction, updateShipmentTrackingAction } from '../actions';
+import { codCancelAction, codCollectAction, editOrderAction, refundOrderEditAction, setPackingStateAction, updateOrderStatusAction, updateShipmentTrackingAction } from '../actions';
+import { refundProvider } from '@/lib/payments';
+import { createInvoiceAction } from '../../finance/actions';
 
 export const metadata: Metadata = { title: 'Order' };
 type Params = Promise<{ id: string }>;
@@ -21,6 +24,20 @@ const CANCELLED_MONEY: Record<string, [string, string]> = {
   cancelled_payment_exception: ['Cancelled · payment exception', 'Money was received after the order was cancelled. Record the manual refund on the Payments page.'],
   cancelled_paid_refund_recorded: ['Cancelled · paid, manual refund recorded', 'Money was received after cancellation; a manual refund has been recorded.'],
 };
+const COD_LABEL: Record<string, string> = { to_collect: 'To collect on delivery', collected: 'Collected', refused: 'Refused by the customer' };
+type EditSnap = { lines: { sku: string; name: string; size: string; qty: number }[]; address: Record<string, unknown> | null };
+/** One line per change: sizes and quantities, removed lines, and a new address. */
+function describeEdit(b: EditSnap, a: EditSnap): string {
+  const out: string[] = [];
+  for (const l of b.lines) {
+    const n = a.lines.find(x => x.name === l.name);
+    if (!n) out.push(`${l.name} (${l.size} × ${l.qty}) removed`);
+    else if (n.size !== l.size || n.qty !== l.qty) out.push(`${l.name}: ${l.size} × ${l.qty} → ${n.size} × ${n.qty}`);
+  }
+  const addr = (x: Record<string, unknown> | null) => [x?.line1, x?.city, x?.pin].filter(Boolean).join(', ');
+  if (addr(b.address) !== addr(a.address)) out.push(`delivery address → ${addr(a.address)}`);
+  return out.join(' · ') || 'No line changes';
+}
 const PACKING_OPTIONS = [{ value: 'not_started', label: 'Not started' }, { value: 'packing', label: 'Packing' }, { value: 'packed', label: 'Packed' }];
 
 export default async function OrderPage({ params }: { params: Params }) {
@@ -33,6 +50,15 @@ export default async function OrderPage({ params }: { params: Params }) {
   const { order: o } = d;
   const intact = d.integrity.linesMatchUnitPrices && d.integrity.linesMatchSubtotal && d.integrity.totalCoversSubtotal;
   const address = [d.shipping.name, d.shipping.line1, d.shipping.line2, [d.shipping.city, d.shipping.state, d.shipping.pin].filter(Boolean).join(', '), d.shipping.country].filter(Boolean);
+  // Second pass: cash on delivery, order edits (before shipment) and their refunds.
+  const [cod, edits, editing] = await Promise.all([orderCodState(db(), o.id), listOrderEdits(db(), o.id),
+    can(actor, 'orders.edit') ? orderEditOptions(db(), actor, o.id) : Promise.resolve(null)]);
+  const canCod = can(actor, 'orders.cod');
+  const provider = refundProvider();
+  // Print invoice (client change request): the issued invoice made from this order's own data (Finance). Without one, staff
+  // with finance.manage can issue it here for a paid order; the numbering and GST split are the Finance module's.
+  const issued = d.billing?.invoices.find(i => i.status === 'issued') ?? null;
+  const canIssue = !issued && can(actor, 'finance.manage') && ['paid', 'processing', 'shipped', 'delivered'].includes(o.status);
 
   return (
     <>
@@ -42,6 +68,8 @@ export default async function OrderPage({ params }: { params: Params }) {
         {d.payment && d.payment.exceptions.some(e => !e.manualRefund) && <span className="head-status" data-payment-exception>
           <span className="head-status-label">Exception</span><StatusBadge status={d.payment.exceptions.find(e => !e.manualRefund)!.kind} /></span>}
         <Link className="btn ghost sm" href={`/orders/${o.id}/packing-slip`} data-link="packing-slip">Packing slip</Link>
+        {editing && !editing.blocker && <a className="btn ghost sm" href="#edit-h" data-link="edit-order">Edit order</a>}
+        {issued && can(actor, 'finance.read') && <Link className="btn ghost sm" href={`/finance/invoices/${issued.id}`} data-link="print-invoice">Print invoice</Link>}
       </PageHead>
       {d.payment?.cancelled && <p className={`msg ${d.payment.cancelled.kind === 'cancelled_payment_exception' ? 'error' : 'ok'}`} data-cancelled-money={d.payment.cancelled.kind}>
         <b>{CANCELLED_MONEY[d.payment.cancelled.kind][0]}.</b> {CANCELLED_MONEY[d.payment.cancelled.kind][1]}</p>}
@@ -68,11 +96,15 @@ export default async function OrderPage({ params }: { params: Params }) {
             })}</tbody>
             <tfoot>
               <tr><th colSpan={5} className="num">Subtotal</th><td className="num" data-subtotal>{rupees(o.subtotalPaise)}</td></tr>
-              <tr><th colSpan={5} className="num">Total (tax-inclusive)</th><td className="num" data-order-total><b>{rupees(o.totalPaise)}</b></td></tr>
+              {o.discountPaise > 0 && <tr><th colSpan={5} className="num">Discounts{o.loyaltyPointsUsed > 0 ? ` (incl. ${o.loyaltyPointsUsed} points, ${rupees(o.loyaltyDiscountPaise)})` : ''}</th><td className="num" data-discount>−{rupees(o.discountPaise)}</td></tr>}
+              <tr><th colSpan={5} className="num">Delivery</th><td className="num" data-shipping-amount>{rupees(o.shippingPaise)}</td></tr>
+              {o.codFeePaise > 0 && <tr><th colSpan={5} className="num">Cash on delivery fee</th><td className="num" data-cod-fee>{rupees(o.codFeePaise)}</td></tr>}
+              {!o.pricesIncludeTax && <tr><th colSpan={5} className="num">Tax</th><td className="num">{rupees(o.taxPaise)}</td></tr>}
+              <tr><th colSpan={5} className="num">Total{o.pricesIncludeTax ? ' (tax-inclusive)' : ''}</th><td className="num" data-order-total><b>{rupees(o.totalPaise)}</b></td></tr>
             </tfoot>
           </table></div>
           <p className="note" data-integrity={intact ? 'ok' : 'mismatch'}>
-            {intact ? 'Amounts are the prices paid at checkout and cannot be edited.' : 'Warning: the recorded line totals do not add up. Amounts are shown exactly as recorded and were not changed.'}
+            {intact ? 'Amounts are the prices paid at checkout. Changes before shipment are made under Edit order and kept in its history.' : 'Warning: the recorded line totals do not add up. Amounts are shown exactly as recorded and were not changed.'}
           </p>
         </section>
 
@@ -80,7 +112,7 @@ export default async function OrderPage({ params }: { params: Params }) {
           <h2 id="st-h">Status &amp; actions</h2>
           <dl className="facts">
             <dt>Order</dt><dd>{label(o.status)}</dd>
-            <dt>Payment</dt><dd>{label(o.paymentStatus)}</dd>
+            <dt>Payment</dt><dd>{label(o.paymentStatus)}{o.paymentMethod === 'cod' && <span className="note" data-payment-method="cod"> · cash on delivery</span>}</dd>
             <dt>Paid at</dt><dd>{formatDateTime(o.paidAt)}</dd>
             <dt>Last change</dt><dd>{formatDateTime(o.updatedAt)}</dd>
           </dl>
@@ -111,6 +143,7 @@ export default async function OrderPage({ params }: { params: Params }) {
             <dt>Email</dt><dd>{d.contact.email ?? '—'}</dd>
             <dt>Phone</dt><dd>{d.contact.phone ?? '—'}</dd>
             <dt>Ship to</dt><dd>{address.length ? address.map((l, i) => <div key={i}>{l}</div>) : '—'}</dd>
+            <dt>Bill to</dt><dd data-billing>{d.billingAddress ? [d.billingAddress.name, d.billingAddress.line1, d.billingAddress.line2, [d.billingAddress.city, d.billingAddress.state, d.billingAddress.pin].filter(Boolean).join(', ')].filter(Boolean).map((l, i) => <div key={i}>{l}</div>) : 'Same as delivery'}</dd>
             <dt>Account</dt><dd data-customer-account>{d.customer === undefined ? <span className="note">needs customers.read</span>
               : d.customer ? <><Link href={`/customers/${d.customer.id}`} data-customer-link>{d.customer.email}</Link> <StatusBadge status={d.customer.status} /></>
               : <span className="note">no account record</span>}</dd>
@@ -131,6 +164,8 @@ export default async function OrderPage({ params }: { params: Params }) {
                   </tbody></table></div>
               )}
               <h3 className="sub">Invoices</h3>
+              {canIssue && <ActionForm action={createInvoiceAction} submitLabel="Issue invoice" id="issue-invoice-form" label="Issue the invoice for this order" className="inline-form">
+                <Hidden name="orderId" value={o.id} /></ActionForm>}
               {d.billing.invoices.length === 0 ? <p className="empty">No invoice.</p> : (
                 <ul className="plain" data-invoices>{d.billing.invoices.map(i => (
                   <li key={i.id}><span className="mono">{i.invoice_number ?? 'draft'}</span> <StatusBadge status={i.status} /> {rupees(i.total_paise)}
@@ -149,6 +184,107 @@ export default async function OrderPage({ params }: { params: Params }) {
           )}
         </section>
       </div>
+
+      {cod && (
+        <section className="card" aria-labelledby="cod-h" data-section="cod">
+          <h2 id="cod-h">Cash on delivery</h2>
+          <dl className="facts" data-cod={cod.status}>
+            <dt>Cash</dt><dd>{COD_LABEL[cod.status]}{o.status === 'cancelled' && cod.status === 'to_collect' ? ' (order cancelled: nothing to collect)' : ''}</dd>
+            {cod.toCollectPaise > 0 && <><dt>To collect</dt><dd data-cod-to-collect><b>{rupees(cod.toCollectPaise)}</b></dd></>}
+            <dt>COD fee</dt><dd>{cod.feePaise > 0 ? rupees(cod.feePaise) : 'None'}</dd>
+            {cod.collectedAt && <><dt>Collected</dt><dd>{formatDateTime(cod.collectedAt)}{cod.reference && <span className="note mono"> · {cod.reference}</span>}</dd></>}
+          </dl>
+          {!canCod ? <p className="note">Recording cash on delivery needs the orders.cod permission.</p> : cod.status === 'to_collect' && o.status !== 'cancelled' && (<>
+            {(o.status === 'shipped' || o.status === 'delivered') && (
+              <ActionForm action={codCollectAction} submitLabel="Record cash collected" id="cod-collect-form" label="Cash collected" confirmText={`Record ${rupees(o.totalPaise)} collected in cash for ${o.orderNumber}?`}>
+                <Hidden name="orderId" value={o.id} />
+                <div className="cols">
+                  <Field name="amount" label="Amount collected (₹)" defaultValue={paiseToRupees(o.totalPaise)} hint="Must be the order total." />
+                  <Field name="reference" label="Receipt / courier reference (optional)" />
+                </div>
+              </ActionForm>
+            )}
+            {(o.status === 'processing' || o.status === 'shipped') && (
+              <ActionForm action={codCancelAction} submitLabel={o.status === 'processing' ? 'Cancel this COD order' : 'Record parcel refused'} variant="danger" id="cod-cancel-form"
+                label={o.status === 'processing' ? 'Cancel before dispatch' : 'Customer refused the parcel'} className="form spaced"
+                confirmText={o.status === 'processing' ? 'Cancel this order? Its items go back to stock.' : 'Record that the customer refused the parcel? The order is cancelled.'}>
+                <Hidden name="orderId" value={o.id} />
+                <Hidden name="kind" value={o.status === 'processing' ? 'cancel' : 'refused'} />
+                <Field name="note" label="Reason" required />
+                {o.status === 'shipped' && <Checkbox name="restock" label="The pieces are back and fit to sell: put them back in stock" />}
+              </ActionForm>
+            )}
+          </>)}
+        </section>
+      )}
+
+      {editing && (
+        <section className="card" aria-labelledby="edit-h" data-section="order-edit">
+          <h2 id="edit-h">Edit order</h2>
+          {editing.blocker ? <p className="note" data-edit-blocked>{editing.blocker}</p> : (
+            <>
+              <p className="note">Change sizes (only sizes at the same price) or quantities (0 removes a line), or the delivery address. Each line keeps the price the customer paid; discounts, delivery (for a new address) and tax are worked out again on the server.
+                {o.paymentMethod === 'cod' ? ' The new total is what is collected on delivery.' : ' A lower total leaves a refund due; a higher total cannot be saved (an extra payment cannot be collected).'}</p>
+              <ActionForm action={editOrderAction} submitLabel="Save changes" id="order-edit-form" label="Edit order" confirmText="Save these changes? Stock and the order total are updated now.">
+                <Hidden name="orderId" value={o.id} />
+                <Hidden name="expectedTotalPaise" value={String(o.totalPaise)} />
+                <div className="table-wrap"><table data-edit-lines>
+                  <thead><tr><th>Item</th><th>Size</th><th>Qty</th></tr></thead>
+                  <tbody>{editing.items.map(i => (
+                    <tr key={i.id}><td>{i.name}<div className="note mono">{i.sku}</div><input type="hidden" name="itemIds[]" value={i.id} /></td>
+                      <td><select name="variantIds[]" className="input" defaultValue={i.variant_id ?? ''} aria-label={`Size of ${i.name}`}>{i.sizes.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}</select></td>
+                      <td><input name="qtys[]" className="input qty" type="number" min={0} max={10} defaultValue={i.qty} aria-label={`Quantity of ${i.name}`} /></td></tr>
+                  ))}</tbody>
+                </table></div>
+                <Checkbox name="changeAddress" label="Change the delivery address" />
+                <div className="cols">
+                  <Field name="fullName" label="Name" defaultValue={d.shipping.name ?? ''} />
+                  <Field name="phone" label="Mobile" defaultValue={d.contact.phone ?? ''} />
+                  <Field name="line1" label="Address line 1" defaultValue={d.shipping.line1 ?? ''} />
+                  <Field name="line2" label="Address line 2" defaultValue={d.shipping.line2 ?? ''} />
+                  <Field name="city" label="City" defaultValue={d.shipping.city ?? ''} />
+                  <Select name="state" label="State" defaultValue={d.shipping.state ?? ''} options={[{ value: '', label: 'Choose…' }, ...INDIAN_STATES.map(x => ({ value: x, label: x }))]} />
+                  <Field name="pin" label="PIN code" defaultValue={d.shipping.pin ?? ''} />
+                </div>
+                <p className="note">The address fields are used only when “Change the delivery address” is ticked.</p>
+                <TextArea name="note" label="Reason for the change" rows={2} required hint="Kept in the edit history, e.g. Customer asked by phone for size M." />
+              </ActionForm>
+            </>
+          )}
+        </section>
+      )}
+
+      {edits.length > 0 && (
+        <section className="card" aria-labelledby="edits-h" data-section="order-edits">
+          <h2 id="edits-h">Order edits</h2>
+          <ol className="timeline" data-edit-history>{edits.map(e => {
+            const b = e.before as EditSnap, a = e.after as EditSnap;
+            return (
+              <li key={e.id} data-edit={e.id}>
+                <b>{rupees(e.total_before)} → {rupees(e.total_after)}</b>
+                <span className="note"> · {formatDateTime(e.created_at)} · {e.staff_email ?? '—'}</span>
+                <div className="note">“{e.note}”</div>
+                <div className="note">{describeEdit(b, a)}</div>
+                {e.refund_due_paise > 0 && (e.refund_id
+                  ? <div className="note" data-edit-refund={e.refund_status}>Refund {rupees(e.refund_due_paise)}: <StatusBadge status={e.refund_status ?? 'pending'} /> {e.refund_method === 'manual' ? `recorded (${e.refund_reference})` : 'through the payment provider'}</div>
+                  : <div data-edit-refund="due">
+                      <p className="msg error">Refund due: {rupees(e.refund_due_paise)}.</p>
+                      {can(actor, 'refunds.create') ? (<div className="cols">
+                        {provider && <ActionForm action={refundOrderEditAction} submitLabel={`Refund through ${provider.label}`} id={`edit-refund-p-${e.id}`} label="Refund through the payment provider"
+                          confirmText={`Refund ${rupees(e.refund_due_paise)} to the customer through ${provider.label}?`}>
+                          <Hidden name="editId" value={e.id} /><Hidden name="mode" value="provider" />
+                        </ActionForm>}
+                        <ActionForm action={refundOrderEditAction} submitLabel="Record refund paid outside" id={`edit-refund-m-${e.id}`} label="Refunded by bank transfer / UPI">
+                          <Hidden name="editId" value={e.id} /><Hidden name="mode" value="manual" />
+                          <Field name="reference" label="Bank / UPI reference" required />
+                        </ActionForm>
+                      </div>) : <p className="note">Making the refund needs the refunds.create permission.</p>}
+                    </div>)}
+              </li>
+            );
+          })}</ol>
+        </section>
+      )}
 
       <section className="card" aria-labelledby="ful-h" data-section="fulfilment">
         <h2 id="ful-h">Fulfilment</h2>

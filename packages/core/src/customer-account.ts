@@ -153,6 +153,11 @@ export interface CustomerOrderDetail extends CustomerOrderSummary {
   canPay: boolean; canCancel: boolean;
   items: { sku: string; name: string; size: string; imagePath: string | null; productId: string | null; unitPricePaise: number; qty: number; lineTotalPaise: number }[];
   shipping: { name: string | null; phone: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null; country: string | null };
+  /** Client change request: null when billing is the delivery address. */
+  billing: { name: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null } | null;
+  /** Second pass: cash on delivery (to collect / collected / refused) and its fee; loyalty points used on the order. */
+  paymentMethod: 'online' | 'cod'; codStatus: 'to_collect' | 'collected' | 'refused' | null; codFeePaise: number;
+  pointsUsed: number; pointsDiscountPaise: number;
   history: { status: OrderStatus; at: Date }[];
 }
 
@@ -163,7 +168,8 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
   const { legacy } = await ownerFilter(db, p);
   const o = await db.selectFrom('orders as o')
     .select(['o.id', 'o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.total_paise', 'o.subtotal_paise', 'o.currency', 'o.paid_at', 'o.shipping_address',
-      'o.contact', 'o.discount_paise', 'o.shipping_paise', 'o.tax_paise', 'o.prices_include_tax', 'o.payment_expires_at', 'o.customer_id'])
+      'o.contact', 'o.discount_paise', 'o.shipping_paise', 'o.tax_paise', 'o.prices_include_tax', 'o.payment_expires_at', 'o.customer_id', 'o.billing_address',
+      'o.payment_method', 'o.cod_status', 'o.cod_fee_paise', 'o.loyalty_points_used', 'o.loyalty_discount_paise'])
     .where('o.order_number', '=', orderNumber)
     .where(eb => eb.or([
       eb('o.customer_id', '=', p.customerId),
@@ -191,5 +197,7 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     items: items.map(i => ({ sku: i.sku, name: i.name, size: i.size, imagePath: i.image_path, productId: i.product_id, unitPricePaise: i.unit_price_paise, qty: i.qty, lineTotalPaise: i.line_total_paise })),
     shipping: { name: text(a.name ?? a.full_name), phone: text(a.phone), line1: text(a.line1), line2: text(a.line2), city: text(a.city), state: text(a.state), pin: text(a.pin), country: text(a.country) },
     history: history.map(h => ({ status: h.to_status, at: h.created_at as Date })),
+    paymentMethod: o.payment_method, codStatus: o.cod_status, codFeePaise: o.cod_fee_paise, pointsUsed: o.loyalty_points_used, pointsDiscountPaise: o.loyalty_discount_paise,
+    billing: o.billing_address ? (b => ({ name: text(b.name), line1: text(b.line1), line2: text(b.line2), city: text(b.city), state: text(b.state), pin: text(b.pin) }))(o.billing_address as Record<string, unknown>) : null,
   };
 }

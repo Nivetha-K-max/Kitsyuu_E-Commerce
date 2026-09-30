@@ -3,10 +3,10 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
   addAttributeValueInput, attributeValueRef, createAttributeInput, moveAttributeInput, moveAttributeValueInput, renameAttributeValueInput,
-  setAttributeActiveInput, updateAttributeInput, type ActionState
+  setAttributeActiveInput, setAttributeValueActiveInput, updateAttributeInput, type ActionState
 } from '@kitsyuu/contracts';
 import {
-  addAttributeValue, createAttribute, deleteAttributeValue, moveAttribute, moveAttributeValue, renameAttributeValue, setAttributeActive, updateAttribute
+  addAttributeValue, createAttribute, deleteAttributeValue, moveAttribute, moveAttributeValue, renameAttributeValue, setAttributeActive, setAttributeValueActive, updateAttribute
 } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
@@ -24,8 +24,8 @@ function action<S extends z.ZodType>(schema: S, run: (input: z.output<S>, actor:
 }
 
 export const createAttributeAction = action(createAttributeInput, async (input, actor) => {
-  const a = await createAttribute(db(), actor, input, await requestContext());
-  return { ok: true, message: `Attribute "${a.id}" created. Add its values below.` };
+  await createAttribute(db(), actor, input, await requestContext());
+  return { ok: true, message: `${input.label} created. Add its values with + Add value.` };
 });
 export const updateAttributeAction = action(updateAttributeInput, async (input, actor) => {
   const u = await updateAttribute(db(), actor, input, await requestContext());
@@ -37,8 +37,8 @@ export const setAttributeActiveAction = action(setAttributeActiveInput, async (i
 });
 export const moveAttributeAction = action(moveAttributeInput, async (input, actor) => { await moveAttribute(db(), actor, input, await requestContext()); return { ok: true }; });
 export const addAttributeValueAction = action(addAttributeValueInput, async (input, actor) => {
-  const v = await addAttributeValue(db(), actor, input, await requestContext());
-  return { ok: true, message: `Value "${v.slug}" added.` };
+  await addAttributeValue(db(), actor, input, await requestContext());
+  return { ok: true, message: `${input.label} added.` };
 });
 export const renameAttributeValueAction = action(renameAttributeValueInput, async (input, actor) => {
   const r = await renameAttributeValue(db(), actor, input, await requestContext());
@@ -48,4 +48,8 @@ export const moveAttributeValueAction = action(moveAttributeValueInput, async (i
 export const deleteAttributeValueAction = action(attributeValueRef, async (input, actor) => {
   await deleteAttributeValue(db(), actor, input, await requestContext());
   return { ok: true, message: 'Value deleted.' };
+});
+export const setAttributeValueActiveAction = action(setAttributeValueActiveInput, async (input, actor) => {
+  await setAttributeValueActive(db(), actor, input, await requestContext());
+  return { ok: true, message: input.active ? 'Reactivated.' : 'Deactivated: products keep it; it is no longer offered.' };
 });

@@ -61,13 +61,19 @@ export function quoteFromZoneRates(rates: ZoneRate[], subtotalPaise: number, shi
   const zone = matchZone(zones, shipTo);
   const unavailable = 'We do not deliver to this address yet. Choose another address or contact us.';
   if (!zone) return { amountPaise: 0, method: 'zones', label: 'Not available', configured: true, unavailable };
-  const rate = rates.filter(r => r.zoneId === zone.zoneId)
+  const eligible = rates.filter(r => r.zoneId === zone.zoneId)
     .filter(r => (r.minOrderPaise === null || subtotalPaise >= r.minOrderPaise) && (r.maxOrderPaise === null || subtotalPaise < r.maxOrderPaise))
-    .sort((a, b) => a.rateSort - b.rateSort || a.amountPaise - b.amountPaise)[0];
-  if (!rate) return { amountPaise: 0, method: 'zones', label: 'Not available', configured: true, unavailable: 'Delivery is not available for this order value to this address.' };
-  const estimate = rate.estMin !== null && rate.estMax !== null ? `${rate.estMin}–${rate.estMax} days` : rate.estMax !== null ? `up to ${rate.estMax} days` : null;
-  if (rate.freeFromPaise !== null && subtotalPaise >= rate.freeFromPaise) return { amountPaise: 0, method: 'zones', label: `Free delivery (${rate.name})`, configured: true, estimate };
-  return { amountPaise: rate.amountPaise, method: 'zones', label: rate.name, configured: true, estimate };
+    .sort((a, b) => a.rateSort - b.rateSort || a.amountPaise - b.amountPaise);
+  if (!eligible.length) return { amountPaise: 0, method: 'zones', label: 'Not available', configured: true, unavailable: 'Delivery is not available for this order value to this address.' };
+  const describe = (rate: ZoneRate) => {
+    const estimate = rate.estMin !== null && rate.estMax !== null ? `${rate.estMin}–${rate.estMax} days` : rate.estMax !== null ? `up to ${rate.estMax} days` : null;
+    const free = rate.freeFromPaise !== null && subtotalPaise >= rate.freeFromPaise;
+    return { rateId: rate.rateId, label: free ? `Free delivery (${rate.name})` : rate.name, amountPaise: free ? 0 : rate.amountPaise, estimate };
+  };
+  const options = eligible.map(describe);
+  // The customer's choice if it is one of the options for this address and order value; otherwise the first option.
+  const chosen = options.find(o => o.rateId === shipTo.deliveryRateId) ?? options[0];
+  return { amountPaise: chosen.amountPaise, method: 'zones', label: chosen.label, configured: true, estimate: chosen.estimate, options, rateId: chosen.rateId };
 }
 
 export async function activeZoneRates(q: Queryable): Promise<ZoneRate[]> {

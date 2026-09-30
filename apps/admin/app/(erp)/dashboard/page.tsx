@@ -23,7 +23,7 @@ export default async function DashboardPage() {
   const [d, t, recent] = await Promise.all([
     getDashboard(db(), actor),
     dashboardTrends(db(), actor),
-    can(actor, 'orders.read') ? listOrders(db(), actor, { status: 'all', payment: 'all', page: 1, q: undefined, from: undefined, to: undefined }) : Promise.resolve(null),
+    can(actor, 'orders.read') ? listOrders(db(), actor, { status: 'all', payment: 'all', page: 1, q: undefined, from: undefined, to: undefined, view: 'all' }) : Promise.resolve(null),
   ]);
   const s = t.series;
   const firstName = (actor.fullName || '').split(/\s+/)[0] || 'there';

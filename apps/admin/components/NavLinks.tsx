@@ -10,7 +10,7 @@ export const NAV_ICON: Record<string, string> = {
   '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/reviews': 'reviews', '/content': 'content', '/vendors': 'vendors', '/materials': 'materials', '/purchase-orders': 'purchase', '/production': 'production', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
   '/settings': 'settings', '/system': 'system',
   '/notifications': 'notifications', '/pricing': 'pricing', '/shipping': 'shipping', '/returns': 'returns', '/carts': 'carts', '/marketing': 'marketing',
-  '/support': 'support', '/finance': 'finance',
+  '/support': 'support', '/finance': 'finance', '/size-charts': 'sizecharts', '/loyalty': 'loyalty',
 };
 
 /** Receives only the items the server already filtered by permission. In the collapsed rail each link shows its

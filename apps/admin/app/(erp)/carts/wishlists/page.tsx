@@ -21,7 +21,7 @@ export default async function WishlistsPage({ searchParams }: { searchParams: SP
   return (
     <>
       <PageHead title="Carts & wishlists" eyebrow="What customers want: products in wishlists and active carts right now." />
-      <SubNav label="Carts" current="/carts/wishlists" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
+      <SubNav label="Carts" current="/carts/wishlists" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       <section className="card" aria-labelledby="mw-h"><h2 id="mw-h">Most wanted products</h2>
         {top.length === 0 ? <Empty compact title="No products in wishlists or carts" /> : (
           <div className="table-wrap"><table data-wanted>

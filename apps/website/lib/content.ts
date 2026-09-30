@@ -46,3 +46,28 @@ export const getBanners = cache(async (placement: 'home' | 'shop'): Promise<Bann
     return [];
   }
 });
+
+/* Client change request ("Japan → India: No"): the brand wording staff can edit under Store content. Until they publish new
+   wording (and on any error) every field is exactly today's text, so the store looks the same. */
+export const getBrandCopy = cache(async () => {
+  const { mergeBrandCopy } = await import('@kitsyuu/core');
+  try {
+    const r = await publicSupabase().from('site_content').select('content')
+      .eq('key', 'store.brand_copy').eq('locale', 'en-IN').eq('status', 'published').maybeSingle();
+    return mergeBrandCopy(r.error ? null : r.data?.content);
+  } catch {
+    return mergeBrandCopy(null);
+  }
+});
+
+/* Client change request: how often a cart with items re-syncs (Settings → Checkout → "Cart refresh interval"; the client
+   asked for 30 minutes). Read with the page, so guests make no extra request. On any error: 30 minutes. */
+export const getCartRefreshMinutes = cache(async (): Promise<number> => {
+  try {
+    const { cartRefreshMinutes } = await import('@kitsyuu/core');
+    const { db } = await import('./server');
+    return await cartRefreshMinutes(db());
+  } catch {
+    return 30;
+  }
+});

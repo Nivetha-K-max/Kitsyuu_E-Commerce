@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { getCollection } from '@kitsyuu/core';
-import { ActionForm, Field, Hidden, Select } from '@/components/forms';
+import { getCollection, listCollectionGroups } from '@kitsyuu/core';
+import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { addCollectionMemberAction, moveCollectionMemberAction, removeCollectionMemberAction, setCollectionActiveAction, updateCollectionAction } from '../actions';
@@ -21,6 +21,7 @@ export default async function CollectionPage({ params, searchParams }: { params:
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) notFound();
   const { collection: c, members, candidates } = await getCollection(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const write = can(actor, 'categories.write');
+  const groups = await listCollectionGroups(db(), actor);
   const created = (await searchParams).notice === 'created';
   return (
     <>
@@ -66,10 +67,14 @@ export default async function CollectionPage({ params, searchParams }: { params:
               </ActionForm>
             </section>
             <section className="card" aria-labelledby="n-h" data-section="name">
-              <SectionTitle id="n-h">Name</SectionTitle>
-              <ActionForm action={updateCollectionAction} submitLabel="Save name" id="collection-name-form" label="Collection name">
+              <SectionTitle id="n-h">Collection details</SectionTitle>
+              <ActionForm action={updateCollectionAction} submitLabel="Save" id="collection-name-form" label="Collection details">
                 <Hidden name="collectionId" value={c.id} /><Hidden name="expectedLabel" value={c.label} />
                 <Field name="label" label="Name" defaultValue={c.label} required />
+                <Select name="groupId" label="Group" defaultValue={c.groupId ?? ''} options={[{ value: '', label: 'No group (Other)' }, ...groups.map(g => ({ value: g.id, label: g.label }))]} />
+                <p className="note">Link: <span className="mono">/shop?collection={c.id}</span> (fixed).</p>
+                <Field name="seoTitle" label="Search-engine title (optional)" defaultValue={c.seoTitle ?? ''} hint="Up to 70 characters. Empty: the collection name." />
+                <TextArea name="seoDescription" label="Search-engine description (optional)" defaultValue={c.seoDescription ?? ''} rows={3} hint="Up to 160 characters. Empty: the store's default text." />
               </ActionForm>
             </section>
           </aside>

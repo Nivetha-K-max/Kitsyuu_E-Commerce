@@ -85,7 +85,10 @@ export const priceInput = z.string().max(20).transform((v, ctx) => {
 export const productListQuery = z.object({
   q: z.string().trim().max(80).optional().transform(v => v || undefined),
   category: categoryId.optional().or(z.literal('').transform(() => undefined)),
-  status: z.enum(['all', 'active', 'inactive']).default('all'),
+  status: z.enum(['all', 'active', 'inactive', 'draft', 'archived']).default('all'),
+  /** Filters that combine with the others: a collection, and availability of the sellable sizes. */
+  collection: z.string().trim().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).optional().or(z.literal('').transform(() => undefined)),
+  stock: z.enum(['all', 'in_stock', 'low', 'out']).default('all'),
 });
 
 const optionalText = (max: number) => z.string().trim().max(max).transform(v => v || null);
@@ -173,6 +176,16 @@ export const ORDER_TRANSITIONS_BY_ACTOR: Readonly<Record<OrderActor, Readonly<Re
 };
 export const canTransitionAs = (actor: OrderActor, from: OrderStatusCode, to: OrderStatusCode) =>
   ORDER_TRANSITIONS_BY_ACTOR[actor][from]?.includes(to) ?? false;
+/** Client change request (second pass): cash-on-delivery orders, which never wait for an online payment. The checkout
+    sends a new COD order straight to fulfilment (system: pending payment → processing), and staff may cancel one before
+    dispatch or record a parcel the customer refused (processing / shipped → cancelled). Only the COD flows use these
+    (applyOrderTransition with cod: true), so nothing changes for orders paid online. */
+export const COD_TRANSITIONS: Readonly<Record<OrderActor, Partial<Record<OrderStatusCode, readonly OrderStatusCode[]>>>> = {
+  system: { pending_payment: ['processing'] },
+  staff: { processing: ['cancelled'], shipped: ['cancelled'] },
+  customer: {},
+};
+export const canCodTransition = (actor: OrderActor, from: OrderStatusCode, to: OrderStatusCode) => COD_TRANSITIONS[actor][from]?.includes(to) ?? false;
 /** Orders that still wait for payment (they hold stock until payment_expires_at). */
 export const UNPAID_ORDER_STATUSES: readonly OrderStatusCode[] = ['pending_payment', 'payment_failed'];
 /** Transitions that need a written reason (kept in the order's status history). */
@@ -186,6 +199,9 @@ export const orderListQuery = z.object({
   from: isoDate.optional().or(z.literal('').transform(() => undefined)),
   to: isoDate.optional().or(z.literal('').transform(() => undefined)),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
+  /** Client change request: Active (confirmed, not yet delivered), Draft (placed, not paid yet, newer than the abandoned-
+      checkout delay), Abandoned (still unpaid after that delay; 24 h unless set in Settings). All = no view filter. */
+  view: z.enum(['all', 'active', 'draft', 'abandoned']).default('all'),
 });
 export const updateOrderStatusInput = z.object({
   orderId: uuid,
@@ -270,13 +286,21 @@ export const moveCategoryInput = z.object({ categoryId, direction });
 /* Product attributes (store filters). Ids/slugs are fixed once created: the store uses them in links (?fabric=cotton). */
 export const attributeId = z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9-]{1,39}$/, 'Use 2–40 lower-case letters, digits or hyphens, starting with a letter.');
 const attrLabel = z.string().trim().min(1, 'Enter a name.').max(60);
-export const createAttributeInput = z.object({ id: attributeId, label: attrLabel, description: z.string().trim().max(300).default('') });
-export const updateAttributeInput = z.object({ attributeId, label: attrLabel, description: z.string().trim().max(300).default(''), expectedLabel: z.string().max(60) });
+/** Single choice (e.g. Fit) or several values per product (e.g. Colour). */
+export const attributeSelection = z.enum(['single', 'multi']).default('multi');
+/** The id is optional: when empty it is made from the name (staff never have to type ids). */
+export const createAttributeInput = z.object({ id: attributeId.optional().or(z.literal('').transform(() => undefined)), label: attrLabel,
+  description: z.string().trim().max(300).default(''), selection: attributeSelection });
+export const updateAttributeInput = z.object({ attributeId, label: attrLabel, description: z.string().trim().max(300).default(''), expectedLabel: z.string().max(60),
+  selection: attributeSelection });
 export const setAttributeActiveInput = z.object({ attributeId, active: z.enum(['true', 'false']).transform(v => v === 'true'), expectedActive: z.enum(['true', 'false']).transform(v => v === 'true') });
 export const moveAttributeInput = z.object({ attributeId, direction });
-export const addAttributeValueInput = z.object({ attributeId, label: attrLabel, slug: categorySlug.optional().or(z.literal('').transform(() => undefined)) });
+/** Optional colour swatch for colour values: #rrggbb (the colour picker's format). */
+const swatch = z.string().trim().toLowerCase().regex(/^#[0-9a-f]{6}$/, 'Choose a colour.').optional().or(z.literal('').transform(() => undefined));
+export const addAttributeValueInput = z.object({ attributeId, label: attrLabel, slug: categorySlug.optional().or(z.literal('').transform(() => undefined)), swatch });
 export const attributeValueRef = z.object({ attributeId, slug: categorySlug });
-export const renameAttributeValueInput = attributeValueRef.extend({ label: attrLabel });
+export const renameAttributeValueInput = attributeValueRef.extend({ label: attrLabel, swatch });
+export const setAttributeValueActiveInput = attributeValueRef.extend({ active: z.enum(['true', 'false']).transform(v => v === 'true') });
 export const moveAttributeValueInput = attributeValueRef.extend({ direction });
 /** The product form sends one checkbox per value, named attr:<attributeId>:<slug>. */
 export const setProductAttributesInput = z.object({ productId, values: z.array(z.object({ attributeId, slug: categorySlug })).max(200) });
@@ -286,6 +310,7 @@ export type UpdateAttributeInput = z.infer<typeof updateAttributeInput>;
 export type SetAttributeActiveInput = z.infer<typeof setAttributeActiveInput>;
 export type AddAttributeValueInput = z.infer<typeof addAttributeValueInput>;
 export type RenameAttributeValueInput = z.infer<typeof renameAttributeValueInput>;
+export type SetAttributeValueActiveInput = z.infer<typeof setAttributeValueActiveInput>;
 export type SetProductAttributesInput = z.infer<typeof setProductAttributesInput>;
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -390,7 +415,16 @@ export const placeOrderInput = z.object({
   addressId: z.union([uuid, z.literal('').transform(() => undefined)]).optional()
     .refine(v => v !== undefined, 'Choose a delivery address.'),
   expectedTotalPaise: z.coerce.number().int().min(0),
-});
+  /** Client change request: the delivery option chosen at checkout (a zone rate), and a billing address other than the
+      delivery address (unticked 'same as delivery'). Both optional: omitted = as before. */
+  deliveryRateId: z.union([uuid, z.literal('').transform(() => undefined)]).optional(),
+  billingSame: z.union([z.literal('on'), z.literal('true'), z.literal('false'), z.literal('')]).optional().transform(v => v === undefined || v === 'on' || v === 'true'),
+  billingAddressId: z.union([uuid, z.literal('').transform(() => undefined)]).optional(),
+  /** Second pass: how the customer pays (cash on delivery when the business offers it) and whether to use loyalty points.
+      Omitted = online payment, no points (as before). The server decides whether either is possible and what it costs. */
+  paymentMethod: z.union([z.enum(['online', 'cod']), z.literal('').transform(() => 'online' as const)]).optional().transform(v => v ?? 'online'),
+  usePoints: z.union([z.literal('on'), z.literal('true'), z.literal('false'), z.literal('')]).optional().transform(v => v === 'on' || v === 'true'),
+}).superRefine((v, ctx) => { if (!v.billingSame && !v.billingAddressId) ctx.addIssue({ code: 'custom', path: ['billingAddressId'], message: 'Choose the billing address.' }); });
 /** What the payment provider's browser widget reported. Provider-specific fields are checked by that provider (signature
     and read-back); here only the shape is limited. */
 export const paymentResultInput = z.object({
@@ -470,8 +504,16 @@ export type ShipmentTrackingInput = z.infer<typeof shipmentTrackingInput>;
 
 // ---------- M11: collections, "Complete the look", bulk product status ----------
 export const collectionId = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Use lower-case letters, digits and single hyphens.').min(2).max(40);
-export const createCollectionInput = z.object({ id: collectionId, label: z.string().trim().min(1, 'Enter a name.').max(60) });
-export const updateCollectionInput = z.object({ collectionId, label: z.string().trim().min(1, 'Enter a name.').max(60), expectedLabel: z.string().max(60) });
+const groupRef = z.string().trim().regex(/^[a-z][a-z0-9-]{1,39}$/).optional().or(z.literal('').transform(() => undefined)).transform(v => v ?? null);
+const seoText = (max: number) => z.string().trim().max(max, `Keep it under ${max} characters.`).optional().transform(v => v || null);
+/** The id is optional: when empty it is made from the name. */
+export const createCollectionInput = z.object({ id: collectionId.optional().or(z.literal('').transform(() => undefined)), label: z.string().trim().min(1, 'Enter a name.').max(60),
+  groupId: groupRef });
+export const updateCollectionInput = z.object({ collectionId, label: z.string().trim().min(1, 'Enter a name.').max(60), expectedLabel: z.string().max(60),
+  groupId: groupRef, seoTitle: seoText(70), seoDescription: seoText(160) });
+export const createCollectionGroupInput = z.object({ label: z.string().trim().min(1, 'Enter a name.').max(40) });
+/** The collections a product is in (the product page's collection picker): the full set, by id. */
+export const productCollectionsInput = z.object({ productId, collectionIds: z.array(collectionId).max(100).optional().transform(v => v ?? []) });
 export const setCollectionActiveInput = z.object({ collectionId, active: z.enum(['true', 'false']).transform(v => v === 'true'), expectedActive: z.enum(['true', 'false']).transform(v => v === 'true') });
 export const moveCollectionInput = z.object({ collectionId, direction: z.enum(['up', 'down']) });
 export const collectionMemberInput = z.object({ collectionId, productId });
@@ -482,6 +524,7 @@ export const PRODUCT_STATUSES = ['active', 'draft', 'archived'] as const;
 export const bulkProductStatusInput = z.object({ productIds: z.array(productId).min(1, 'Select at least one product.').max(200), status: z.enum(PRODUCT_STATUSES) });
 export type CreateCollectionInput = z.infer<typeof createCollectionInput>;
 export type UpdateCollectionInput = z.infer<typeof updateCollectionInput>;
+export type ProductCollectionsInput = z.infer<typeof productCollectionsInput>;
 export type SetCollectionActiveInput = z.infer<typeof setCollectionActiveInput>;
 export type BulkProductStatusInput = z.infer<typeof bulkProductStatusInput>;
 
@@ -535,6 +578,29 @@ export const createPurchaseOrderInput = z.object({
   vendorId: uuid,
   expectedOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
   notes: optText(1000),
+});
+/** One purchase order for ONE vendor with SEVERAL materials at once (client change request): a row per material; rows
+    with no quantity are left out. Costs are optional (taken only from staff with costs.read). */
+export const purchaseOrderWithLinesInput = z.object({
+  vendorId: uuid,
+  expectedOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
+  notes: optText(1000),
+  materialIds: z.array(uuid).max(200).optional().transform(v => v ?? []),
+  qtys: z.array(z.string().trim().max(20)).max(200).optional().transform(v => v ?? []),
+  costs: z.array(z.string().trim().max(20)).max(200).optional().transform(v => v ?? []),
+}).transform((v, ctx) => {
+  if (v.materialIds.length !== v.qtys.length || v.materialIds.length !== v.costs.length) { ctx.addIssue({ code: 'custom', message: 'Reload the page and try again.' }); return z.NEVER; }
+  const lines = [];
+  for (const [i, materialId] of v.materialIds.entries()) {
+    if (!v.qtys[i]) continue;
+    const qty = Number(v.qtys[i]), cost = v.costs[i] ? Number(v.costs[i].replace(/[₹,\s]/g, '')) : null;
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 1e9 || Math.round(qty * 1000) !== qty * 1000) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Quantities must be numbers above 0 (up to 3 decimals).' }); return z.NEVER; }
+    if (cost !== null && (!Number.isFinite(cost) || cost < 0)) { ctx.addIssue({ code: 'custom', path: ['costs'], message: 'Enter unit prices in rupees.' }); return z.NEVER; }
+    lines.push({ materialId, qty, unitCostPaise: cost === null ? null : Math.round(cost * 100) });
+  }
+  if (!lines.length) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Enter a quantity for at least one material.' }); return z.NEVER; }
+  if (new Set(lines.map(l => l.materialId)).size !== lines.length) { ctx.addIssue({ code: 'custom', message: 'A material is listed twice.' }); return z.NEVER; }
+  return { vendorId: v.vendorId, expectedOn: v.expectedOn, notes: v.notes, lines };
 });
 export const poLineInput = z.object({
   purchaseOrderId: uuid,
@@ -605,3 +671,51 @@ export const customerNoteInput = z.object({ customerId: uuid, body: z.string().t
 
 // ERP modules 1–8 (pricing, shipping, returns, marketing, support, finance, carts, notifications).
 export * from './erp.ts';
+
+// ======================= client change request, second pass =======================
+// Shape only; permissions and every business check are in @kitsyuu/core (cod.ts, loyalty.ts, order-edit.ts).
+const reqNote = (max: number) => z.string().trim().min(1, 'Give a reason; it is kept in the history.').max(max);
+const optNote = (max: number) => z.string().trim().max(max).optional().transform(v => v || null);
+const amountInRupees = z.string().trim().max(20).transform((v, ctx) => {
+  const p = rupeesToPaise(v);
+  if (p === null) { ctx.addIssue({ code: 'custom', message: 'Enter an amount in rupees, e.g. 1299 or 1299.50.' }); return z.NEVER; }
+  return p;
+});
+const checked = z.union([z.literal('on'), z.literal('true'), z.literal('false'), z.literal('')]).optional().transform(v => v === 'on' || v === 'true');
+
+export const codCollectInput = z.object({ orderId: uuid, amount: amountInRupees, reference: optNote(100), note: optNote(300) });
+export const codCancelInput = z.object({ orderId: uuid, kind: z.enum(['cancel', 'refused']), note: reqNote(300), restock: checked });
+
+export const loyaltyAdjustInput = z.object({
+  customerId: uuid,
+  points: z.string().trim().regex(/^-?\d{1,7}$/, 'Enter a whole number of points, e.g. 100 or -50.').transform(Number).refine(n => n !== 0, 'Enter a number other than 0.'),
+  reason: reqNote(300),
+});
+export const loyaltyImportInput = z.object({ text: z.string().max(200_000), reason: reqNote(300) });
+export const loyaltyListQuery = z.object({ q: z.string().trim().max(80).optional().transform(v => v || undefined), page: z.coerce.number().int().min(1).max(10_000).default(1) });
+
+/** Staff edit of an order before it ships: every line's size and quantity (0 removes the line), optionally a new
+    delivery address, and the reason. expectedTotalPaise is the total the page showed (refused if the order changed). */
+export const orderEditInput = z.object({
+  orderId: uuid, expectedTotalPaise: z.coerce.number().int().min(0), note: reqNote(500),
+  itemIds: z.array(uuid).max(100).optional().transform(v => v ?? []),
+  variantIds: z.array(uuid).max(100).optional().transform(v => v ?? []),
+  qtys: z.array(z.string().trim().max(3)).max(100).optional().transform(v => v ?? []),
+  changeAddress: checked,
+  fullName: z.string().trim().max(120).optional(), phone: z.string().trim().max(20).optional(), line1: z.string().trim().max(200).optional(),
+  line2: z.string().trim().max(200).optional(), city: z.string().trim().max(80).optional(), state: z.string().trim().max(60).optional(), pin: z.string().trim().max(10).optional(),
+}).transform((v, ctx) => {
+  if (v.itemIds.length !== v.variantIds.length || v.itemIds.length !== v.qtys.length || !v.itemIds.length) { ctx.addIssue({ code: 'custom', message: 'Reload the order and try again.' }); return z.NEVER; }
+  const lines = v.itemIds.map((itemId, i) => ({ itemId, variantId: v.variantIds[i], qty: Number(v.qtys[i]) }));
+  if (lines.some(l => !Number.isInteger(l.qty) || l.qty < 0 || l.qty > 10)) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Quantities are whole numbers from 0 (remove) to 10.' }); return z.NEVER; }
+  let address = null;
+  if (v.changeAddress) {
+    const a = addressInput.omit({ addressId: true, isDefault: true }).safeParse({ fullName: v.fullName ?? '', phone: v.phone ?? '', line1: v.line1 ?? '', line2: v.line2 ?? '', city: v.city ?? '', state: v.state ?? '', pin: v.pin ?? '' });
+    if (!a.success) { for (const i of a.error.issues) ctx.addIssue({ code: 'custom', path: i.path, message: i.message }); return z.NEVER; }
+    address = a.data;
+  }
+  return { orderId: v.orderId, expectedTotalPaise: v.expectedTotalPaise, note: v.note, lines, address };
+});
+export type OrderEditInput = z.infer<typeof orderEditInput>;
+export const orderEditRefundInput = z.object({ editId: uuid, mode: z.enum(['provider', 'manual']), reference: optNote(100) })
+  .superRefine((v, ctx) => { if (v.mode === 'manual' && !v.reference) ctx.addIssue({ code: 'custom', path: ['reference'], message: 'Enter the bank or UPI reference of the refund.' }); });

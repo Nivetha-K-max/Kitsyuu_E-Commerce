@@ -20,7 +20,11 @@ function loadOrder(count: number, finest: number): number[] {
   return order;
 }
 
-export default function BrandHero() {
+/** Brand wording (client change request): editable under Store content; the defaults are the original text. */
+export type HeroCopy = { heroTop: string; heroEyebrow: string; heroLead: string };
+const arrow = (t: string) => t.split('→').map((part, i) => <span key={i}>{i > 0 && <b aria-hidden="true">→</b>}{part}</span>);
+
+export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEyebrow: 'KITSYUU — FROM JAPAN TO INDIA', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
   const section = useRef<HTMLElement>(null), canvas = useRef<HTMLCanvasElement>(null), word = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -109,12 +113,12 @@ export default function BrandHero() {
         <img className="st-brand-hero-img" src="/assets/upscaled-poster.webp" alt="" width={2560} height={1440} fetchPriority="high" />
         <canvas className="st-brand-film" ref={canvas} aria-hidden="true" />
         <div className="st-brand-hero-shade" />
-        <p className="st-brand-hero-top eyebrow"><span>KITSYUU / FORM STUDY 001</span><span>JAPAN <b aria-hidden="true">→</b> INDIA</span></p>
+        <p className="st-brand-hero-top eyebrow"><span>KITSYUU / FORM STUDY 001</span><span data-brand-top>{arrow(copy.heroTop)}</span></p>
         <h1 id="st-brand-title" className="st-brand-hero-word" ref={word}>KITSYUU</h1>
         <div className="st-brand-hero-copy st-wrap">
           <div>
-            <p className="eyebrow"><span></span>KITSYUU — FROM JAPAN TO INDIA</p>
-            <p className="st-brand-hero-lead">Japanese streetwear. Unconventional shapes. Made personal.</p>
+            <p className="eyebrow" data-brand-eyebrow><span></span>{copy.heroEyebrow}</p>
+            <p className="st-brand-hero-lead" data-brand-lead>{copy.heroLead}</p>
           </div>
           <div className="st-brand-hero-actions">
             <Link className="button" href={url.shop()}>Shop now</Link>

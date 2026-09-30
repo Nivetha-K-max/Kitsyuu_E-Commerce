@@ -3,7 +3,7 @@
    the caller's transaction, and the change is recorded in order_status_history in the same transaction. Stock and audit
    stay with the caller, which knows why the change happens. */
 import { sql, type OrderStatus, type Tx } from '@kitsyuu/db';
-import { canTransitionAs, DomainError, type OrderActor } from '@kitsyuu/contracts';
+import { canCodTransition, canTransitionAs, DomainError, type OrderActor } from '@kitsyuu/contracts';
 
 export interface LockedOrder { id: string; order_number: string; status: OrderStatus }
 
@@ -18,10 +18,12 @@ export async function lockOrder(tx: Tx, where: { id: string }) {
 
 export async function applyOrderTransition(tx: Tx, order: LockedOrder, to: OrderStatus, opts: {
   actor: OrderActor; note?: string | null;
+  /** A cash-on-delivery flow (cod.ts / checkout): also allows the COD transitions (COD_TRANSITIONS). */
+  cod?: boolean;
   /** Extra columns set with the status (e.g. payment_status, paid_at). */
   set?: { payment_status?: 'unpaid' | 'pending' | 'authorized' | 'paid' | 'failed'; paid_at?: Date };
 }): Promise<{ historyId: number; from: OrderStatus; to: OrderStatus }> {
-  if (!canTransitionAs(opts.actor, order.status, to))
+  if (!canTransitionAs(opts.actor, order.status, to) && !(opts.cod && canCodTransition(opts.actor, order.status, to)))
     throw new DomainError('invalid', `An order cannot go from ${label(order.status)} to ${label(to)}.`);
   await tx.updateTable('orders').set({ status: to, ...opts.set }).where('id', '=', order.id).execute();
   const h = await tx.insertInto('order_status_history')
