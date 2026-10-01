@@ -24,7 +24,7 @@ function loadOrder(count: number, finest: number): number[] {
 export type HeroCopy = { heroTop: string; heroEyebrow: string; heroLead: string };
 const arrow = (t: string) => t.split('→').map((part, i) => <span key={i}>{i > 0 && <b aria-hidden="true">→</b>}{part}</span>);
 
-export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEyebrow: '', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
+export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
   const section = useRef<HTMLElement>(null), canvas = useRef<HTMLCanvasElement>(null), word = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEye
         <img className="st-brand-hero-img" src="/assets/upscaled-poster.webp" alt="" width={2560} height={1440} fetchPriority="high" />
         <canvas className="st-brand-film" ref={canvas} aria-hidden="true" />
         <div className="st-brand-hero-shade" />
-        <p className="st-brand-hero-top eyebrow"><span>KITSYUU / FORM STUDY 001</span><span data-brand-top>{arrow(copy.heroTop)}</span></p>
+        <p className="st-brand-hero-top eyebrow"><span>KITSYUU / FORM STUDY 001</span>{copy.heroTop && <span data-brand-top>{arrow(copy.heroTop)}</span>}</p>
         <h1 id="st-brand-title" className="st-brand-hero-word" ref={word}>KITSYUU</h1>
         <div className="st-brand-hero-copy st-wrap">
           <div>
@@ -122,7 +122,7 @@ export default function BrandHero({ copy = { heroTop: 'JAPAN → INDIA', heroEye
           </div>
           <div className="st-brand-hero-actions">
             <Link className="button" href={url.shop()}>Shop now</Link>
-            <Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>New arrivals <span aria-hidden="true">↗</span></Link>
+            <Link className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></Link>
             {/* The story page runs the landing's own script, so it is a full page load (not a client-side <Link>). */}
             <a className="text-link" href="/our-story">Our story <span aria-hidden="true">↗</span></a>
           </div>

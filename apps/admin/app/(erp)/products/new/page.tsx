@@ -23,7 +23,7 @@ export default async function NewProductPage() {
       <ActionForm action={createProductAction} submitLabel="Create draft product" pendingLabel="Creating…" id="create-product-form" label="Create product" className="form cols-form">
         <Field name="name" label="Name" autoComplete="off" required />
         <Field name="sku" label="SKU" autoComplete="off" required hint="e.g. KTS-TOP-023. Must be unique; sizes get SKU-SIZE." />
-        <Field name="slug" label="Store URL slug (optional)" autoComplete="off" hint="Left blank, it is made from the name: /product/<slug>." />
+        <Field name="slug" label="Store URL slug (optional)" autoComplete="off" hint="Left blank, it is made from the name (lower case, hyphens): /product/<slug>; a name already in use gets -2, -3 and so on. It stays fixed after creation, so links keep working." />
         <Select name="categoryId" label="Category" required options={categories.filter(c => !c.parent_id).map(c => ({ value: c.id, label: label(c) }))} />
         <Select name="subcategoryId" label="Subcategory" hint="Must belong to the chosen category."
           options={[{ value: '', label: 'None' }, ...categories.filter(c => c.parent_id).map(c => ({ value: c.id, label: `${categories.find(x => x.id === c.parent_id)?.label} / ${label(c)}` }))]} />

@@ -26,7 +26,7 @@ export default function SearchView() {
       <form className="st-search" role="search" action={url.search()} onSubmit={e => { e.preventDefault(); clearTimeout(timer.current); run(value); }}>
         <label htmlFor="st-q">Search by product name or category</label>
         <div className="st-search-row">
-          <input ref={input} id="st-q" name="q" type="search" value={value} autoComplete="off" spellCheck={false} placeholder="Hoodie, KTS-BTM-004, jeans…"
+          <input ref={input} id="st-q" name="q" type="search" value={value} autoComplete="off" spellCheck={false} placeholder="Hoodie, jeans, outerwear…"
             onChange={e => { const v = e.target.value; setValue(v); clearTimeout(timer.current); timer.current = setTimeout(() => run(v), 160); }} />
           <button className="button" type="submit">Search</button>
         </div>

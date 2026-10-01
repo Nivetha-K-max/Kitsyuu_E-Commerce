@@ -7,12 +7,13 @@ import type { Product } from '@/lib/types';
 import { useHydrated, useStore } from './StoreProvider';
 import { useAuth } from './AuthProvider';
 import { Icons } from './icons';
+import ThemeToggle from './ThemeToggle';
 
 type Active = { key?: string; exact?: boolean; sub?: string | null; tool?: string };
 
 export function navItems(idx: Index) {
   const items = idx.c.navigation.map(n => n.all ? { key: 'all', label: 'Shop', href: url.shop(), children: [] as { id: string; label: string }[] }
-    : n.collection ? { key: 'col:' + n.collection, label: n.label, href: url.shop({ collection: n.collection }), children: [] }
+    : n.collection ? { key: 'col:' + n.collection, label: n.label, href: url.collection(n.collection), children: [] }
     : { key: 'cat:' + n.category, label: n.label, href: url.shop({ category: n.category! }), children: idx.children(n.category!) });
   const home = { key: 'home', label: 'Home', href: url.home, children: [] as { id: string; label: string }[] };
   return [home, ...items.filter(i => i.key === 'all'), ...items.filter(i => i.key !== 'all')];
@@ -21,6 +22,7 @@ export function navItems(idx: Index) {
 function useActive(idx: Index): Active {
   const path = usePathname(), q = useSearchParams();
   if (path === '/') return { key: 'home', exact: true };
+  if (path.startsWith('/collections/')) return { key: 'col:' + decodeURIComponent(path.split('/')[2] || ''), exact: true };
   if (path === '/shop') {
     const col = q.get('collection'), cat = q.get('category') && idx.cats.get(q.get('category')!);
     if (col) return { key: 'col:' + col, exact: true };
@@ -60,7 +62,7 @@ function megaFor(idx: Index, key: string): { cols: MegaCol[]; tiles: MegaTile[] 
     const col = idx.collection(key.slice(4));
     if (!col) return null;
     return {
-      cols: [{ heading: col.label, links: [...col.products.slice(0, 6).map(p => ({ href: url.product(p), label: p.name })), { href: url.shop({ collection: col.id }), label: 'View all' }] }],
+      cols: [{ heading: col.label, links: [...col.products.slice(0, 6).map(p => ({ href: url.product(p), label: p.name })), { href: url.collection(col.id), label: 'View all' }] }],
       tiles: shown(col.products).slice(0, 5).map(productTile),
     };
   }
@@ -165,6 +167,7 @@ export default function Header() {
         </ul>
       </nav>
       <div className="st-tools">
+        <ThemeToggle />
         <Link className="st-tool" href={url.search()} {...cur('search')}>{Icons.search}<span className="st-tool-label">Search</span></Link>
         <Link className="st-tool st-tool-wish" href={url.wishlist} {...cur('wishlist')}>{Icons.heart}<span className="st-tool-label">Wishlist</span> <span className="st-count-badge">(<span data-badge="wish">{wishCount}</span>)<span className="sr-only"> saved</span></span></Link>
         <Link className="st-tool" href={url.cart} {...cur('cart')}>{Icons.bag}<span className="st-tool-label">Cart</span> <span className="st-count-badge">(<span data-badge="cart">{cartCount}</span>)<span className="sr-only"> items</span></span></Link>

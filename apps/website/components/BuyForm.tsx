@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { MAX_QTY, url } from '@/lib/catalogue-utils';
 import { useStore } from './StoreProvider';
 import WishButton from './WishButton';
+import { useColour } from './ColourScope';
 
 /* Size + quantity + Add to cart. A size is required; the status line appears only after an action. */
 export default function BuyForm({ productId }: { productId: string }) {
@@ -12,6 +13,11 @@ export default function BuyForm({ productId }: { productId: string }) {
   const [size, setSize] = useState(''), [qty, setQtyState] = useState(1), [invalid, setInvalid] = useState(false);
   const [status, setStatus] = useState<React.ReactNode>(null), [busy, setBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
+  // Third pass: a product that comes in colours shows the colours first; the sizes are those of the chosen colour.
+  const { colour, setColour } = useColour();
+  const colours = p.colours ?? [], coloured = colours.length > 0;
+  const colourLabel = colours.find(c => c.slug === colour)?.label ?? null;
+  const sizes = coloured ? p.variants.filter(v => v.colour === colour) : p.variants;
   const clamp = (v: unknown) => Math.min(MAX_QTY, Math.max(1, Math.round(Number(v)) || 1));
   const setQty = (v: unknown) => setQtyState(clamp(v));
 
@@ -19,6 +25,10 @@ export default function BuyForm({ productId }: { productId: string }) {
     <form className="st-buy" noValidate ref={form} aria-busy={busy || undefined} onSubmit={async e => {
       e.preventDefault();
       if (busy) return;
+      if (coloured && !colour) {
+        setStatus('Select a colour to add this to your cart.');
+        form.current!.querySelector<HTMLInputElement>('input[name="colour"]')?.focus(); return;
+      }
       if (!size) {
         setInvalid(true); setStatus('Select a size to add this to your cart.');
         form.current!.querySelector<HTMLInputElement>('input[name="size"]:not(:disabled)')?.focus(); return;
@@ -26,15 +36,33 @@ export default function BuyForm({ productId }: { productId: string }) {
       const input = form.current!.querySelector<HTMLInputElement>('#st-qty')!, n = clamp(input.value);
       setQty(n);
       setBusy(true);
-      const r = await addToCart(p, size, n).finally(() => setBusy(false));
+      const r = await addToCart(p, size, n, coloured ? colour : null).finally(() => setBusy(false));
       if (!r.ok) { setStatus(r.message ?? 'Your cart could not be saved in this browser.'); return; }
-      setStatus(<>{r.capped ? `Your cart now has the maximum of ${MAX_QTY} in size ${size}.` : `Added to cart: size ${size}, quantity ${r.merged ? `now ${r.qty}` : r.qty}.`} <Link href={url.cart}>View cart</Link></>);
+      const what = `${colourLabel ? `${colourLabel}, ` : ''}size ${size}`;
+      setStatus(<>{r.capped ? `Your cart now has the maximum of ${MAX_QTY} in ${what}.` : `Added to cart: ${what}, quantity ${r.merged ? `now ${r.qty}` : r.qty}.`} <Link href={url.cart}>View cart</Link></>);
     }}>
+      {coloured && (
+        <fieldset className="st-fieldset st-colours-set">
+          <legend>Colour <span aria-hidden="true">{colourLabel ?? 'Select a colour'}</span></legend>
+          <div className="st-sizes st-colours">
+            {colours.map(c => {
+              const any = p.variants.some(v => v.colour === c.slug && v.available);
+              return (
+                <label className="st-size st-colour-opt" key={c.slug}>
+                  <input type="radio" name="colour" value={c.slug} checked={colour === c.slug}
+                    onChange={() => { setColour(c.slug); if (!p.variants.some(v => v.colour === c.slug && v.size === size && v.available)) setSize(''); setStatus(null); }} />
+                  <span><i style={{ background: c.swatch || 'transparent' }} aria-hidden="true"></i>{c.label}{!any && <span className="st-colour-out"> · sold out</span>}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
       <fieldset className={`st-fieldset${invalid ? ' is-invalid' : ''}`} {...(invalid ? { 'aria-describedby': 'st-buy-status' } : {})}>
         <legend>Size <span aria-hidden="true" data-size-label>{size ? `Selected: ${size}` : 'Select a size'}</span></legend>
         <div className="st-sizes">
-          {p.variants.map(v => (
-            <label className="st-size" key={v.size}>
+          {sizes.map(v => (
+            <label className="st-size" key={`${v.colour ?? ''}|${v.size}`}>
               <input type="radio" name="size" value={v.size} disabled={!v.available} checked={size === v.size} onChange={() => { setSize(v.size); setInvalid(false); }} />
               <span>{v.size}{!v.available && <span className="sr-only"> (unavailable)</span>}</span>
             </label>

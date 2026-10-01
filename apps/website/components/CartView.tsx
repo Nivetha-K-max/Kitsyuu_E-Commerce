@@ -46,7 +46,7 @@ export default function CartView() {
     const sel = focusNext.current; focusNext.current = null;
     (document.querySelector<HTMLElement>(sel) || document.getElementById('st-page-title'))?.focus();
   });
-  const key = (l: ShownLine) => `${l.id}|${l.size}`;
+  const key = (l: ShownLine) => `${l.id}|${l.colour ?? ''}|${l.size}`;
   const sel = (k: string, inner: string) => `[data-line="${CSS.escape(k)}"] ${inner}`;
   if (!ready) return <div className="st-wrap"><p className="st-status">Loading…</p></div>;
 
@@ -60,7 +60,7 @@ export default function CartView() {
               const p = idx.byId.get(l.id), href = p ? url.product(p) : url.shop(), k = key(l);
               const max = Math.min(MAX_QTY, l.available ?? MAX_QTY);
               const step = async (d: number) => {
-                const next = await setQty(l.id, l.size, l.qty + d);
+                const next = await setQty(l.id, l.size, l.qty + d, l.colour);
                 focusNext.current = sel(k, `[data-line-step="${d}"]:not(:disabled)`);
                 if (next) toast(`${l.name}, size ${l.size}: quantity ${next.qty}.`);
               };
@@ -69,7 +69,7 @@ export default function CartView() {
                   <Link className="st-line-media" href={href} tabIndex={-1} aria-hidden="true"><LineImage line={l} /></Link>
                   <div className="st-line-info">
                     <h2 className="st-line-name"><Link href={href}>{l.name}</Link></h2>
-                    <p className="st-line-meta">Size <b>{l.size}</b></p>
+                    <p className="st-line-meta">{l.colourLabel && <>Colour <b>{l.colourLabel}</b> · </>}Size <b>{l.size}</b></p>
                     <p className="st-line-unit">{formatMoney(l.price)} <small>each</small></p>
                     {l.problem && <p className="st-line-problem" role="alert" data-line-problem>{l.problem}</p>}
                   </div>
@@ -77,14 +77,14 @@ export default function CartView() {
                     <div className="st-qty" role="group" aria-label={`Quantity for ${l.name}, size ${l.size}`}>
                       <button type="button" data-line-step="-1" aria-label="Decrease quantity" disabled={l.qty <= 1} onClick={() => step(-1)}>−</button>
                       <input type="number" inputMode="numeric" min={1} max={max} defaultValue={l.qty} key={l.qty} data-line-qty="" aria-label="Quantity"
-                        onBlur={e => { if (Number(e.target.value) !== l.qty) { void setQty(l.id, l.size, Number(e.target.value)); focusNext.current = sel(k, '[data-line-qty]'); } }}
+                        onBlur={e => { if (Number(e.target.value) !== l.qty) { void setQty(l.id, l.size, Number(e.target.value), l.colour); focusNext.current = sel(k, '[data-line-qty]'); } }}
                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
                       <button type="button" data-line-step="1" aria-label="Increase quantity" disabled={l.qty >= max} onClick={() => step(1)}>+</button>
                     </div>
                     <button className="st-line-remove" type="button" data-line-remove="" onClick={async () => {
                       const nb = lines[n + 1] || lines[n - 1];
                       focusNext.current = nb ? sel(key(nb), '[data-line-remove]') : '#st-page-title';
-                      await removeLine(l.id, l.size); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
+                      await removeLine(l.id, l.size, l.colour); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
                     }}>Remove<span className="sr-only"> {l.name}, size {l.size}</span></button>
                   </div>
                   <p className="st-line-total"><span className="sr-only">Line total </span>{formatMoney(l.price * l.qty)}</p>

@@ -1,4 +1,4 @@
-# KITSYUU: Japanese streetwear, brought to India
+# KITSYUU: Japanese streetwear e-commerce and ERP
 
 KITSYUU is an **e-commerce store and an ERP / business-management back office** built as one platform:
 
@@ -26,7 +26,7 @@ KITSYUU is an **e-commerce store and an ERP / business-management back office** 
 
 ## Status
 
-The platform is built in milestones. Each is reviewed before it moves on. **Production (`main`) runs up to M4.** Later milestones are on review branches until they are approved.
+The platform is built in milestones. Each is reviewed before it moves on. **Production (`main`) runs every milestone below, ERP modules 1–8, the client change requests (passes 1–3) and the 2026-10-01 store audit** (themes, SEO, collection pages). The table records how each milestone was built.
 
 | Milestone | Scope | State |
 |---|---|---|
@@ -67,9 +67,17 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 - **Clear failure states**: sold-out or changed items, a changed total, a declined payment, a closed payment window, the payment service or database being unavailable, a network cut, and an ended session.
 - **Accessibility and responsiveness**: labelled fields with linked errors, focus management, live status messages, reduced-motion support, and no horizontal scrolling at 1440–390 px.
 
+- **Colours and sizes** (third pass): a product can come in colours, each with its own sizes, stock and photos. The cart, checkout, order, invoice, packing slip and returns keep the colour.
+- **Product-specific size charts**: any columns (Chest, Length, Shoulder, Sleeve, Waist, Hip…), in cm or inches, per product or per category. A product without a chart shows none.
+- **Collections with their own pages**: `/collections/men`, `/collections/women`, `/collections/sale`, `/collections/new-arrivals`… (hidden or unknown collections are a 404). The older `/shop?collection=…` addresses still work.
+- **Tags**: attribute values (Admin → Attributes) work as tags for filters and search; search also finds colours.
+- **SEO generated from the catalogue**: titles, descriptions, canonical URLs, Open Graph, and JSON-LD (Product, BreadcrumbList, CollectionPage, Organization, WebSite) built only from real data, plus `sitemap.xml` and `robots.txt`. Product URLs come from the title (`/product/vintage-oversized-black-hoodie`); a repeated title gets `-2`, `-3`…, and a URL never changes after creation.
+- **Dark and light themes**: dark by default (`STORE_THEME`), a switch in the header, the visitor's choice remembered. All colours come from design tokens in `public/store.css`.
+
 ### Admin/ERP (`apps/admin`)
 - Staff accounts with invitations, roles, fine-grained permissions (no privilege escalation) and an append-only audit log.
 - Dashboard, products (create, edit, status, price), categories, sizes, images, New Arrivals, stock adjustments with reasons, and orders (list, filters, detail, status changes along the workflow).
+- **Locations, transfers and channels** (third pass): stock per location (the online location is the store's stock), stock counts and history per location, transfers (draft → sent → received, or cancelled with the stock returned), retail sales recorded at their branch, and a report by location with online and retail kept apart.
 - **M8 operations (local only, not deployed):**
   - **Customers**: list with search and filters, order counts, lifetime value and last order; detail with contact, addresses, orders, safe session and login activity, and audit. Disable (ends every session at once) and enable, and contact corrections, all audited with a reason. No secret is ever shown: the admin database role cannot read password or token hashes.
   - **Payments**: payment attempts with filters, provider notifications (webhooks, without their content), and an exceptions queue (paid after cancel, amount mismatch, duplicate payment, paid without a payment record). The only action is recording that money received for a cancelled order was refunded by hand; nothing is sent to a provider.
@@ -95,6 +103,8 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 | ![Shop All](docs/screenshots/desktop-shop.jpg) | ![Product page](docs/screenshots/desktop-product.jpg) |
 | **Cart** | **Checkout as a guest (asks to log in)** |
 | ![Cart](docs/screenshots/desktop-cart.jpg) | ![Guest checkout](docs/screenshots/desktop-checkout-guest.png) |
+| **Light theme (shop)** | |
+| ![Shop in the light theme](docs/screenshots/desktop-shop-light.png) | |
 
 **Mobile (390 px)**
 
@@ -225,6 +235,8 @@ KITSYUU-Website2/
 - **After M9**: structured logging with request correlation, external uptime monitoring against `/api/health`, performance budgets. (Checkout rate limiting and the daily unpaid-order expiry job already exist.)
 - **Official photography and confirmed product data** (see `PRODUCT-DATA.md`).
 - **Continuous integration** running the test suites on every branch.
+- **Retail till (POS)**: retail sales are recorded as stock movements at their branch; a till that creates retail orders waits for the client's choice.
+- **Per-variant prices**: today every colour and size of a product has the product's price.
 
 ## Lessons learned
 - **Put business logic in one place.** Moving every rule into `packages/core` let the website and the ERP share it, and made the rules testable without a browser.
@@ -233,6 +245,7 @@ KITSYUU-Website2/
 - **Don't invent business rules.** Leaving shipping, tax, discounts and hold times unset kept the platform honest; each is a clearly listed decision, not a hidden guess.
 - **Rehearse database changes.** Read-only preflights, dry runs that roll back, and row fingerprints before and after made live migrations uneventful.
 - **Flaky tests are real bugs.** Several "random" failures were test helpers reading a page too early; fixing the helpers, not rerunning, made the suites trustworthy.
+- **Wait for a condition, never for a time.** Replacing fixed sleeps with waits on what the next check reads (a badge count, the URL, a rendered result) made the store suite five times faster and stopped its flakes. Images in a hidden menu are never downloaded, so tests only check the images a visitor can see.
 
 ## Credits
 Brand, catalogue and imagery © KITSYUU. Landing-page concept imagery and film are documented in [`PRODUCTION-NOTES.md`](PRODUCTION-NOTES.md). Fonts: Barlow Condensed and DM Sans (Google Fonts, served locally).

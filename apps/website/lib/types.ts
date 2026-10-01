@@ -1,8 +1,12 @@
 /* Catalogue shapes the storefront renders. Since Phase 4.3 they are filled from Supabase (lib/catalogue.ts);
    the shape still mirrors data/products.json, which remains the seed/reference file. */
-export type Variant = { size: string; available: boolean };
+/** colour: the Colour value of the size for products that come in colours (third pass); null / absent otherwise. */
+export type Variant = { size: string; available: boolean; colour?: string | null };
+export type ProductColour = { slug: string; label: string; swatch: string | null };
 
 export type MediaImage = {
+  /** Third pass: the colour this photo shows (null = the product in general). */
+  colour?: string | null;
   src: string;
   width: number;
   height: number;
@@ -30,6 +34,8 @@ export type Product = {
   colour: { label: string; swatches: string[] };
   price: number;
   variants: Variant[];
+  /** The colours the product comes in (third pass), in order; empty for a product without colours. */
+  colours?: ProductColour[];
   featured: boolean;
   styledWith: string[];
   media: Media;
@@ -69,6 +75,8 @@ export type Catalogue = {
 
 /* A cart line as stored in localStorage (kitsyuu-cart-v1); same format as the static store. */
 export type CartLine = {
+  /** Third pass: the colour of the line (Colour value and name), for products that come in colours. */
+  colour?: string | null; colourLabel?: string | null;
   id: string;
   sku: string;
   name: string;
@@ -79,7 +87,7 @@ export type CartLine = {
 };
 
 /* M7: a signed-in customer's cart as the server priced it (rupees, for display). Lines use the same fields as CartLine. */
-export type StoreCartLine = { id: string; sku: string; name: string; size: string; qty: number; price: number; lineTotal: number; available: number; problem: string | null };
+export type StoreCartLine = { id: string; sku: string; name: string; size: string; colour?: string | null; colourLabel?: string | null; qty: number; price: number; lineTotal: number; available: number; problem: string | null };
 export type StoreCart = {
   lines: StoreCartLine[];
   totals: { units: number; subtotal: number; discount: number; shipping: number; shippingLabel: string | null; tax: number; pricesIncludeTax: boolean; total: number };

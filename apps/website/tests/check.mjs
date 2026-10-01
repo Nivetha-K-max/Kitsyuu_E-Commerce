@@ -6,8 +6,24 @@ const data = JSON.parse(fs.readFileSync(new URL('../data/products.json', import.
 const b = await launch();
 const out = []; const ok = (name, pass, extra = '') => out.push(`${pass ? 'PASS' : 'FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
 const READY = '!document.querySelector("main .st-status")&&!!document.querySelector(".st-footer .st-footer-top")';
-const imgs = `[...document.querySelectorAll("main img,header img")].map(i=>({src:i.currentSrc||i.src,ok:i.complete&&i.naturalWidth>0}))`;
+/* The images a visitor can see. Images inside a hidden (display:none) part of the page — e.g. the desktop mega-menu's
+   lazy pictures on a phone — are correctly never downloaded by the browser, so they are not counted. */
+const SHOWN = `[...document.querySelectorAll("main img,header img")].filter(i=>i.checkVisibility())`;
+const imgs = `${SHOWN}.map(i=>({src:i.currentSrc||i.src,ok:i.complete&&i.naturalWidth>0}))`;
 const overflow = 'document.documentElement.scrollWidth-innerWidth';
+/* Waits for the shown images to actually finish (load or error), bringing lazy ones into view first; then back to the top.
+   No fixed sleep: each image resolves on its own load / error event (10 s cap per image). The checks then read complete +
+   naturalWidth, so a broken image still fails. */
+const SETTLE = `(async()=>{for(const i of ${SHOWN}){if(i.complete&&i.naturalWidth>0)continue;
+  i.scrollIntoView({block:'center'});await new Promise(r=>{if(i.complete&&i.naturalWidth>0)return r();i.addEventListener('load',r,{once:true});i.addEventListener('error',r,{once:true});setTimeout(r,10000);});}
+  scrollTo(0,0);return true})()`;
+const settle = () => b.eval(SETTLE);
+/* The store menu: Home, Shop, then the collections the store can see (Men / Women / Sale / New Arrivals… whichever staff made
+   visible, in their admin order: the same public read the store makes), then the top-level categories. */
+const env = Object.fromEntries(fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
+const visibleCollections = await (await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/collections?select=label,sort_order&order=sort_order`,
+  {headers: {apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY, Authorization: `Bearer ${env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`}})).json();
+const navExpect = ['Home', 'Shop', ...visibleCollections.map(c => c.label), 'Tops', 'Bottoms', 'Outerwear'];
 const skus = sel => `[...document.querySelectorAll("${sel} .st-card[data-sku]")].map(e=>e.dataset.sku)`;
 const bySku = Object.fromEntries(data.products.map(p => [p.sku, p]));
 
@@ -43,7 +59,7 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
     && b.errors.length === 0, JSON.stringify(story) + (b.errors.length ? ' errors: ' + b.errors.join('; ') : ''));
 
   // Store home
-  await b.goto(B + '/', READY);
+  await b.goto(B + '/', READY); await settle();
   const home = await b.eval(`({na:${skus('[aria-labelledby=st-na-title]')},ft:${skus('[aria-labelledby=st-ft-title]')},cats:[...document.querySelectorAll('.st-cat-name')].map(e=>e.textContent),nav:[...document.querySelectorAll('.st-nav-main>li>a')].map(a=>a.textContent),imgs:${imgs},ov:${overflow}})`);
   const naExpect = data.collections[0].productIds.map(id => data.products.find(p => p.id === id).sku);
   const ftExpect = data.products.filter(p => p.featured).map(p => p.sku);
@@ -51,7 +67,10 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   ok(`[${tag}] home Featured = products.json featured`, JSON.stringify(home.ft) === JSON.stringify(ftExpect), home.ft.join(', '));
   ok(`[${tag}] home has no held product in Featured/New Arrivals`, ![...home.na, ...home.ft].some(s => bySku[s].media.status === 'held'));
   ok(`[${tag}] home category tiles`, home.cats.join() === 'Tops,Bottoms,Outerwear', home.cats.join());
-  ok(`[${tag}] header nav order`, home.nav.join() === 'Home,Shop,New Arrivals,Tops,Bottoms,Outerwear', home.nav.join());
+  ok(`[${tag}] header nav order (visible collections, e.g. Men / Women / Sale, then categories)`, home.nav.join() === navExpect.join(), `${home.nav.join()} | expected ${navExpect.join()}`);
+  // Men / Women / Sale are each in the menu exactly when their collection is active, in that order.
+  const groups = ['Men', 'Women', 'Sale'], active = groups.filter(g => visibleCollections.some(c => c.label === g));
+  ok(`[${tag}] Men / Women / Sale in the menu when active (${active.join(', ') || 'none'} active)`, JSON.stringify(home.nav.filter(l => groups.includes(l))) === JSON.stringify(active), home.nav.join());
   ok(`[${tag}] home images resolve`, home.imgs.every(i => i.ok), home.imgs.filter(i => !i.ok).map(i => i.src).join());
   ok(`[${tag}] home no horizontal overflow / errors`, home.ov <= 0 && b.errors.length === 0, `overflow ${home.ov}px ${b.errors.join('; ')}`);
   await b.shot(`${tag}-home.png`, true);
@@ -60,27 +79,47 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   const routes = [['', data.products.length], ['?collection=new-arrivals', 4]];
   for (const c of data.categories) routes.push([`?category=${c.id}`, data.products.filter(p => p.category === c.id || p.subcategory === c.id).length]);
   for (const [q, n] of routes) {
-    await b.goto(`${B}/shop${q}`, READY);
+    await b.goto(`${B}/shop${q}`, READY); await settle();
     const r = await b.eval(`({h1:document.querySelector('h1')?.innerText.replace(/\\n/g,' '),n:document.querySelectorAll('main .st-grid>li').length,count:document.querySelector('.st-result-count')?.textContent,cur:document.querySelector('.st-subnav [aria-current]')?.textContent,imgs:${imgs},ov:${overflow},heldOk:[...document.querySelectorAll('.st-card')].every(c=>{const s=c.dataset.sku,src=(${JSON.stringify(Object.fromEntries(data.products.map(p => [p.sku, p.media.status === 'held' ? null : 'storage/v1/object/public/product-images/products/' + p.id + '.webp'])))})[s];const photo=c.querySelector('img:not(.st-soon-mark)');return src===null?(!!c.querySelector('.st-soon .st-soon-title')&&!photo&&c.querySelector('.st-soon-title').textContent==='Photocoming soon'&&c.querySelector('.st-soon-label').textContent==='KITSYUU'):(!c.querySelector('.st-soon')&&photo.src.endsWith('/'+src))})})`);
     ok(`[${tag}] shop.html${q || ' (all)'}`, r.n === n && r.imgs.every(i => i.ok) && r.heldOk && r.ov <= 0 && b.errors.length === 0, `${r.h1} | ${r.n}/${n} cards | ${r.count} | tab: ${r.cur ?? '-'}${b.errors.length ? ' | ' + b.errors.join('; ') : ''}${r.ov > 0 ? ' | overflow ' + r.ov : ''}`);
     if (q === '' || q === '?category=tops.hoodies') await b.shot(`${tag}-shop${q ? '-hoodies' : ''}.png`, true);
   }
+  // Collections have their own pages (2026-10-01); /shop?collection= shows the same list with the collection URL as canonical.
+  await b.goto(`${B}/collections/new-arrivals`, READY);
+  const colPage = await b.eval(`({n:document.querySelectorAll('main .st-grid>li').length,canon:document.querySelector('link[rel=canonical]')?.href,ld:[...document.querySelectorAll('script[type="application/ld+json"]')].flatMap(s=>[JSON.parse(s.textContent)].flat()).map(x=>x['@type']).join()})`);
+  ok(`[${tag}] /collections/new-arrivals: 4 products, canonical, CollectionPage JSON-LD`, colPage.n === 4 && !!colPage.canon?.endsWith('/collections/new-arrivals') && colPage.ld === 'CollectionPage,BreadcrumbList' && b.errors.length === 0, JSON.stringify(colPage));
+  // Dark by default; the header switch turns the page light, the choice is kept, and switching back restores dark.
+  await b.goto(`${B}/shop`, READY);
+  const th = await b.eval(`(async()=>{const w=c=>new Promise(r=>{const t=Date.now();(function f(){if(c()||Date.now()-t>5000)return r();setTimeout(f,50)})()});localStorage.removeItem('kitsyuu-theme');
+    const bg=()=>getComputedStyle(document.body).backgroundColor,d=document.documentElement,btn=()=>document.querySelector('[data-theme-toggle]');
+    await w(()=>btn()?.dataset.themeToggle==='dark');const a=[d.dataset.theme,bg()];btn().click();await w(()=>d.dataset.theme==='light');const b=[d.dataset.theme,bg(),localStorage.getItem('kitsyuu-theme')];
+    btn().click();await w(()=>d.dataset.theme==='dark');const c=[d.dataset.theme,bg()];localStorage.removeItem('kitsyuu-theme');return {a,b,c}})()`);
+  ok(`[${tag}] theme: dark by default; the switch turns it light (kept) and back`, th.a[0] === 'dark' && th.b[0] === 'light' && th.b[1] !== th.a[1] && th.b[2] === 'light' && th.c[0] === 'dark' && th.c[1] === th.a[1], JSON.stringify(th));
   await b.goto(`${B}/shop?category=nope`, READY);
   ok(`[${tag}] unknown category shows not-found`, (await b.eval('document.querySelector("h1")?.textContent')) === 'Category not found');
 
   // All 22 product pages (desktop checks all; mobile checks a sample)
   const list = tag === 'desktop' ? data.products : data.products.filter(p => ['KTS-TOP-006', 'KTS-OUT-002', 'KTS-BTM-004'].includes(p.sku));
-  let pdpFails = [];
+  let pdpFails = [], seoFails = [];
   for (const p of list) {
-    await b.goto(`${B}/product/${p.slug}`, READY);
+    await b.goto(`${B}/product/${p.slug}`, READY); await settle();
     const r = await b.eval(`(()=>{const m=document.querySelector('#st-main-img');return{h1:document.querySelector('#st-pdp-title')?.textContent,src:m?.src,ok:m?m.complete&&m.naturalWidth>0:!!document.querySelector('.st-gallery-stage .st-soon[role=img]'),held:!!document.querySelector('.st-gallery-main.is-held .st-soon'),zoom:document.querySelector('.st-gallery').dataset.zoom,sizes:document.querySelectorAll('.st-size input').length,sku:document.querySelector('.st-pdp-meta').textContent,title:document.title,ov:${overflow},imgs:${imgs}}})()`);
     const held = p.media.status === 'held';
     const expectSrc = held ? undefined : `/storage/v1/object/public/product-images/products/${p.id}.webp`; // Phase 4.3: images come from Supabase Storage (product-images bucket)
     const pass = r.h1 === p.name && (held ? r.src === undefined : r.src.endsWith(expectSrc)) && r.ok && r.held === held && r.zoom === 'false' && r.sizes === p.variants.length && !/SKU/i.test(r.sku) && !r.sku.includes(p.sku) && r.ov <= 0 && r.imgs.every(i => i.ok) && b.errors.length === 0;
-    if (!pass) pdpFails.push(`${p.sku}: ${JSON.stringify({...r, imgs: undefined})} ${b.errors.join('; ')}`);
+    if (!pass) pdpFails.push(`${p.sku}: ${JSON.stringify({...r, imgs: r.imgs.filter(i => !i.ok)})} ${b.errors.join('; ')}`);
+    // SEO (2026-10-01): JSON-LD Product + BreadcrumbList and the canonical URL, generated from the product itself; the Open Graph
+    // title is the page title (staff's SEO title when set, e.g. on live, else the name).
+    const seo = await b.eval(`({ld:[...document.querySelectorAll('script[type="application/ld+json"]')].flatMap(s=>[JSON.parse(s.textContent)].flat()),canon:document.querySelector('link[rel=canonical]')?.href,og:document.querySelector('meta[property="og:title"]')?.content,title:document.title})`);
+    const pld = seo.ld.find(x => x['@type'] === 'Product');
+    if (!pld || pld.name !== p.name || pld.sku !== p.sku || pld.brand?.name !== 'KITSYUU' || pld.offers?.priceCurrency !== 'INR' || !(Number(pld.offers?.price) > 0)
+      || !/schema\.org\/(InStock|OutOfStock)$/.test(pld.offers?.availability) || pld.url !== seo.canon || !seo.canon?.endsWith('/product/' + p.slug) || seo.og !== seo.title.replace(/ \| KITSYUU Store$/, '')
+      || !seo.ld.some(x => x['@type'] === 'BreadcrumbList') || ('aggregateRating' in pld && !(pld.aggregateRating.reviewCount > 0)))
+      seoFails.push(`${p.sku}: ${JSON.stringify({pld, canon: seo.canon, og: seo.og}).slice(0, 300)}`);
     if (p.sku === 'KTS-TOP-006' || p.sku === 'KTS-OUT-002') await b.shot(`${tag}-pdp-${p.sku}.png`, true);
   }
   ok(`[${tag}] product pages (${list.length}) render, image or placeholder correct, zoom off`, pdpFails.length === 0, pdpFails.join('\n      '));
+  ok(`[${tag}] product pages (${list.length}): JSON-LD Product (name, SKU, brand, INR offer, availability, URL) + breadcrumbs, canonical = /product/<slug>`, seoFails.length === 0, seoFails.join(' | '));
   await b.goto(`${B}/product/missing`, READY);
   ok(`[${tag}] unknown product shows not-found`, (await b.eval('document.querySelector("h1")?.textContent')) === 'Product not found');
 

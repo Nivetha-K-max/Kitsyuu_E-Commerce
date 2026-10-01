@@ -157,3 +157,11 @@ export {
 } from './loyalty.ts';
 export { editOrder, orderEditBlocker, orderEditOptions, listOrderEdits, refundOrderEdit } from './order-edit.ts';
 export type { PaymentChoice } from './pricing.ts';
+// ---------- client change request, third pass ----------
+export {
+  listLocations, onlineLocationId, saveLocation, getLocationStock, adjustLocationStock, stockByLocation, listTransfers, getTransfer, createTransfer,
+  sendTransfer, receiveTransfer, cancelTransfer, locationReport, LOCATION_KINDS,
+} from './locations.ts';
+export { listColours, addColourVariant, setVariantColour, setImageColour, colourLabel } from './colour-variants.ts';
+export { lineLabel } from './cart.ts';
+export { RETAIL_ONLY_REASONS } from './inventory.ts';

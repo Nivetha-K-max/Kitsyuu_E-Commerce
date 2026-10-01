@@ -8,7 +8,8 @@
      required edits are made, each asserted so a changed dist/landing.html stops the build instead of drifting:
        · <main id="top"> becomes <div id="top"> (the page already has the store's <main>; one main landmark per page);
        · one nav link to the store: <a href="/">Store</a> (the landing's own header is hidden on /our-story by store.css);
-       · asset URLs become root-absolute (/assets/…), so they resolve on any URL.
+       · asset URLs become root-absolute (/assets/…), so they resolve on any URL;
+       · the "Japan → India" route wording is removed (client request; see EDITS and CONTENT_EDITS).
    - public/: app.js, content.json, the sequence manifest, images and the 241 frames, unchanged.
    Files the store already ships in public/ (styles.css, fonts, logo, editorial image) are shared, not copied: they must
    be byte-identical to dist/, otherwise the build stops so the landing can never change by accident. */
@@ -21,7 +22,7 @@ const DIST = path.join(WEB, '../../dist');
 const PUBLIC = path.join(WEB, 'public');
 const MODULE = path.join(WEB, 'lib/landing.generated.ts');
 const FRAMES = 'assets/upscaled-1440';
-const COPY = ['app.js', 'content.json', 'assets/sequence.json', 'assets/upscaled-poster.webp', 'assets/volume.webp', 'assets/layers.webp'];
+const COPY = ['app.js', 'assets/sequence.json', 'assets/upscaled-poster.webp', 'assets/volume.webp', 'assets/layers.webp'];
 const SHARED = ['styles.css', 'fonts.css', 'assets/kitsyuu-icon.svg', 'assets/editorial.webp',
   ...fs.readdirSync(path.join(DIST, 'assets/fonts')).filter(f => f.endsWith('.woff2')).map(f => `assets/fonts/${f}`)];
 
@@ -49,7 +50,22 @@ for (const rel of [...COPY, ...frames]) {
 }
 fs.rmSync(path.join(PUBLIC, 'landing.html'), { force: true });   // left over from the earlier stand-alone version
 
-// The landing markup (<body> contents) with the three required edits.
+// content.json (the wording app.js puts into [data-copy] elements), with the "Japan → India" route wording removed
+// (client request, 2026-10-01). Each edit is asserted, so a changed dist/content.json stops the build instead of drifting.
+const content = JSON.parse(fs.readFileSync(path.join(DIST, 'content.json'), 'utf8'));
+const CONTENT_EDITS = [
+  [['hero', 'eyebrow'], 'KITSYUU — FROM JAPAN TO INDIA', ''],
+  [['about', 'description'], 'Kitsyuu brings streetwear from Japan to India. An approach to getting dressed that starts with shape, builds through layers, and becomes your own.',
+    'An approach to getting dressed that starts with shape, builds through layers, and becomes your own.'],
+];
+for (const [[a, b], from, to] of CONTENT_EDITS) {
+  if (content[a]?.[b] !== from) fail(`expected content.json ${a}.${b} to be "${from}"`);
+  content[a][b] = to;
+}
+const contentOut = JSON.stringify(content, null, 2) + '\n';
+if (!fs.existsSync(path.join(PUBLIC, 'content.json')) || fs.readFileSync(path.join(PUBLIC, 'content.json'), 'utf8') !== contentOut) { fs.writeFileSync(path.join(PUBLIC, 'content.json'), contentOut); copied++; }
+
+// The landing markup (<body> contents) with the required edits.
 const html = fs.readFileSync(path.join(DIST, 'landing.html'), 'utf8');
 const body = html.match(/<body[^>]*>([\s\S]*)<\/body>/)?.[1];
 if (!body) fail('no <body> in dist/landing.html');
@@ -59,6 +75,11 @@ const edits = [
   ['<a href="#about">Our world</a></nav>', '<a href="#about">Our world</a><a href="/">Store</a></nav>'],
   // The client asked to remove this line wherever it appears (2026-09-30).
   ['<p class="eyebrow"><span aria-hidden="true"></span><span data-copy="hero.eyebrow">KITSYUU — FROM JAPAN TO INDIA</span></p>', ''],
+  // The other "Japan → India" route lines (2026-10-01): the film's top-right label and the "Our world" section label.
+  ['<span>KITSYUU / FORM STUDY 001</span><span>JAPAN <b>→</b> INDIA</span>', '<span>KITSYUU / FORM STUDY 001</span>'],
+  ['<span>03 — OUR WORLD</span><span>JAPAN → INDIA</span>', '<span>03 — OUR WORLD</span>'],
+  // The same sentence as content.json about.description (the markup's text before app.js fills it, and what search engines read).
+  ['<p data-copy="about.description">Kitsyuu brings streetwear from Japan to India. An approach', '<p data-copy="about.description">An approach'],
 ];
 let markup = body;
 for (const [from, to] of edits) {

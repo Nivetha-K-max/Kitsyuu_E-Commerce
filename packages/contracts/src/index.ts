@@ -401,8 +401,10 @@ export const MAX_LINES_PER_REQUEST = 100;
 const size = z.string().trim().min(1, 'Choose a size.').max(20, 'Unknown size.');
 const qty = z.coerce.number({ message: 'Enter a quantity.' }).int('Enter a whole number.')
   .min(1, 'The quantity must be at least 1.').max(MAX_QTY_PER_LINE, `At most ${MAX_QTY_PER_LINE} per size.`);
-export const cartLineInput = z.object({ productId, size, qty });
-export const cartLineKey = z.object({ productId, size });
+/** Third pass: the colour of the size (a Colour value), for products that come in colours; omitted = a product without colours. */
+const colourKey = z.string().trim().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(40).optional().or(z.literal('').transform(() => undefined)).or(z.null().transform(() => undefined));
+export const cartLineInput = z.object({ productId, size, qty, colour: colourKey });
+export const cartLineKey = z.object({ productId, size, colour: colourKey });
 export const wishlistInput = z.object({ productId });
 /** Guest (browser) cart / wishlist merged after login. Invalid lines are dropped, not fatal. */
 export const guestMergeInput = z.object({
@@ -654,7 +656,8 @@ export const qualityCheckInput = z.object({
 });
 
 // ---------- M15: stock counts and stock value ----------
-export const openStockCountInput = z.object({ note: z.string().trim().max(300).optional().transform(v => v || null) });
+export const openStockCountInput = z.object({ note: z.string().trim().max(300).optional().transform(v => v || null),
+  locationId: uuid.optional().or(z.literal('').transform(() => undefined)) });   // third pass: counts are per location
 export const stockCountIdInput = z.object({ stockCountId: uuid });
 export const variantCostInput = z.object({ variantId: uuid, unitCost: z.string().trim().optional() })
   .transform(({ variantId, unitCost }) => ({ variantId, unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
@@ -719,3 +722,6 @@ export const orderEditInput = z.object({
 export type OrderEditInput = z.infer<typeof orderEditInput>;
 export const orderEditRefundInput = z.object({ editId: uuid, mode: z.enum(['provider', 'manual']), reference: optNote(100) })
   .superRefine((v, ctx) => { if (v.mode === 'manual' && !v.reference) ctx.addIssue({ code: 'custom', path: ['reference'], message: 'Enter the bank or UPI reference of the refund.' }); });
+
+// Third pass: locations, transfers, colour variants.
+export * from './third-pass.ts';

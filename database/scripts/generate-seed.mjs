@@ -40,7 +40,7 @@ for (const p of data.products) {
   out.push(`with new_variants as (
   insert into public.product_variants (product_id, size, sku, sort_order, stock_qty, stock_source, is_active) values
     ${rows}
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;`);

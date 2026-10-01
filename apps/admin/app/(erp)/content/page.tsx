@@ -39,7 +39,7 @@ export default async function ContentPage() {
       </div>
       <section className="card form-panel" aria-labelledby="brand-h" data-section="brand-copy">
         <SectionTitle id="brand-h">Brand wording</SectionTitle>
-        <p className="note">The lines that describe the brand’s origin (they mention Japan and India today). Each box shows the wording the store uses now; change it and publish. An empty box goes back to the original wording.
+        <p className="note">The lines that describe the brand (the “Japan → India” route wording was removed; an empty line is not shown). Each box shows the wording the store uses now; change it and publish. An empty box goes back to the default wording.
           {brand.updatedAt ? ` Last published ${formatDateTime(brand.updatedAt)}.` : ' Nothing has been changed yet.'}</p>
         <ActionForm action={saveBrandCopyAction} submitLabel="Publish wording" id="brand-copy-form" label="Brand wording" confirmText="Publish this wording to the store?">
           {BRAND_COPY_FIELDS.map(f => f.max > 80 || f.key === 'footerTagline'

@@ -16,7 +16,14 @@ const MAIN_FORM = 'main form:not(:has([data-logout]))';
 const PW = 'correct horse battery staple', PW2 = 'a different long passphrase';
 
 const b = await launch(9441); const ev = e => b.eval(e);
-const until = async (x, ms = 15000) => { for (let t = 0; t < ms; t += 120) { if (await ev(x).catch(() => false)) return true; await w(120); } return false; };
+/** Polls a page condition. A condition that throws (e.g. a broken expression) or never holds is reported on stderr, so a
+    slow or silently broken wait is visible; some checks expect a timeout ("x never appears"). */
+const until = async (x, ms = 15000) => {
+  let last = null;
+  for (let t = 0; t < ms; t += 120) { try { if (await ev(x)) return true; last = null; } catch (e) { last = e; } await w(120); }
+  if (process.env.WAIT_TRACE) console.error(`WAIT TIMEOUT ${ms}ms: ${String(x).slice(0, 140)}${last ? ` — throws: ${String(last.message ?? last).split(String.fromCharCode(10))[0]}` : ""}`);
+  return false;
+};
 const errs = () => b.errors.filter(e => !/http 40[34]/.test(e));
 const go = async (p, ready = '!!document.querySelector("main h1")') => { await b.goto(BASE + p, ready); };
 const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.stringify(sel)});if(!el)throw new Error('no field ${sel}');

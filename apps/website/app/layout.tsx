@@ -6,18 +6,23 @@ import StoreProvider from '@/components/StoreProvider';
 import AuthProvider from '@/components/AuthProvider';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { DEFAULT_THEME, THEME_BOOT, THEME_COLOUR } from '@/lib/theme';
+import { siteUrl } from '@/lib/seo';
 
 /* The site title and description are part of the editable brand wording (client change request); the defaults are the
    original text. */
 export async function generateMetadata(): Promise<Metadata> {
   const copy = await getBrandCopy();
   return {
+    // Relative canonical / Open Graph URLs on every page resolve against the public origin (lib/seo.ts).
+    metadataBase: new URL(siteUrl()),
     title: { default: copy.metaTitle, template: '%s | KITSYUU Store' },
     description: copy.metaDescription,
+    openGraph: { type: 'website', siteName: 'KITSYUU Store', locale: 'en_IN', title: copy.metaTitle, description: copy.metaDescription },
     icons: { icon: { url: '/assets/kitsyuu-icon.svg', type: 'image/svg+xml' } },
   };
 }
-export const viewport: Viewport = { themeColor: '#101011' };
+export const viewport: Viewport = { themeColor: THEME_COLOUR[DEFAULT_THEME] };
 /* Catalogue pages are regenerated at most every 60 s, so price/stock changes in Supabase appear without a rebuild. */
 export const revalidate = 60;
 
@@ -26,8 +31,10 @@ export const revalidate = 60;
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [catalogue, announcement, policy, copy, refreshMinutes] = await Promise.all([getCatalogue().then(toClientCatalogue), getAnnouncement(), getReturnsPolicy(), getBrandCopy(), getCartRefreshMinutes()]);
   return (
-    <html lang="en" className="st">
+    // suppressHydrationWarning: the boot script may set data-theme from the visitor's saved choice before React hydrates.
+    <html lang="en" className="st" data-theme={DEFAULT_THEME} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <link rel="stylesheet" href="/fonts.css" />
         <link rel="stylesheet" href="/styles.css" />
         <link rel="stylesheet" href="/store.css" />

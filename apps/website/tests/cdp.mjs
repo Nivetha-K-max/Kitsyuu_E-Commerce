@@ -9,10 +9,13 @@ const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Applic
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function launch(port = 9333) {
-  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${DIR}/chrome-prof`, '--no-first-run', '--hide-scrollbars', '--disable-gpu', 'about:blank'], {stdio: 'ignore'});
+  // One profile per debugging port: two suites running at once must not share a Chrome profile (the second Chrome would hand
+  // over to the first and exit, leaving no debugging port).
+  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${DIR}/chrome-prof-${port}`, '--no-first-run', '--hide-scrollbars', '--disable-gpu', 'about:blank'], {stdio: 'ignore'});
   let list;
   for (let i = 0; i < 50; i++) { try { list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (list.find(t => t.type === 'page')) break; } catch {} await sleep(200); }
-  const target = list.find(t => t.type === 'page');
+  const target = list?.find(t => t.type === 'page');
+  if (!target) { proc.kill(); throw new Error(`headless Chrome did not start on port ${port}`); }
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise(r => ws.addEventListener('open', r, {once: true}));
   let id = 0; const pending = new Map(); const listeners = [];
@@ -33,10 +36,13 @@ export async function launch(port = 9333) {
     async goto(url, readyExpr = 'true') {
       errors.length = 0;
       const loaded = new Promise(r => { const l = m => { if (m.method === 'Page.loadEventFired') { listeners.splice(listeners.indexOf(l), 1); r(); } }; listeners.push(l); });
-      await send('Page.navigate', {url}); await loaded;
+      // A navigation that never fires its load event (e.g. cut short) fails with the URL instead of hanging the whole suite.
+      await send('Page.navigate', {url});
+      let timer; await Promise.race([loaded, new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`page did not finish loading in 30 s: ${url}`)), 30000); })]).finally(() => clearTimeout(timer));
       // Up to 20 s for the page to be ready (it only waits that long when a page is slow; the caller then checks the content).
       for (let i = 0; i < 200; i++) { if (await api.eval(readyExpr).catch(() => false)) break; await sleep(100); }
-      await api.eval('document.querySelectorAll("img[loading=lazy]").forEach(i=>i.loading="eager"),Promise.race([new Promise(r=>setTimeout(r,6000)),Promise.all([...document.images].map(i=>i.complete?0:new Promise(r=>{i.addEventListener("load",r);i.addEventListener("error",r)})))])');
+      // Only images that are shown: one inside a display:none part of the page (e.g. a hidden menu) is never downloaded.
+      await api.eval('document.querySelectorAll("img[loading=lazy]").forEach(i=>i.loading="eager"),Promise.race([new Promise(r=>setTimeout(r,6000)),Promise.all([...document.images].filter(i=>i.checkVisibility()).map(i=>i.complete?0:new Promise(r=>{i.addEventListener("load",r);i.addEventListener("error",r)})))])');
       await sleep(250);
     },
     async eval(expression) { const r = await send('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true}); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; },

@@ -6,7 +6,10 @@ import { formatMoney, imagesOf, indexCatalogue, plural, url } from '@/lib/catalo
 import { Crumbs, ProductGrid } from '@/components/ui';
 import BuyForm from '@/components/BuyForm';
 import Gallery from '@/components/Gallery';
+import { ColourScope } from '@/components/ColourScope';
 import ProductReviews from '@/components/ProductReviews';
+import JsonLd from '@/components/JsonLd';
+import { breadcrumbLd, describe, productLd, productOgImages } from '@/lib/seo';
 
 type Params = Promise<{ slug: string }>;
 
@@ -15,7 +18,13 @@ export async function generateStaticParams() {
 }
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const p = indexCatalogue(await getCatalogue()).bySlug(decodeURIComponent((await params).slug));
-  return p ? { title: p.seo.title ?? p.name, description: p.seo.description ?? p.description } : { title: 'Product not found' };
+  if (!p) return { title: 'Product not found', robots: { index: false } };
+  // Generated from the product: staff's SEO title / description when entered (Products → SEO), else its name and description.
+  // The canonical URL is always the slug (the page also opens by id or SKU).
+  const title = p.seo.title ?? p.name, description = p.seo.description ?? describe(p.description), path = url.product(p);
+  return { title, description, alternates: { canonical: path },
+    openGraph: { type: 'website', title, description, url: path, siteName: 'KITSYUU Store', images: productOgImages(p) },
+    twitter: { card: productOgImages(p).length ? 'summary_large_image' : 'summary', title, description } };
 }
 
 export default async function ProductPage({ params }: { params: Params }) {
@@ -26,17 +35,23 @@ export default async function ProductPage({ params }: { params: Params }) {
   const styled = (p.styledWith || []).map(id => idx.byId.get(id)).filter(x => !!x);
   const more = idx.inCategory(p.subcategory).filter(x => x !== p && !styled.includes(x)).slice(0, 4);
   const sub = idx.catLabel(p.subcategory);
+  // Third pass: a product in colours opens on the first colour that has a size in stock.
+  const firstColour = p.colours?.length ? (p.colours.find(c => p.variants.some(v => v.colour === c.slug && v.available)) ?? p.colours[0]).slug : null;
+  const trail = [{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }, { label: idx.catLabel(p.category), href: url.shop({ category: p.category }) },
+    ...(sub && sub !== idx.catLabel(p.category) ? [{ label: sub, href: url.shop({ category: p.subcategory }) }] : []), { label: p.name }];
   const caption: [string, string] = img.held ? ['Photo coming soon', 'Product photography in preparation'] : ['Product image', ''];
   return (
     <div className="st-wrap">
-      <Crumbs list={[{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }, { label: idx.catLabel(p.category), href: url.shop({ category: p.category }) }, ...(sub && sub !== idx.catLabel(p.category) ? [{ label: sub, href: url.shop({ category: p.subcategory }) }] : []), { label: p.name }]} />
+      <JsonLd data={[productLd(idx, p), breadcrumbLd(trail, url.product(p))]} />
+      <Crumbs list={trail} />
       <article className="st-pdp" aria-labelledby="st-pdp-title">
+        <ColourScope initial={firstColour}>
         <Gallery p={p} images={imgs} caption={caption} />
         <div className="st-info">
           <p className="st-pdp-meta"><b>{idx.categoryPath(p)}</b></p>
           <h1 id="st-pdp-title">{p.name}</h1>
           <p className="st-pdp-price">{formatMoney(p.price)}{p.compareAt ? <s className="st-was" aria-label={`was ${formatMoney(p.compareAt)}`}>{formatMoney(p.compareAt)}</s> : null}</p>
-          <p className="st-colour"><i style={{ background: p.colour?.swatches?.[0] || 'transparent' }} aria-hidden="true"></i>Colour <b>{p.colour?.label}</b></p>
+          {!p.colours?.length && <p className="st-colour"><i style={{ background: p.colour?.swatches?.[0] || 'transparent' }} aria-hidden="true"></i>Colour <b>{p.colour?.label}</b></p>}
           <p className="st-desc">{p.description}</p>
           <BuyForm productId={p.id} />
           {p.sizeChart && (
@@ -56,6 +71,7 @@ export default async function ProductPage({ params }: { params: Params }) {
             <details><summary>Product data</summary><dl><dt>Catalogue ref</dt><dd>{p.catalogueRef}</dd><dt>Category</dt><dd>{idx.categoryPath(p)}</dd></dl></details>
           </div>
         </div>
+        </ColourScope>
       </article>
       <ProductReviews productId={p.id} />
       {styled.length > 0 && (

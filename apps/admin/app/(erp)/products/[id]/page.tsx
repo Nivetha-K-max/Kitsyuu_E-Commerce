@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, productId as productIdSchema } from '@kitsyuu/contracts';
-import { getProduct, getProductAttributes, getProductCollections, listAdjustmentReasons, listAttributes, listCategories, listCollections, listRelated } from '@kitsyuu/core';
+import { getProduct, getProductAttributes, getProductCollections, listAdjustmentReasons, listAttributes, listCategories, listCollections, listColours, listRelated, stockByLocation } from '@kitsyuu/core';
 import TagPicker from '@/components/TagPicker';
 import { setProductCollectionsAction } from '../../collections/actions';
 import { ActionForm, Checkbox, DropzoneField, Field, Hidden, Select, TextArea } from '@/components/forms';
@@ -12,6 +12,7 @@ import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/compone
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
+import { addColourVariantAction, setImageColourAction, setVariantColourAction } from '../colour-actions';
 import { addRelatedAction, addVariantAction, moveImageAction, moveRelatedAction, removeRelatedAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
 /** The initial-stock rows written by the catalogue seed carry an internal note; the reason ("Initial stock") says it all. */
@@ -51,6 +52,12 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
     getProductCollections(db(), actor, id),
   ]);
   const looks = await listRelated(db(), actor, id);
+  // Third pass: colours (values of the Colour attribute) and each size's stock per location.
+  const [colours, byLocation] = await Promise.all([listColours(db()), variants ? stockByLocation(db(), variants.map(v => v.variant_id)) : Promise.resolve([])]);
+  const colourName = (slug: string | null) => (slug ? colours.find(c => c.slug === slug)?.label ?? slug : null);
+  const colourOptions = [{ value: '', label: 'No colour' }, ...colours.filter(c => c.is_active).map(c => ({ value: c.slug, label: c.label }))];
+  const coloured = !!variants?.some(v => v.colour_slug);
+  const sizeName = (v: { size: string; colour_slug: string | null }) => (v.colour_slug ? `${colourName(v.colour_slug)} / ${v.size}` : v.size);
   const hasTag = new Set(tagged);
   const sellable = variants?.filter(v => v.is_active) ?? [];
   const units = sellable.reduce((n, v) => n + v.stock_qty, 0);
@@ -248,10 +255,14 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                       </div>
                       <figcaption>
                         <span className="media-file" title={i.storage_path}>{i.storage_path.replace(/^products\//, '')}</span>
-                        <span className="media-dim">{i.width ? `${i.width} × ${i.height}` : 'size unknown'}</span>
+                        <span className="media-dim">{i.width ? `${i.width} × ${i.height}` : 'size unknown'}{i.colour_slug ? ` · ${colourName(i.colour_slug)}` : ''}</span>
                       </figcaption>
                       {write && (
                         <div className="image-tools" data-image-tools={i.id}>
+                          {coloured && <ActionForm action={setImageColourAction} submitLabel="Save colour" variant="ghost" className="form compact" label={`Colour of image ${n + 1}`}>
+                            <Hidden name="productId" value={p.id} /><Hidden name="imageId" value={i.id} />
+                            <Select name="colour" label="Shows colour" options={[{ value: '', label: 'All colours' }, ...colourOptions.slice(1)]} defaultValue={i.colour_slug ?? ''} />
+                          </ActionForm>}
                           <ActionForm action={updateImageAction} submitLabel="Save alt" variant="ghost" className="form compact alt-form" label={`Alt text for image ${n + 1}`}>
                             <Hidden name="productId" value={p.id} /><Hidden name="imageId" value={i.id} />
                             <Field name="alt" label="Alt text" defaultValue={i.alt} />
@@ -289,11 +300,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
             {!variants ? <p className="note">Viewing stock needs the inventory.read permission.</p> : variants.length === 0 ? <p className="empty">This product has no sizes.</p> : (
               <>
                 <div className="table-wrap"><table data-variants-table>
-                  <thead><tr><th>Size</th><th>SKU</th><th className="num">In stock</th><th className="num">Reorder at</th><th>Status</th><th>Price</th><th>Last movement</th></tr></thead>
+                  <thead><tr><th>Size</th><th>SKU</th><th className="num">In stock</th><th>By location</th><th className="num">Reorder at</th><th>Status</th><th>Price</th><th>Last movement</th></tr></thead>
                   <tbody>{variants.map(v => (
                     <tr key={v.variant_id} data-variant={v.variant_sku} data-level={v.is_active ? v.stock_status : 'off'}>
-                      <td className="size-cell">{v.size}</td><td className="mono">{v.variant_sku}</td>
-                      <td className="num qty" data-qty>{v.stock_qty}</td><td className="num">{v.reorder_level}</td>
+                      <td className="size-cell">{sizeName(v)}</td><td className="mono">{v.variant_sku}</td>
+                      <td className="num qty" data-qty>{v.stock_qty}</td>
+                      <td className="note" data-by-location>{byLocation.filter(s => s.variant_id === v.variant_id && !s.is_online).map(s => `${s.name} ${s.qty}`).join(' · ') || '—'}</td>
+                      <td className="num">{v.reorder_level}</td>
                       <td>{v.is_active ? <StatusBadge status={v.stock_status} /> : <span className="badge">size not offered</span>}</td>
                       <td>{v.price_paise === null ? <span className="note">product price</span> : `₹${paiseToRupees(v.price_paise)}`}</td>
                       <td className="nowrap">{formatDateTime(v.last_movement_at)}</td>
@@ -303,11 +316,11 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                 {adjust ? (
                   <>
                     <h3 className="sub">Adjust stock</h3>
-                    <p className="note">Each change is recorded in the stock ledger with a reason.</p>
+                    <p className="note">Each change is recorded in the stock ledger with a reason. This is the online store&apos;s stock; other locations are managed under <Link href="/locations">Locations</Link>.</p>
                     <div className="stock-forms" data-stock-forms>
                       {variants.map(v => (
                         <StockAdjustForm key={v.variant_id} action={adjustStockAction} productId={p.id} reasons={reasons}
-                          variant={{ id: v.variant_id, sku: v.variant_sku, size: v.size, stockQty: v.stock_qty }} />
+                          variant={{ id: v.variant_id, sku: v.variant_sku, size: sizeName(v), stockQty: v.stock_qty }} />
                       ))}
                     </div>
                   </>
@@ -323,7 +336,11 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               <div className="stock-forms" data-size-forms>
                 {variants.map((v, n) => (
                   <div className="stock-form" key={v.variant_id} data-size={v.variant_sku}>
-                    <p className="stock-form-head"><b>{v.size}</b><span className="mono">{v.variant_sku}</span></p>
+                    <p className="stock-form-head"><b>{sizeName(v)}</b><span className="mono">{v.variant_sku}</span></p>
+                    {colours.length > 0 && <ActionForm action={setVariantColourAction} submitLabel="Save colour" variant="ghost" className="form compact" id={`colour-${v.variant_sku}`} label={`Colour of size ${v.size}`}>
+                      <Hidden name="productId" value={p.id} /><Hidden name="variantId" value={v.variant_id} />
+                      <Select name="colour" label="Colour" options={colourOptions} defaultValue={v.colour_slug ?? ''} />
+                    </ActionForm>}
                     <ActionForm action={updateVariantAction} submitLabel="Save size" variant="ghost" className="form compact" id={`size-${v.variant_sku}`} label={`Settings for size ${v.size}`}>
                       <Hidden name="productId" value={p.id} /><Hidden name="variantId" value={v.variant_id} /><Hidden name="expectedVersion" value={v.version} />
                       <Checkbox name="isActive" label="Offered in the store" defaultChecked={v.is_active} />
@@ -339,10 +356,19 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   </div>
                 ))}
               </div>
-              <ActionForm action={addVariantAction} submitLabel="Add size" id="add-size-form" label="Add a size" className="form add-size" resetOnSuccess>
-                <Hidden name="productId" value={p.id} />
-                <Field name="size" label="New size" autoComplete="off" hint={`e.g. XXL, 32, FREE. The SKU becomes ${p.sku}-<SIZE>.`} />
-              </ActionForm>
+              {coloured ? (
+                <ActionForm action={addColourVariantAction} submitLabel="Add size" id="add-size-form" label="Add a size" className="form add-size" resetOnSuccess>
+                  <Hidden name="productId" value={p.id} />
+                  <Select name="colour" label="Colour" required options={colourOptions.slice(1)} />
+                  <Field name="size" label="New size" autoComplete="off" hint={`e.g. XXL, 32, FREE. The SKU becomes ${p.sku}-<COLOUR>-<SIZE>.`} />
+                </ActionForm>
+              ) : (
+                <ActionForm action={addVariantAction} submitLabel="Add size" id="add-size-form" label="Add a size" className="form add-size" resetOnSuccess>
+                  <Hidden name="productId" value={p.id} />
+                  <Field name="size" label="New size" autoComplete="off" hint={`e.g. XXL, 32, FREE. The SKU becomes ${p.sku}-<SIZE>.`} />
+                </ActionForm>
+              )}
+              {colours.length > 0 && <p className="note">Colours: to sell this product in several colours, give each existing size its colour above, then add the sizes of the other colours. Colours are managed under Attributes → Colour. Existing products are not converted automatically.</p>}
             </section>
           )}
 

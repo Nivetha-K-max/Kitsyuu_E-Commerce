@@ -73,20 +73,21 @@ export async function editOrder(db: Db, actor: StaffPrincipal, input: OrderEditI
       if (input.lines.length !== items.length || input.lines.some(l => !byId.has(l.itemId))) throw new ConflictError('The items of this order changed. Reload it and try again.');
 
       // ---- the new lines
-      const variants = await tx.selectFrom('product_variants').select(['id', 'product_id', 'size', 'sku', 'price_paise', 'is_active'])
+      const variants = await tx.selectFrom('product_variants').select(['id', 'product_id', 'size', 'sku', 'price_paise', 'is_active', 'colour_slug', sql<string | null>`(select av.label from public.attribute_values av where av.attribute_id = 'colour' and av.slug = colour_slug)`.as('colour_label')])
         .where('id', 'in', [...new Set([...input.lines.map(l => l.variantId), ...items.map(i => i.variant_id).filter((v): v is string => !!v)])]).execute();
       const vById = new Map(variants.map(v => [v.id, v]));
-      const next: { item: typeof items[number]; variantId: string; sku: string; size: string; qty: number }[] = [];
+      // Third pass: a line can move to another COLOUR and/or size of the same product (same price), checked here and in stock below.
+      const next: { item: typeof items[number]; variantId: string; sku: string; size: string; colour: string | null; qty: number }[] = [];
       for (const l of input.lines) {
         const item = byId.get(l.itemId)!;
         if (l.qty === 0) continue;
-        if (l.variantId === item.variant_id) { next.push({ item, variantId: l.variantId, sku: item.sku, size: item.size, qty: l.qty }); continue; }
+        if (l.variantId === item.variant_id) { next.push({ item, variantId: l.variantId, sku: item.sku, size: item.size, colour: item.colour, qty: l.qty }); continue; }
         const now = item.variant_id ? vById.get(item.variant_id) : undefined, to = vById.get(l.variantId);
         if (!to || to.product_id !== item.product_id) throw new DomainError('invalid', `Choose another size of ${item.name}.`);
         if (!to.is_active) throw new ConflictError(`Size ${to.size} of ${item.name} is not on sale.`);
         if ((now?.price_paise ?? null) !== (to.price_paise ?? null))
           throw new ConflictError(`Size ${to.size} of ${item.name} has a different price, so it cannot be swapped here.`);
-        next.push({ item, variantId: to.id, sku: to.sku, size: to.size, qty: l.qty });
+        next.push({ item, variantId: to.id, sku: to.sku, size: to.size, colour: to.colour_slug ? (to.colour_label ?? to.colour_slug) : null, qty: l.qty });
       }
       if (!next.length) throw new ConflictError('An order needs at least one item. To remove everything, cancel the order instead.');
       if (new Set(next.map(n => n.variantId)).size !== next.length) throw new ConflictError('Two lines would be the same size. Change the quantity of one line instead.');
@@ -153,7 +154,7 @@ export async function editOrder(db: Db, actor: StaffPrincipal, input: OrderEditI
       if (removed.length) await tx.deleteFrom('order_items').where('id', 'in', removed.map(i => i.id)).execute();
       for (const n of next) {
         if (n.variantId === n.item.variant_id && n.qty === n.item.qty) continue;
-        await tx.updateTable('order_items').set({ variant_id: n.variantId, sku: n.sku, size: n.size, qty: n.qty, line_total_paise: n.item.unit_price_paise * n.qty }).where('id', '=', n.item.id).execute();
+        await tx.updateTable('order_items').set({ variant_id: n.variantId, sku: n.sku, size: n.size, colour: n.colour, qty: n.qty, line_total_paise: n.item.unit_price_paise * n.qty }).where('id', '=', n.item.id).execute();
       }
       const newPricing: Pricing = { ...pricing, discounts, ...(quote ? { shipping: quote } : {}) };
       // Amount columns are a snapshot everywhere else; this is the one place that changes them, audited below.
@@ -255,14 +256,14 @@ export async function orderEditOptions(db: Db, actor: StaffPrincipal, orderId: s
   const blocker = await orderEditBlocker(db, orderId);
   const items = await db.selectFrom('order_items').select(['id', 'product_id', 'variant_id', 'name', 'size', 'sku', 'qty']).where('order_id', '=', orderId).orderBy('sku').execute();
   const productIds = [...new Set(items.map(i => i.product_id).filter((x): x is string => !!x))];
-  const variants = productIds.length ? await db.selectFrom('product_variants').select(['id', 'product_id', 'size', 'sku', 'price_paise', 'is_active', 'stock_qty', 'sort_order'])
+  const variants = productIds.length ? await db.selectFrom('product_variants').select(['id', 'product_id', 'size', 'sku', 'price_paise', 'is_active', 'stock_qty', 'sort_order', 'colour_slug', sql<string | null>`(select av.label from public.attribute_values av where av.attribute_id = 'colour' and av.slug = colour_slug)`.as('colour_label')])
     .where('product_id', 'in', productIds).orderBy('sort_order').execute() : [];
   return {
     blocker,
     items: items.map(i => {
       const now = variants.find(v => v.id === i.variant_id);
       const sizes = variants.filter(v => v.product_id === i.product_id && (v.id === i.variant_id || (v.is_active && (v.price_paise ?? null) === (now?.price_paise ?? null))))
-        .map(v => ({ id: v.id, label: `${v.size} · ${v.stock_qty} in stock${v.id === i.variant_id ? ' (current)' : ''}` }));
+        .map(v => ({ id: v.id, label: `${v.colour_slug ? `${v.colour_label ?? v.colour_slug} / ` : ''}${v.size} · ${v.stock_qty > 0 ? `${v.stock_qty} in stock` : 'sold out'}${v.id === i.variant_id ? ' (current)' : ''}` }));
       return { ...i, sizes: sizes.length ? sizes : i.variant_id ? [{ id: i.variant_id, label: `${i.size} (current)` }] : [] };
     }),
   };

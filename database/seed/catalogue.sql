@@ -46,7 +46,7 @@ with new_variants as (
     ('ky-proto-001', 'M', 'KTS-TOP-001-M', 2, 10, 'prototype', true),
     ('ky-proto-001', 'L', 'KTS-TOP-001-L', 3, 10, 'prototype', true),
     ('ky-proto-001', 'XL', 'KTS-TOP-001-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -57,7 +57,7 @@ with new_variants as (
     ('ky-proto-002', 'M', 'KTS-BTM-001-M', 2, 10, 'prototype', true),
     ('ky-proto-002', 'L', 'KTS-BTM-001-L', 3, 10, 'prototype', true),
     ('ky-proto-002', 'XL', 'KTS-BTM-001-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -68,7 +68,7 @@ with new_variants as (
     ('ky-proto-003', 'M', 'KTS-TOP-002-M', 2, 10, 'prototype', true),
     ('ky-proto-003', 'L', 'KTS-TOP-002-L', 3, 10, 'prototype', true),
     ('ky-proto-003', 'XL', 'KTS-TOP-002-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -79,7 +79,7 @@ with new_variants as (
     ('ky-proto-004', 'M', 'KTS-BTM-002-M', 2, 10, 'prototype', true),
     ('ky-proto-004', 'L', 'KTS-BTM-002-L', 3, 10, 'prototype', true),
     ('ky-proto-004', 'XL', 'KTS-BTM-002-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -90,7 +90,7 @@ with new_variants as (
     ('ky-proto-005', 'M', 'KTS-TOP-003-M', 2, 10, 'prototype', true),
     ('ky-proto-005', 'L', 'KTS-TOP-003-L', 3, 10, 'prototype', true),
     ('ky-proto-005', 'XL', 'KTS-TOP-003-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -101,7 +101,7 @@ with new_variants as (
     ('ky-proto-006', 'M', 'KTS-BTM-003-M', 2, 10, 'prototype', true),
     ('ky-proto-006', 'L', 'KTS-BTM-003-L', 3, 10, 'prototype', true),
     ('ky-proto-006', 'XL', 'KTS-BTM-003-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -112,7 +112,7 @@ with new_variants as (
     ('ky-proto-007', 'M', 'KTS-TOP-004-M', 2, 10, 'prototype', true),
     ('ky-proto-007', 'L', 'KTS-TOP-004-L', 3, 10, 'prototype', true),
     ('ky-proto-007', 'XL', 'KTS-TOP-004-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -123,7 +123,7 @@ with new_variants as (
     ('ky-proto-008', '32', 'KTS-BTM-004-32', 2, 10, 'prototype', true),
     ('ky-proto-008', '34', 'KTS-BTM-004-34', 3, 10, 'prototype', true),
     ('ky-proto-008', '36', 'KTS-BTM-004-36', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -134,7 +134,7 @@ with new_variants as (
     ('ky-proto-009', 'M', 'KTS-TOP-005-M', 2, 10, 'prototype', true),
     ('ky-proto-009', 'L', 'KTS-TOP-005-L', 3, 10, 'prototype', true),
     ('ky-proto-009', 'XL', 'KTS-TOP-005-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -145,7 +145,7 @@ with new_variants as (
     ('ky-proto-010', 'M', 'KTS-BTM-005-M', 2, 10, 'prototype', true),
     ('ky-proto-010', 'L', 'KTS-BTM-005-L', 3, 10, 'prototype', true),
     ('ky-proto-010', 'XL', 'KTS-BTM-005-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -156,7 +156,7 @@ with new_variants as (
     ('ky-proto-011', 'M', 'KTS-TOP-006-M', 2, 10, 'prototype', true),
     ('ky-proto-011', 'L', 'KTS-TOP-006-L', 3, 10, 'prototype', true),
     ('ky-proto-011', 'XL', 'KTS-TOP-006-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -167,7 +167,7 @@ with new_variants as (
     ('ky-proto-012', 'M', 'KTS-BTM-006-M', 2, 10, 'prototype', true),
     ('ky-proto-012', 'L', 'KTS-BTM-006-L', 3, 10, 'prototype', true),
     ('ky-proto-012', 'XL', 'KTS-BTM-006-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -178,7 +178,7 @@ with new_variants as (
     ('ky-proto-013', 'M', 'KTS-TOP-007-M', 2, 10, 'prototype', true),
     ('ky-proto-013', 'L', 'KTS-TOP-007-L', 3, 10, 'prototype', true),
     ('ky-proto-013', 'XL', 'KTS-TOP-007-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -189,7 +189,7 @@ with new_variants as (
     ('ky-proto-014', 'M', 'KTS-BTM-007-M', 2, 10, 'prototype', true),
     ('ky-proto-014', 'L', 'KTS-BTM-007-L', 3, 10, 'prototype', true),
     ('ky-proto-014', 'XL', 'KTS-BTM-007-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -200,7 +200,7 @@ with new_variants as (
     ('ky-proto-015', 'M', 'KTS-OUT-001-M', 2, 10, 'prototype', true),
     ('ky-proto-015', 'L', 'KTS-OUT-001-L', 3, 10, 'prototype', true),
     ('ky-proto-015', 'XL', 'KTS-OUT-001-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -211,7 +211,7 @@ with new_variants as (
     ('ky-proto-016', 'M', 'KTS-OUT-002-M', 2, 10, 'prototype', true),
     ('ky-proto-016', 'L', 'KTS-OUT-002-L', 3, 10, 'prototype', true),
     ('ky-proto-016', 'XL', 'KTS-OUT-002-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -222,7 +222,7 @@ with new_variants as (
     ('ky-proto-017', 'M', 'KTS-BTM-008-M', 2, 10, 'prototype', true),
     ('ky-proto-017', 'L', 'KTS-BTM-008-L', 3, 10, 'prototype', true),
     ('ky-proto-017', 'XL', 'KTS-BTM-008-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -233,7 +233,7 @@ with new_variants as (
     ('ky-proto-018', 'M', 'KTS-TOP-008-M', 2, 10, 'prototype', true),
     ('ky-proto-018', 'L', 'KTS-TOP-008-L', 3, 10, 'prototype', true),
     ('ky-proto-018', 'XL', 'KTS-TOP-008-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -244,7 +244,7 @@ with new_variants as (
     ('ky-proto-019', 'M', 'KTS-TOP-009-M', 2, 10, 'prototype', true),
     ('ky-proto-019', 'L', 'KTS-TOP-009-L', 3, 10, 'prototype', true),
     ('ky-proto-019', 'XL', 'KTS-TOP-009-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -255,7 +255,7 @@ with new_variants as (
     ('ky-proto-020', 'M', 'KTS-BTM-009-M', 2, 10, 'prototype', true),
     ('ky-proto-020', 'L', 'KTS-BTM-009-L', 3, 10, 'prototype', true),
     ('ky-proto-020', 'XL', 'KTS-BTM-009-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -266,7 +266,7 @@ with new_variants as (
     ('ky-proto-021', 'M', 'KTS-TOP-010-M', 2, 10, 'prototype', true),
     ('ky-proto-021', 'L', 'KTS-TOP-010-L', 3, 10, 'prototype', true),
     ('ky-proto-021', 'XL', 'KTS-TOP-010-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;
@@ -277,7 +277,7 @@ with new_variants as (
     ('ky-proto-022', 'M', 'KTS-BTM-010-M', 2, 10, 'prototype', true),
     ('ky-proto-022', 'L', 'KTS-BTM-010-L', 3, 10, 'prototype', true),
     ('ky-proto-022', 'XL', 'KTS-BTM-010-XL', 4, 10, 'prototype', true)
-  on conflict (product_id, size) do nothing
+  on conflict do nothing
   returning id, stock_qty
 ) insert into public.inventory_movements (variant_id, delta, reason, note)
   select id, stock_qty, 'seed', 'Prototype demo stock' from new_variants;

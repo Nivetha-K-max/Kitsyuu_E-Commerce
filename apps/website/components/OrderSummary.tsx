@@ -10,7 +10,7 @@ export function OrderItems({ o }: { o: CustomerOrderDetail }) {
         return (
           <li key={i.sku} className="st-order-item">
             {img ? <img src={img} alt="" width={64} height={80} loading="lazy" /> : <span className="st-order-noimg" aria-hidden="true" />}
-            <div><p className="st-order-item-name">{i.name}</p><p className="st-order-item-meta">Size {i.size} · {i.qty} × {rupees(i.unitPricePaise)}</p></div>
+            <div><p className="st-order-item-name">{i.name}</p><p className="st-order-item-meta">{i.colour && <>{i.colour} · </>}Size {i.size} · {i.qty} × {rupees(i.unitPricePaise)}</p></div>
             <p className="st-order-item-total">{rupees(i.lineTotalPaise)}</p>
           </li>
         );

@@ -16,7 +16,14 @@ const q = async sql => { const c = new pg.Client({connectionString: KITSYUU_DB_U
 
 const b = await launch(9371);
 const ev = e => b.eval(e);
-const until = async (expr, ms = 10000) => { for (let t = 0; t < ms; t += 100) { if (await ev(expr).catch(() => false)) return true; await w(100); } return false; };
+/** Polls a page condition. A condition that throws (e.g. a broken expression) or never holds is reported on stderr, so a
+    slow or silently broken wait is visible; some checks expect a timeout ("x never appears"). */
+const until = async (expr, ms = 10000) => {
+  let last = null;
+  for (let t = 0; t < ms; t += 100) { try { if (await ev(expr)) return true; last = null; } catch (e) { last = e; } await w(100); }
+  if (process.env.WAIT_TRACE) console.error(`WAIT TIMEOUT ${ms}ms: ${String(expr).slice(0, 140)}${last ? ` — throws: ${String(last.message ?? last).split(String.fromCharCode(10))[0]}` : ""}`);
+  return false;
+};
 const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.stringify(sel)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(v)});el.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);
 // Submit buttons are looked up inside the page content (main), never the sidebar's sign-out form.
 // submit() waits for THIS submission to start (form aria-busy, or navigation) and then finish, so later checks never
@@ -38,6 +45,9 @@ const path_ = () => ev('location.pathname + location.search');
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 /* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
+/** In the page: is this /<section>/<uuid>? (RegExp from a string: a regex literal starting "/^/" is parsed as division.) */
+const atDetail = section => `new RegExp('^/${section}/[0-9a-f-]{36}$').test(location.pathname)`;
+const choose = (sel, label) => ev(`(()=>{const s=document.querySelector(${JSON.stringify(sel)});const o=[...s.options].find(o=>o.textContent.trim()===${JSON.stringify(label)});if(!o)throw new Error('no option '+${JSON.stringify(label)});s.value=o.value;s.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const mails = () => fs.readFileSync(SERVER_LOG, 'utf8').match(/token=[A-Za-z0-9_-]{43}/g) ?? [];
 const lastMailLink = async prevCount => { for (let i = 0; i < 50; i++) { const m = mails(); if (m.length > prevCount) return m.at(-1).slice(6); await w(100); } return null; };
@@ -92,7 +102,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Stock value|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -120,38 +130,78 @@ try {
   await visit('/vendors', '!!document.querySelector("#create-vendor-form")');
   await fill('#create-vendor-form input[name=name]', 'E2E Mills'); await submit('#create-vendor-form');
   await visit('/materials', '!!document.querySelector("#create-material-form")');
-  await fill('#create-material-form input[name=code]', 'E2E-TWILL'); await fill('#create-material-form input[name=name]', 'Twill');
-  await fill('#create-material-form input[name=unit]', 'm'); await submit('#create-material-form');
-  ok('M13 vendor and material created', /E2E-TWILL/.test(await text('[data-materials-table]')));
-  await visit('/purchase-orders', '!!document.querySelector("#create-po-form")');
-  await submit('#create-po-form');
-  await until(`/^/purchase-orders/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
-  await fill('#po-line-form input[name=qty]', '25'); await submit('#po-line-form');
-  await visit(await ev('location.pathname'), '!!document.querySelector("#po-place-form")');
+  for (const [code, name, unit] of [['E2E-TWILL', 'Twill', 'm'], ['E2E-THREAD', 'Thread', 'cone']]) {
+    await fill('#create-material-form input[name=code]', code); await fill('#create-material-form input[name=name]', name);
+    await fill('#create-material-form input[name=unit]', unit); await submit('#create-material-form');
+    await until(`document.querySelector('[data-materials-table]')?.textContent.includes('${code}')`, 10000);
+  }
+  ok('M13 vendor and materials created', /E2E-TWILL[\s\S]*E2E-THREAD|E2E-THREAD[\s\S]*E2E-TWILL/.test(await text('[data-materials-table]')));
+  // One purchase order with several lines in one form (purchase workflow): vendor, quantity and unit price per material.
+  await visit('/purchase-orders', '!!document.querySelector("#create-po-form [data-po-material=E2E-THREAD]")');
+  await choose('#create-po-form select[name=vendorId]', 'E2E Mills');
+  const line = code => `#create-po-form [data-po-material="${code}"] input`;
+  await fill(`${line('E2E-TWILL')}[name="qtys[]"]`, '25'); await fill(`${line('E2E-TWILL')}[name="costs[]"]`, '120.50');
+  await fill(`${line('E2E-THREAD')}[name="qtys[]"]`, '10'); await fill(`${line('E2E-THREAD')}[name="costs[]"]`, '35');
+  ok('M13 new PO form: 2 items chosen, running total', /2 items chosen · ₹3,362\.50/.test(await text('[data-po-chosen]')), await text('[data-po-chosen]'));
+  await autoConfirm(); await submit('#create-po-form');
+  ok('M13 purchase order created', await until(atDetail('purchase-orders'), 15000), await ev('location.pathname'));
+  const poId = (await ev('location.pathname')).split('/').pop();
+  const poLines = await q(`select m.code, l.qty_ordered::float qty, l.unit_cost_paise cost from purchase_order_lines l join materials m on m.id = l.material_id where l.purchase_order_id = '${poId}' order by m.code`);
+  ok('M13 both lines are on the same purchase order, with their quantities and prices', JSON.stringify(poLines) === JSON.stringify([{code: 'E2E-THREAD', qty: 10, cost: 3500}, {code: 'E2E-TWILL', qty: 25, cost: 12050}]), JSON.stringify(poLines));
+  ok('M13 PO page: both lines and the total', (await ev(`document.querySelectorAll('[data-po-lines] tbody tr').length`)) === 2 && /3,362\.50/.test(await text('[data-po-total]')), await text('[data-po-total]'));
+  await visit(`/purchase-orders/${poId}/print`, '!!document.querySelector("[data-po-print-items]")');
+  ok('M13 printed PO: vendor, both items, grand total', /E2E Mills/.test(await text('[data-po-print]')) && (await ev(`document.querySelectorAll('[data-po-print-items] tbody tr').length`)) === 2
+    && /Grand total\s*₹3,362\.50/.test(await text('[data-po-print-items]')), await text('[data-po-print-items] tfoot'));
+  await visit(`/purchase-orders/${poId}`, '!!document.querySelector("#po-place-form")');
   await autoConfirm();
   await submit('#po-place-form');
-  await visit(await ev('location.pathname'), '!!document.querySelector("#receive-form")');
-  await ev(`(()=>{const i=document.querySelector('#receive-form input[name^="received:"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'25');i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await visit(`/purchase-orders/${poId}`, '!!document.querySelector("#receive-form")');
+  await ev(`(()=>{const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;for(const i of document.querySelectorAll('#receive-form input[name^="received:"]')){const label=i.closest('.field')?.querySelector('label')?.textContent||'';set.call(i,label.startsWith('Twill')?'25':'10');i.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
   await submit('#receive-form');
   // Once fully received the delivery form is no longer offered, so the result is checked in the database and on the page.
   await until(`!document.querySelector('#receive-form')`, 10000);
-  ok('M13 order placed and fully received; stock follows', (await q(`select status from purchase_orders order by created_at desc limit 1`))[0].status === 'received'
-    && (await q(`select stock_qty::int n from materials where code = 'E2E-TWILL'`))[0].n === 25);
+  ok('M13 order placed and fully received; stock follows', (await q(`select status from purchase_orders where id = '${poId}'`))[0].status === 'received'
+    && JSON.stringify(await q(`select code, stock_qty::float n from materials where code like 'E2E-%' order by code`)) === JSON.stringify([{code: 'E2E-THREAD', n: 10}, {code: 'E2E-TWILL', n: 25}]));
   // ---------- M14: plan and start a production order ----------
   await visit('/production', '!!document.querySelector("#create-production-form")');
   await fill('#create-production-form input[name=qty]', '3'); await submit('#create-production-form');
-  await until(`/^/production/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
+  await until(atDetail('production'), 15000);
   await submit('#production-start-form');
   await visit(await ev('location.pathname'), '!!document.querySelector("#qc-form")');
   ok('M14 production order planned and started; the quality check form is offered', (await exists('#qc-form')) && /in progress/i.test(await text('main')));
   // ---------- M15: open a stock count; stock value page ----------
   await visit('/stock-counts', '!!document.querySelector("#open-count-form")');
   await submit('#open-count-form');
-  await until(`/^/stock-counts/[0-9a-f-]{36}$/.test(location.pathname)`, 15000);
+  await until(atDetail('stock-counts'), 15000);
   ok('M15 stock count opened with every size to count', (await ev(`document.querySelectorAll('[data-count-lines] input[name^="counted:"]').length`)) > 100);
   await autoConfirm(); await submit('#cancel-count-form');
   await visit('/stock-value', '!!document.querySelector("[data-value-garments]")');
   ok('M15 stock value page: pieces and materials, costs "not set" until entered', /not set/.test(await text('[data-value-garments]')) && (await exists('[data-value-materials]')));
+  // ---------- third pass: locations, a transfer sent and cancelled (stock back where it was), the location report ----------
+  await visit('/locations', '!!document.querySelector("#new-location-form")');
+  ok('third pass: the online location (Chennai Warehouse) is listed', /Chennai Warehouse/.test(await text('[data-locations-table]')) && /Online store stock/.test(await text('[data-locations-table]')));
+  const onlineId = await ev(`document.querySelector('[data-location="CHN-WH"] a').getAttribute('href').split('/').pop()`);
+  await fill('#new-location-form input[name=name]', 'Retail Branch Test'); await fill('#new-location-form input[name=code]', 'RB-T');
+  await submit('#new-location-form');
+  await until(atDetail('locations'), 15000);
+  const branchId = (await ev('location.pathname')).split('/').pop();
+  ok('third pass: a retail location is added and opens with no stock', /No stock at this location/.test(await text('main')));
+  await visit(`/transfers/new?from=${onlineId}&to=${branchId}`, '!!document.querySelector("#new-transfer-form")');
+  const sku = await ev(`document.querySelector('[data-transfer-pick] tbody tr').dataset.sku`);
+  const online = async () => (await q(`select stock_qty::int n from product_variants where sku = '${sku}'`))[0].n, start = await online();
+  await fill('#new-transfer-form input[name^="qty:"]', '2'); await submit('#new-transfer-form');
+  await until(atDetail('transfers'), 15000);
+  ok('third pass: transfer saved as a draft with its size', /draft/i.test(await text('main')) && (await text('[data-transfer-lines]')).includes(sku));
+  await autoConfirm(); await submit('#send-transfer-form');
+  // The send / cancel forms are gone once done, so the result is read from the page and the database.
+  const sent = (await until(`!!document.querySelector('#receive-transfer-form')`, 15000)) && (await online()) === start - 2;
+  await visit(await ev('location.pathname'), '!!document.querySelector("#cancel-transfer-form")');
+  await fill('#cancel-transfer-form input[name=note]', 'Browser test'); await autoConfirm(); await submit('#cancel-transfer-form');
+  const back = (await until(`!document.querySelector('#cancel-transfer-form')`, 15000))
+    && (await q(`select status from stock_transfers order by created_at desc limit 1`))[0].status === 'cancelled' && (await online()) === start;
+  ok('third pass: a transfer is sent (stock leaves), then cancelled (stock goes back)', sent && back);
+  await visit('/locations/report', '!!document.querySelector("[data-by-location]")');
+  ok('third pass: the location report shows every location and both channels', /Retail Branch Test/.test(await text('[data-by-location]')) && (await exists('[data-channel="retail"]')));
   // ---------- M16: reports and CSV export ----------
   await visit('/reports', '!!document.querySelector("[data-report-tabs]")');
   ok('M16 reports: sales tab with totals (no orders yet → empty state)', (await exists('[data-report-totals]')) && /No paid orders/.test(await text('main')));
@@ -195,7 +245,7 @@ try {
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit;
   // ERP modules add read access to shipping, returns, carts and support (and the notification centre everyone has).
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Locations|Transfers|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

@@ -9,10 +9,13 @@ import type { MutationContext } from './staff.ts';
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
 
 /** Reasons a person may choose (system reasons such as seed/sale/cancel are used by the platform itself). */
-export async function listAdjustmentReasons(db: Db, actor: StaffPrincipal) {
+/** Reasons staff may choose. The store's (online) stock never takes an in-store sale: 'retail_sale' is for retail locations only. */
+export const RETAIL_ONLY_REASONS = ['retail_sale'];
+export async function listAdjustmentReasons(db: Db, actor: StaffPrincipal, opts: { retail?: boolean } = {}) {
   requirePermission(actor, 'inventory.read');
-  return db.selectFrom('inventory_reasons').select(['code', 'label', 'direction'])
-    .where('is_system', '=', false).where('is_active', '=', true).orderBy('sort_order').execute();
+  let q = db.selectFrom('inventory_reasons').select(['code', 'label', 'direction']).where('is_system', '=', false).where('is_active', '=', true);
+  if (!opts.retail) q = q.where('code', 'not in', RETAIL_ONLY_REASONS);
+  return q.orderBy('sort_order').execute();
 }
 
 export async function listStock(db: Db, actor: StaffPrincipal, query: StockListQuery) {
@@ -49,7 +52,7 @@ export async function adjustStock(db: Db, actor: StaffPrincipal, input: AdjustSt
   const delta = input.direction === 'increase' ? input.quantity : -input.quantity;
   return db.transaction().execute(async tx => {
     const reason = await tx.selectFrom('inventory_reasons').select(['code', 'direction', 'is_system', 'is_active']).where('code', '=', input.reason).executeTakeFirst();
-    if (!reason || reason.is_system || !reason.is_active) throw new DomainError('invalid', 'Choose one of the listed reasons.');
+    if (!reason || reason.is_system || !reason.is_active || RETAIL_ONLY_REASONS.includes(reason.code)) throw new DomainError('invalid', 'Choose one of the listed reasons.');
     if ((reason.direction === 'in' && delta < 0) || (reason.direction === 'out' && delta > 0))
       throw new DomainError('invalid', `“${reason.code}” can only be used to ${reason.direction === 'in' ? 'increase' : 'decrease'} stock.`);
     const v = await tx.selectFrom('product_variants').select(['id', 'sku', 'product_id', 'size', 'stock_qty']).where('id', '=', input.variantId).forUpdate().executeTakeFirst();

@@ -2,6 +2,10 @@ import BrandHero from '@/components/BrandHero';
 import { getBrandCopy } from '@/lib/content';
 import StoreHome from '@/components/StoreHome';
 import PromoBanners from '@/components/PromoBanners';
+import JsonLd from '@/components/JsonLd';
+import { organizationLd, websiteLd } from '@/lib/seo';
+
+export const metadata = { alternates: { canonical: '/' } };
 
 /* The KITSYUU homepage is the store, as on a typical online shop: the layout's one store header, the brand hero, then the
    store homepage (new arrivals, the rotation banner, categories, featured pieces), then the layout's one footer.
@@ -13,6 +17,8 @@ export default async function Home() {
       <BrandHero copy={{ heroTop: copy.heroTop, heroEyebrow: copy.heroEyebrow, heroLead: copy.heroLead }} />
       <PromoBanners placement="home" />
       <StoreHome />
+      {/* After the content: the brand hero stays the first thing in <main>. */}
+      <JsonLd data={[organizationLd(), websiteLd()]} />
     </>
   );
 }

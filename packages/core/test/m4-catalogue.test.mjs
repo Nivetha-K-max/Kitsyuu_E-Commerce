@@ -9,7 +9,7 @@ import pg from 'pg';
 import sharp from 'sharp';
 import {createDb, recordAudit} from '@kitsyuu/db';
 import {acceptStaffInvite, issueStaffInvite, validateStaffSession} from '@kitsyuu/auth';
-import {ConflictError, DomainError, ForbiddenError, addVariantInput, createCategoryInput, createProductInput, updateVariantInput} from '@kitsyuu/contracts';
+import {ConflictError, DomainError, ForbiddenError, addVariantInput, createCategoryInput, createProductInput, slugify, updateVariantInput} from '@kitsyuu/contracts';
 import {
   addVariant, adjustStock, createCategory, createProduct, getProduct, listCategoryTree, localStorage, moveCategory, moveImage, moveNewArrival, moveVariant,
   processImage, removeImage, setCategoryActive, setNewArrival, setPrimaryImage, setProductStatus, updateCategory, updateImageAlt, updateProduct, updateVariant, uploadProductImage,
@@ -80,7 +80,13 @@ test('create product: draft, generated id, audited; duplicates and bad input ref
   await assert.rejects(createProduct(db, manager, {...input, sku: 'KTS-TOP-001'}, ctx), ConflictError, 'existing product SKU');
   const vsku = (await q(`select sku from product_variants limit 1`))[0].sku;
   await assert.rejects(createProduct(db, manager, {...input, sku: vsku, slug: 'other-x'}, ctx), ConflictError, 'existing size SKU');
-  await assert.rejects(createProduct(db, manager, {...input, sku: 'KTS-OUT-901'}, ctx), ConflictError, 'slug already used');
+  // Same name, slug left blank: the next free slug (2026-10-01). Removed again so the catalogue counts stay as before.
+  const dup = await createProduct(db, manager, {...input, sku: 'KTS-OUT-901'}, ctx);
+  assert.equal(dup.slug, 'test-utility-vest-2', 'same name: -2 suffix');
+  await q(`delete from products where id = $1`, [dup.productId]);
+  for (const [name, want] of [['Urban Oversized Graphic Tee', 'urban-oversized-graphic-tee'], ['Vintage Oversized Black Hoodie', 'vintage-oversized-black-hoodie'], ['  Café — Tee (Black) #2!  ', 'cafe-tee-black-2']])
+    assert.equal(slugify(name), want, `slug from "${name}"`);
+  await assert.rejects(createProduct(db, manager, {...input, sku: 'KTS-OUT-901', slug: 'test-utility-vest'}, ctx), ConflictError, 'a typed slug already used is refused');
   await assert.rejects(createProduct(db, manager, {...input, sku: 'KTS-OUT-902', slug: 'x-902', subcategoryId: 'tops.hoodies'}, ctx), DomainError, 'subcategory of another category');
   await assert.rejects(createProduct(db, invMgr, {...input, sku: 'KTS-OUT-903', slug: 'x-903'}, ctx), ForbiddenError);
   for (const bad of [{sku: 'kts out'}, {price: '0'}, {price: '-1'}, {name: ''}, {slug: 'Not A Slug'}])

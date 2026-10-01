@@ -93,7 +93,7 @@ export default async function ReturnPage({ params }: { params: Promise<{ id: str
             const choices = sizes.filter(z => z.product_id === i.product_id && z.is_active);
             return (
               <tr key={i.id}>
-                <td>{i.name}<div className="note mono">{i.sku} · size {i.size}</div></td><td className="num">{i.qty}</td><td className="num money">{formatPaise(i.unit_price_paise)}</td>
+                <td>{i.name}<div className="note mono">{i.sku} · {i.colour ? `${i.colour}, ` : ''}size {i.size}</div></td><td className="num">{i.qty}</td><td className="num money">{formatPaise(i.unit_price_paise)}</td>
                 <td>{i.restocked_qty} of {i.qty}
                   {manage && received && i.restocked_qty < i.qty && i.variant_id && (
                     <ActionForm action={returnItemAction} submitLabel="Restock" variant="ghost" className="inline-form" id={`restock-${i.id}`} label="Restock" confirmText="Put these units back into sellable stock?">

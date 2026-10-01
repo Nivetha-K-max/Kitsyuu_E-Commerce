@@ -37,9 +37,9 @@ type StoreState = {
   /** Totals as priced by the server (signed-in customers only). */
   serverCart: StoreCart | null;
   wishIds: string[];
-  addToCart: (p: Product, size: string, qty: number) => Promise<AddResult>;
-  setQty: (id: string, size: string, qty: number) => Promise<ShownLine | undefined>;
-  removeLine: (id: string, size: string) => Promise<void>;
+  addToCart: (p: Product, size: string, qty: number, colour?: string | null) => Promise<AddResult>;
+  setQty: (id: string, size: string, qty: number, colour?: string | null) => Promise<ShownLine | undefined>;
+  removeLine: (id: string, size: string, colour?: string | null) => Promise<void>;
   toggleWish: (id: string) => Promise<boolean>;
   toast: (msg: string) => void;
 };
@@ -147,16 +147,19 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
   const ready = localReady && (auth.status === 'guest' || savedStatus === 'ready' || savedStatus === 'failed');
   const apply = useCallback((r: StoreResult) => { if (r.store) setSaved(r.store); if (!r.ok && r.message) toast(r.message); return r; }, [toast]);
 
-  const lineFor = useCallback((p: Product, size: string, qty: unknown): CartLine =>
-    ({ id: p.id, sku: p.sku, name: p.name, image: p.media?.primary?.src || null, price: p.price, size, qty: clampQty(qty) }), []);
+  const lineFor = useCallback((p: Product, size: string, qty: unknown, colour?: string | null): CartLine =>
+    ({ id: p.id, sku: p.sku, name: p.name, image: p.media?.primary?.src || null, price: p.price, size, qty: clampQty(qty),
+      colour: colour ?? null, colourLabel: colour ? p.colours?.find(c => c.slug === colour)?.label ?? colour : null }), []);
+  /** Same line: product, colour (third pass) and size. */
+  const same = (l: { id: string; size: string; colour?: string | null }, id: string, size: string, colour?: string | null) => l.id === id && l.size === size && (l.colour ?? null) === (colour ?? null);
 
   /* Guest lines: unknown products or sizes are dropped; name, SKU, image and price always come from the catalogue. */
   const guestLines = useMemo(() => rawCart
-    .filter((l): l is { id: string; size: string; qty: unknown } => !!l && typeof (l as CartLine).id === 'string')
-    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && v.available))
-    .map(l => lineFor(idx.byId.get(l.id)!, l.size, l.qty)), [rawCart, idx, lineFor]);
+    .filter((l): l is { id: string; size: string; qty: unknown; colour?: string | null } => !!l && typeof (l as CartLine).id === 'string')
+    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && (v.colour ?? null) === (l.colour ?? null) && v.available))
+    .map(l => lineFor(idx.byId.get(l.id)!, l.size, l.qty, l.colour)), [rawCart, idx, lineFor]);
   const savedLines = useMemo<ShownLine[]>(() => (saved?.cart.lines ?? []).map(l => ({
-    id: l.id, sku: l.sku, name: l.name, size: l.size, qty: l.qty, price: l.price, available: l.available, problem: l.problem,
+    id: l.id, sku: l.sku, name: l.name, size: l.size, colour: l.colour ?? null, colourLabel: l.colourLabel ?? null, qty: l.qty, price: l.price, available: l.available, problem: l.problem,
     image: idx.byId.get(l.id)?.media?.primary?.src || null,
   })), [saved, idx]);
   const lines: ShownLine[] = saved ? savedLines : guestLines;
@@ -165,32 +168,32 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
 
   const saveGuestCart = useCallback((next: CartLine[]) => { const ok = write(KEYS.cart, next); setRawCart(next); return ok; }, [write]);
 
-  const addToCart = useCallback(async (p: Product, size: string, qty: number): Promise<AddResult> => {
+  const addToCart = useCallback(async (p: Product, size: string, qty: number, colour?: string | null): Promise<AddResult> => {
     if (saved) {
-      const before = saved.cart.lines.find(l => l.id === p.id && l.size === size);
-      const r = apply(await addToCartAction({ productId: p.id, size, qty: clampQty(qty) }));
+      const before = saved.cart.lines.find(l => same(l, p.id, size, colour));
+      const r = apply(await addToCartAction({ productId: p.id, size, qty: clampQty(qty), colour: colour ?? undefined }));
       return { ok: r.ok, merged: !!before, capped: !!r.capped, qty: r.qty ?? 0, message: r.message };
     }
     const next = guestLines.map(l => ({ ...l }));
-    const hit = next.find(l => l.id === p.id && l.size === size), want = (hit ? hit.qty : 0) + clampQty(qty);
-    if (hit) hit.qty = Math.min(MAX_QTY, want); else next.push(lineFor(p, size, qty));
+    const hit = next.find(l => same(l, p.id, size, colour)), want = (hit ? hit.qty : 0) + clampQty(qty);
+    if (hit) hit.qty = Math.min(MAX_QTY, want); else next.push(lineFor(p, size, qty, colour));
     return { ok: saveGuestCart(next), merged: !!hit, capped: want > MAX_QTY, qty: Math.min(MAX_QTY, want) };
   }, [saved, apply, guestLines, lineFor, saveGuestCart]);
 
-  const setQty = useCallback(async (id: string, size: string, qty: number): Promise<ShownLine | undefined> => {
+  const setQty = useCallback(async (id: string, size: string, qty: number, colour?: string | null): Promise<ShownLine | undefined> => {
     if (saved) {
-      const r = apply(await setCartQtyAction({ productId: id, size, qty: clampQty(qty) }));
-      const l = r.store?.cart.lines.find(x => x.id === id && x.size === size);
+      const r = apply(await setCartQtyAction({ productId: id, size, qty: clampQty(qty), colour: colour ?? undefined }));
+      const l = r.store?.cart.lines.find(x => same(x, id, size, colour));
       return l && r.ok ? { ...l, image: null } : undefined;
     }
-    const next = guestLines.map(l => ({ ...l })), l = next.find(x => x.id === id && x.size === size);
+    const next = guestLines.map(l => ({ ...l })), l = next.find(x => same(x, id, size, colour));
     if (l) { l.qty = clampQty(qty); saveGuestCart(next); }
     return l;
   }, [saved, apply, guestLines, saveGuestCart]);
 
-  const removeLine = useCallback(async (id: string, size: string) => {
-    if (saved) { apply(await removeCartLineAction({ productId: id, size })); return; }
-    saveGuestCart(guestLines.filter(l => !(l.id === id && l.size === size)));
+  const removeLine = useCallback(async (id: string, size: string, colour?: string | null) => {
+    if (saved) { apply(await removeCartLineAction({ productId: id, size, colour: colour ?? undefined })); return; }
+    saveGuestCart(guestLines.filter(l => !same(l, id, size, colour)));
   }, [saved, apply, guestLines, saveGuestCart]);
 
   const toggleWish = useCallback(async (id: string) => {

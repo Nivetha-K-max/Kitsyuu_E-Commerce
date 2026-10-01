@@ -19,12 +19,12 @@ export async function orderConfirmationEmail(q: Queryable, orderNumber: string, 
   const contact = (o.contact ?? {}) as Record<string, unknown>, ship = (o.shipping_address ?? {}) as Record<string, unknown>;
   const to = text(contact.email);
   if (!to) return null;
-  const items = await q.selectFrom('order_items').select(['name', 'size', 'qty', 'line_total_paise']).where('order_id', '=', o.id).orderBy('name').execute();
+  const items = await q.selectFrom('order_items').select(['name', 'size', 'colour', 'qty', 'line_total_paise']).where('order_id', '=', o.id).orderBy('name').execute();
   const lines = [
     `Hello${text(contact.name) ? ' ' + text(contact.name) : ''},`, '',
     cod ? `Thank you. Your order ${o.order_number} is confirmed. You pay ${money(o.total_paise)} in cash when it is delivered.` : `Thank you. Your order ${o.order_number} is confirmed and paid.`, '',
     'Items',
-    ...items.map(i => `- ${i.name}, size ${i.size} × ${i.qty}: ${money(i.line_total_paise)}`), '',
+    ...items.map(i => `- ${i.name}, ${i.colour ? `${i.colour}, ` : ''}size ${i.size} × ${i.qty}: ${money(i.line_total_paise)}`), '',
     `Subtotal: ${money(o.subtotal_paise)}`,
     ...(o.discount_paise > 0 ? [`Discount: −${money(o.discount_paise)}`] : []),
     ...(o.shipping_paise > 0 ? [`Shipping: ${money(o.shipping_paise)}`] : []),

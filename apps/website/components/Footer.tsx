@@ -8,7 +8,7 @@ import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
 export default function Footer({ catalogue, policy = RETURNS_POLICY, tagline = 'JAPANESE STREETWEAR.\nINDIAN STREETS.' }: { catalogue: Catalogue; policy?: string; tagline?: string }) {
   const idx = indexCatalogue(catalogue);
   const items = idx.c.navigation.map(n => n.all ? { label: 'All products', href: url.shop() }
-    : n.collection ? { label: n.label, href: url.shop({ collection: n.collection }) }
+    : n.collection ? { label: n.label, href: url.collection(n.collection) }
     : { label: n.label, href: url.shop({ category: n.category! }) });
   const shop = [...items.filter(i => i.label === 'All products'), ...items.filter(i => i.label !== 'All products')];
   return (

@@ -151,7 +151,7 @@ export interface CustomerOrderDetail extends CustomerOrderSummary {
   paymentExpiresAt: Date | null;
   /** The customer can pay (again) / cancel this order now. */
   canPay: boolean; canCancel: boolean;
-  items: { sku: string; name: string; size: string; imagePath: string | null; productId: string | null; unitPricePaise: number; qty: number; lineTotalPaise: number }[];
+  items: { sku: string; name: string; size: string; colour: string | null; imagePath: string | null; productId: string | null; unitPricePaise: number; qty: number; lineTotalPaise: number }[];
   shipping: { name: string | null; phone: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null; country: string | null };
   /** Client change request: null when billing is the delivery address. */
   billing: { name: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null } | null;
@@ -178,7 +178,7 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     .executeTakeFirst();
   if (!o) throw new NotFoundError('Order not found.');
   const [items, history] = await Promise.all([
-    db.selectFrom('order_items').select(['sku', 'name', 'size', 'image_path', 'product_id', 'unit_price_paise', 'qty', 'line_total_paise'])
+    db.selectFrom('order_items').select(['sku', 'name', 'size', 'colour', 'image_path', 'product_id', 'unit_price_paise', 'qty', 'line_total_paise'])
       .where('order_id', '=', o.id).orderBy('name').execute(),
     db.selectFrom('order_status_history').select(['to_status', 'created_at']).where('order_id', '=', o.id).orderBy('created_at').execute(),
   ]);
@@ -194,7 +194,7 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     // Asked of the order workflow. canPay assumes a payment provider is configured; the website also checks that.
     canPay: actions.canPay, canCancel: actions.canCancel,
     units: items.reduce((n, i) => n + i.qty, 0), lines: items.length,
-    items: items.map(i => ({ sku: i.sku, name: i.name, size: i.size, imagePath: i.image_path, productId: i.product_id, unitPricePaise: i.unit_price_paise, qty: i.qty, lineTotalPaise: i.line_total_paise })),
+    items: items.map(i => ({ sku: i.sku, name: i.name, size: i.size, colour: i.colour, imagePath: i.image_path, productId: i.product_id, unitPricePaise: i.unit_price_paise, qty: i.qty, lineTotalPaise: i.line_total_paise })),
     shipping: { name: text(a.name ?? a.full_name), phone: text(a.phone), line1: text(a.line1), line2: text(a.line2), city: text(a.city), state: text(a.state), pin: text(a.pin), country: text(a.country) },
     history: history.map(h => ({ status: h.to_status, at: h.created_at as Date })),
     paymentMethod: o.payment_method, codStatus: o.cod_status, codFeePaise: o.cod_fee_paise, pointsUsed: o.loyalty_points_used, pointsDiscountPaise: o.loyalty_discount_paise,

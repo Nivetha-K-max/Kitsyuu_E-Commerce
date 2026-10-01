@@ -23,7 +23,7 @@ export default async function StockCountPage({ params }: { params: Params }) {
   const counted = lines.filter(l => l.counted_qty !== null), differ = counted.filter(l => l.difference !== 0);
   return (
     <>
-      <PageHead section="Catalogue" title={c.number} crumbs={crumbs} eyebrow={`Opened ${formatDateTime(c.created_at as Date)} · ${counted.length} of ${lines.length} sizes counted · ${differ.length} different`}>
+      <PageHead section="Catalogue" title={c.number} crumbs={crumbs} eyebrow={`${c.location} · Opened ${formatDateTime(c.created_at as Date)} · ${counted.length} of ${lines.length} sizes counted · ${differ.length} different`}>
         <StatusBadge status={c.status} />
       </PageHead>
       <section className="card" aria-labelledby="cl-h" data-section="count-lines">

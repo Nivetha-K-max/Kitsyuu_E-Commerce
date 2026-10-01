@@ -117,7 +117,7 @@ export async function createInvoiceForOrder(db: Db, actor: StaffPrincipal, input
     if (!(SOLD as readonly string[]).includes(o.status)) throw new ConflictError('An invoice can be issued for a paid order only.');
     if (await tx.selectFrom('invoices').select('id').where('order_id', '=', o.id).where('status', '=', 'issued').executeTakeFirst()) throw new ConflictError('This order already has an invoice. Void it first to issue a new one.');
     const items = await tx.selectFrom('order_items as i').leftJoin('products as p', 'p.id', 'i.product_id').leftJoin('tax_rates as t', 't.code', 'p.tax_rate_code')
-      .select(['i.id', 'i.name', 'i.size', 'i.sku', 'i.qty', 'i.unit_price_paise', 'i.line_total_paise', 'p.hsn_code', 't.id as rate_id', 't.rate_bp', 't.is_inclusive'])
+      .select(['i.id', 'i.name', 'i.size', 'i.colour', 'i.sku', 'i.qty', 'i.unit_price_paise', 'i.line_total_paise', 'p.hsn_code', 't.id as rate_id', 't.rate_bp', 't.is_inclusive'])
       .where('i.order_id', '=', o.id).orderBy('i.name').execute();
     const snap = ((o.pricing ?? {}) as { tax?: { configured?: boolean; code?: string; rateBp?: number; inclusive?: boolean } }).tax;
     const orderRate = snap?.configured ? await tx.selectFrom('tax_rates').select(['id', 'rate_bp', 'is_inclusive']).where('code', '=', snap.code ?? '').executeTakeFirst() : undefined;
@@ -154,7 +154,7 @@ export async function createInvoiceForOrder(db: Db, actor: StaffPrincipal, input
         ...((o.billing_address ?? {}) as Record<string, unknown>) }),
       shipping_address: JSON.stringify(ship), seller_details: JSON.stringify({ ...seller, state: sellerState }), tax_split: JSON.stringify(split), created_by: actor.staffId,
     } as never).returning('id').executeTakeFirstOrThrow() as { id: string };
-    await tx.insertInto('invoice_items').values(lines.map((l, idx) => ({ invoice_id: inv.id, order_item_id: l.it.id, position: idx, description: `${l.it.name} (size ${l.it.size})`,
+    await tx.insertInto('invoice_items').values(lines.map((l, idx) => ({ invoice_id: inv.id, order_item_id: l.it.id, position: idx, description: `${l.it.name} (${l.it.colour ? `${l.it.colour}, ` : ''}size ${l.it.size})`,
       sku: l.it.sku, hsn_code: l.it.hsn_code, qty: l.it.qty, unit_price_paise: l.it.unit_price_paise, tax_rate_id: l.rate.id, tax_rate_bp: l.rate.bp, tax_paise: Math.max(0, l.tax),
       line_total_paise: l.it.line_total_paise }))).execute();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'invoice.issue', entityType: 'invoices', entityId: inv.id,

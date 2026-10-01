@@ -80,7 +80,7 @@ export async function customerReturnOptions(db: Db, p: CustomerPrincipal, orderN
   const until = deliveredAt ? new Date(deliveredAt.getTime() + s.windowDays * 86_400_000) : null;
   if (!until || until < new Date()) return closed(`The ${s.windowDays}-day return window for this order has ended.`);
   const taken = await alreadyReturned(db, o.id);
-  const items = await db.selectFrom('order_items').select(['id', 'name', 'size', 'sku', 'qty', 'unit_price_paise']).where('order_id', '=', o.id).orderBy('name').execute();
+  const items = await db.selectFrom('order_items').select(['id', 'name', 'size', 'colour', 'sku', 'qty', 'unit_price_paise']).where('order_id', '=', o.id).orderBy('name').execute();
   const lines = items.map(i => ({ ...i, returnable: Math.max(0, i.qty - (taken.get(i.id) ?? 0)) })).filter(i => i.returnable > 0);
   if (!lines.length) return closed('Every item of this order is already in a return request.');
   const reasons = await db.selectFrom('return_reasons').select(['code', 'label']).where('is_active', '=', true).orderBy('sort_order').execute();
@@ -127,7 +127,7 @@ export async function getCustomerReturn(db: Db, p: CustomerPrincipal, number: st
     .where('r.number', '=', number).where('r.customer_id', '=', p.customerId).executeTakeFirst();
   if (!r) throw new NotFoundError('Return not found.');
   const items = await db.selectFrom('return_items as i').innerJoin('order_items as oi', 'oi.id', 'i.order_item_id')
-    .select(['i.id', 'oi.name', 'oi.size', 'i.qty']).where('i.return_id', '=', r.id).execute();
+    .select(['i.id', 'oi.name', 'oi.size', 'oi.colour', 'i.qty']).where('i.return_id', '=', r.id).execute();
   // Customers see the status history, but never staff-only notes.
   const events = await db.selectFrom('return_events').select(['to_status', 'created_at']).where('return_id', '=', r.id).orderBy('created_at').orderBy('id').execute();
   return { ...r, items, events };
@@ -181,7 +181,7 @@ export async function getReturn(db: Db, actor: StaffPrincipal, returnId: string)
   if (!r) throw new NotFoundError('Return not found.');
   const [items, events, refunds, payments] = await Promise.all([
     db.selectFrom('return_items as i').innerJoin('order_items as oi', 'oi.id', 'i.order_item_id').leftJoin('product_variants as ev', 'ev.id', 'i.exchange_variant_id')
-      .select(['i.id', 'i.order_item_id', 'oi.name', 'oi.size', 'oi.sku', 'oi.variant_id', 'oi.product_id', 'oi.unit_price_paise', 'i.qty', 'i.restock', 'i.restocked_qty',
+      .select(['i.id', 'i.order_item_id', 'oi.name', 'oi.size', 'oi.colour', 'oi.sku', 'oi.variant_id', 'oi.product_id', 'oi.unit_price_paise', 'i.qty', 'i.restock', 'i.restocked_qty',
         'i.exchange_variant_id', 'ev.size as exchange_size', 'ev.sku as exchange_sku']).where('i.return_id', '=', returnId).execute(),
     db.selectFrom('return_events as e').leftJoin('staff_users as s', 's.id', 'e.staff_user_id')
       .select(['e.id', 'e.from_status', 'e.to_status', 'e.note', 'e.actor_type', 'e.created_at', 's.email as staff_email']).where('e.return_id', '=', returnId).orderBy('e.created_at').orderBy('e.id').execute(),

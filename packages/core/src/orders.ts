@@ -96,7 +96,7 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
   if (!o) throw new NotFoundError('Order not found.');
   const [items, history] = await Promise.all([
     db.selectFrom('order_items as i').leftJoin('products as p', 'p.id', 'i.product_id')
-      .select(['i.id', 'i.product_id', 'i.variant_id', 'i.sku', 'i.name', 'i.size', 'i.image_path', 'i.unit_price_paise', 'i.qty', 'i.line_total_paise', 'p.status as product_status'])
+      .select(['i.id', 'i.product_id', 'i.variant_id', 'i.sku', 'i.name', 'i.size', 'i.colour', 'i.image_path', 'i.unit_price_paise', 'i.qty', 'i.line_total_paise', 'p.status as product_status'])
       .where('i.order_id', '=', orderId).orderBy('i.sku').execute(),
     db.selectFrom('order_status_history as h')
       .leftJoin('audit_logs as a', join => join.on('a.action', '=', 'order.status_update').on('a.entity_id', '=', orderId)

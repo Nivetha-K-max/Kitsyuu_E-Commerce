@@ -87,7 +87,7 @@ export default async function OrderPage({ params }: { params: Params }) {
                   <td className="thumb">{img ? <img src={img} alt="" width={44} height={56} loading="lazy" /> : null}</td>
                   <td>{i.product_id && can(actor, 'products.read') ? <Link href={`/products/${i.product_id}`}>{i.name}</Link> : i.name}
                     <div className="note mono">{i.sku}</div>{i.product_status && i.product_status !== 'active' && <StatusBadge status={i.product_status} />}</td>
-                  <td>{i.size}</td>
+                  <td>{i.colour ? `${i.colour} / ${i.size}` : i.size}</td>
                   <td className="num">{rupees(i.unit_price_paise)}</td>
                   <td className="num" data-qty>{i.qty}</td>
                   <td className="num">{rupees(i.line_total_paise)}</td>

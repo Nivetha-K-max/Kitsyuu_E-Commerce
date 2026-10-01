@@ -587,3 +587,27 @@ export type AttributeSelection = 'single' | 'multi';
 export interface AttributesTable { selection: Generated<AttributeSelection> }
 export interface AttributeValuesTable { is_active: Generated<boolean>; swatch: string | null }
 export interface Database { collection_groups: CollectionGroupsTable }
+
+// ============================== client change request, third pass (migration 20261004004000) ==============================
+export type LocationKind = 'warehouse' | 'retail' | 'other';
+export interface LocationsTable {
+  id: Generated<string>; code: string; name: string; kind: Generated<LocationKind>; address: string | null; is_online: Generated<boolean>;
+  is_active: Generated<boolean>; sort_order: Generated<number>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface LocationStockTable { location_id: string; variant_id: string; qty: Generated<number>; updated_at: Generated<Timestamp> }
+export type TransferStatus = 'draft' | 'sent' | 'received' | 'cancelled';
+export interface StockTransfersTable {
+  id: Generated<string>; number: string; from_location_id: string; to_location_id: string; status: Generated<TransferStatus>; note: string | null;
+  created_by: string | null; created_at: Generated<Timestamp>; sent_by: string | null; sent_at: Timestamp | null; received_by: string | null;
+  received_at: Timestamp | null; updated_at: Generated<Timestamp>;
+}
+export interface StockTransferLinesTable { id: Generated<string>; transfer_id: string; variant_id: string; qty: number }
+export interface InventoryMovementsTable { location_id: string | null; transfer_id: string | null }
+export interface StockCountsTable { location_id: string }
+export interface OrdersTable { channel: ColumnType<'online' | 'retail', 'online' | 'retail' | undefined, never> }
+export interface ProductVariantsTable { colour_slug: string | null; colour_attribute: ColumnType<string | null, never, never> }
+export interface ProductImagesTable { colour_slug: string | null; colour_attribute: ColumnType<string | null, never, never> }
+export interface Database {
+  locations: LocationsTable; location_stock: LocationStockTable; stock_transfers: StockTransfersTable; stock_transfer_lines: StockTransferLinesTable;
+}
+export interface OrderItemsTable { colour: string | null }

@@ -13,6 +13,8 @@ export const NAV: NavItem[] = [
   { href: '/size-charts', label: 'Size charts', permission: 'products.read', group: 'Catalogue' },
   { href: '/inventory', label: 'Inventory', permission: 'inventory.read', group: 'Catalogue' },
   { href: '/stock-counts', label: 'Stock counts', permission: 'inventory.read', group: 'Catalogue' },
+  { href: '/locations', label: 'Locations', permission: 'inventory.read', group: 'Catalogue' },
+  { href: '/transfers', label: 'Transfers', permission: 'inventory.read', group: 'Catalogue' },
   { href: '/stock-value', label: 'Stock value', permission: 'costs.read', group: 'Catalogue' },
   { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Commerce' },
   { href: '/customers', label: 'Customers', permission: 'customers.read', group: 'Commerce' },

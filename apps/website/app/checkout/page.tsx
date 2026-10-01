@@ -105,7 +105,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               return (
                 <li key={l.variantId} className={l.problem ? 'has-problem' : undefined}>
                   <span className="st-mini-media">{img ? <img src={img} alt="" width={60} height={80} /> : null}</span>
-                  <span className="st-mini-info"><b>{l.name}</b><small>Size {l.size} · Qty {l.qty}</small></span>
+                  <span className="st-mini-info"><b>{l.name}</b><small>{l.colourLabel && <>{l.colourLabel} · </>}Size {l.size} · Qty {l.qty}</small></span>
                   <span className="st-mini-total">{rupees(l.lineTotalPaise)}</span>
                 </li>
               );

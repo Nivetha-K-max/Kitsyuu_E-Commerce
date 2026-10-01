@@ -5,13 +5,13 @@ import {
   ChevronLeft, ChevronRight, ChevronsUpDown, CircleAlert, ClipboardList, Columns3, CornerDownLeft, CreditCard, Download, Ellipsis,
   ExternalLink, Factory, ImageOff, Inbox, IndianRupee, Keyboard, Layers, LayoutDashboard, ListFilter, LogOut, Megaphone, Menu, Monitor,
   Moon, Package, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Rows3, ScrollText, Search, Settings, ShieldCheck, ShoppingCart,
-  SlidersHorizontal, Star, Sun, SunMoon, Tags, TriangleAlert, Truck, Upload, User, UserCog, Users, Warehouse, X, Cylinder,
+  SlidersHorizontal, Star, Sun, SunMoon, Tags, TriangleAlert, Truck, Upload, User, UserCog, Users, Warehouse, X, Cylinder, MapPin, ArrowLeftRight,
   BadgePercent, PackageCheck, Undo2, Sparkles, LifeBuoy, Landmark, ShoppingBasket, BellRing, Ruler, Gift,
   type LucideIcon,
 } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
-  dashboard: LayoutDashboard, reports: ChartColumn, products: Package, categories: Tags, collections: Layers, attributes: SlidersHorizontal,
+  dashboard: LayoutDashboard, locations: MapPin, transfers: ArrowLeftRight, reports: ChartColumn, products: Package, categories: Tags, collections: Layers, attributes: SlidersHorizontal,
   inventory: Boxes, counts: ClipboardList, value: IndianRupee, orders: ShoppingCart, customers: Users, payments: CreditCard, reviews: Star,
   content: Megaphone, vendors: Truck, materials: Cylinder, purchase: ScrollText, production: Factory, staff: UserCog, roles: ShieldCheck,
   audit: Activity, settings: Settings, system: Warehouse, account: User, logout: LogOut, sun: Sun, moon: Moon, monitor: Monitor, theme: SunMoon,

@@ -55,7 +55,7 @@ export default async function PackingSlip({ params }: { params: Params }) {
         <table className="slip-items" data-slip-items>
           <thead><tr><th>Item</th><th>SKU</th><th>Size</th><th className="num">Qty</th><th className="slip-check">Packed</th></tr></thead>
           <tbody>{d.items.map(i => (
-            <tr key={i.id}><td>{i.name}</td><td className="mono">{i.sku}</td><td>{i.size ?? '—'}</td><td className="num">{i.qty}</td><td className="slip-check">☐</td></tr>
+            <tr key={i.id}><td>{i.name}</td><td className="mono">{i.sku}</td><td>{i.colour ? `${i.colour} / ` : ''}{i.size ?? '—'}</td><td className="num">{i.qty}</td><td className="slip-check">☐</td></tr>
           ))}</tbody>
         </table>
         {(company.supportEmail || company.phone) && (

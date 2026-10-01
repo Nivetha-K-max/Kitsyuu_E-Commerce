@@ -29,7 +29,7 @@ export default async function ReturnRequestPage({ params }: { params: Promise<{ 
           <fieldset className="st-form-group"><legend>Items to return</legend>
             {opts.lines.map(l => (
               <div key={l.id} className="st-field st-field-wide">
-                <label htmlFor={`q-${l.id}`}>{l.name} · Size {l.size} · {rupees(l.unit_price_paise)}</label>
+                <label htmlFor={`q-${l.id}`}>{l.name} · {l.colour ? `${l.colour} · ` : ''}Size {l.size} · {rupees(l.unit_price_paise)}</label>
                 <select id={`q-${l.id}`} name={`qty_${l.id}`} defaultValue="0">
                   {Array.from({ length: l.returnable + 1 }, (_, n) => <option key={n} value={n}>{n === 0 ? 'Not returning' : `${n} of ${l.returnable}`}</option>)}
                 </select>

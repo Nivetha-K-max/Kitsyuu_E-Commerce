@@ -46,7 +46,7 @@ export default async function StoreHome() {
       <section className="st-section ch-na" aria-labelledby="st-na-title">
         <div className="st-wrap">
           <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(naList.length, 'piece') : ''}</span></div>
-          <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>
+          <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.collection('new-arrivals')}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>
         </div>
         {naList.length > 0 && (
           <div className="ch-na-reel" data-scroll="pin" data-steps={naList.length} style={{ ['--n' as string]: naList.length }}>
@@ -95,7 +95,7 @@ export default async function StoreHome() {
           <p data-brand-home-intro>{copy.homeIntro}</p>
           <div className="st-hero-actions">
             <Link className="button" href={url.shop()}>Shop all products</Link>
-            <Link className="text-link" href={url.shop({ collection: 'new-arrivals' })}>New arrivals <span aria-hidden="true">↗</span></Link>
+            <Link className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></Link>
           </div>
         </div>
         <HeroTurntable />

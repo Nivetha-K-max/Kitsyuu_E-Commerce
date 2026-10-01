@@ -135,7 +135,7 @@ export async function placeOrder(db: Db, p: CustomerPrincipal, input: PlaceOrder
         payment_expires_at: paymentWindowMinutes && !cod ? sql<Date>`now() + make_interval(mins => ${paymentWindowMinutes})` : null,
       }).returning(['id', 'order_number']).executeTakeFirstOrThrow();
       await tx.insertInto('order_items').values(cart.lines.map(l => ({
-        order_id: order.id, product_id: l.productId, variant_id: l.variantId, sku: l.sku, name: l.name, size: l.size,
+        order_id: order.id, product_id: l.productId, variant_id: l.variantId, sku: l.sku, name: l.name, size: l.size, colour: l.colourLabel,
         image_path: l.imagePath, unit_price_paise: l.unitPaise, qty: l.qty, line_total_paise: l.lineTotalPaise,
       }))).execute();
       await tx.insertInto('order_status_history').values({ order_id: order.id, from_status: null, to_status: 'pending_payment', note: 'Order placed' }).execute();

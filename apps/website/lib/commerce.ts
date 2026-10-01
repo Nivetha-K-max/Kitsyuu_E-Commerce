@@ -61,7 +61,7 @@ export function commerceConfig(): CommerceConfig { return { ...defaultCommerceCo
 /** The cart as the browser receives it: display values only (never ids of other rows, never stock counts beyond "available"). */
 export function clientCart(c: PricedCart, problemText: (l: PricedCart['lines'][number]) => string): StoreCart {
   return {
-    lines: c.lines.map(l => ({ id: l.productId, sku: l.sku, name: l.name, size: l.size, qty: l.qty, price: l.unitPaise / 100,
+    lines: c.lines.map(l => ({ id: l.productId, sku: l.sku, name: l.name, size: l.size, colour: l.colour, colourLabel: l.colourLabel, qty: l.qty, price: l.unitPaise / 100,
       lineTotal: l.lineTotalPaise / 100, available: l.available, problem: l.problem ? problemText(l) : null })),
     totals: { units: c.totals.units, subtotal: c.totals.subtotalPaise / 100, discount: c.totals.discountPaise / 100, shipping: c.totals.shippingPaise / 100,
       shippingLabel: c.totals.shipping.configured ? c.totals.shipping.label : null, tax: c.totals.taxPaise / 100,

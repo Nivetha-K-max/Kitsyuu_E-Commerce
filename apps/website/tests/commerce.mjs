@@ -19,7 +19,14 @@ const q = async (text, params = []) => (await pool.query(text, params)).rows;
 const PW = 'correct horse battery staple';
 
 const b = await launch(9442); const ev = e => b.eval(e);
-const until = async (x, ms = 15000) => { for (let t = 0; t < ms; t += 120) { if (await ev(x).catch(() => false)) return true; await w(120); } return false; };
+/** Polls a page condition. A condition that throws (e.g. a broken expression) or never holds is reported on stderr, so a
+    slow or silently broken wait is visible; some checks expect a timeout ("x never appears"). */
+const until = async (x, ms = 15000) => {
+  let last = null;
+  for (let t = 0; t < ms; t += 120) { try { if (await ev(x)) return true; last = null; } catch (e) { last = e; } await w(120); }
+  if (process.env.WAIT_TRACE) console.error(`WAIT TIMEOUT ${ms}ms: ${String(x).slice(0, 140)}${last ? ` — throws: ${String(last.message ?? last).split(String.fromCharCode(10))[0]}` : ""}`);
+  return false;
+};
 const go = async (url, ready = 'document.readyState==="complete"') => { await b.goto(url.startsWith('http') ? url : BASE + url, ready); };
 const fill = (sel, v) => ev(`(()=>{const el=document.querySelector(${JSON.stringify(sel)});if(!el)throw new Error('no field ${sel}');
   const proto=el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(v)});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);

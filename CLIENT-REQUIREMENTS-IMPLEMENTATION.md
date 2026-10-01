@@ -13,7 +13,7 @@ starts empty or off, so the live store behaves exactly as before until the busin
 |---|---|---|
 | First | Bulk editor, sale price, abandoned checkout, delivery options, newsletter, billing address, size charts, production ↔ purchasing, brand wording, reviews, cart refresh | Local only, tested |
 | Second | Loyalty points, COD, pre-shipment order editing | Local only, core-tested (all switches off) |
-| Third | Colour variants, inventory locations, stock transfers, online vs retail channel, location reports | Not started |
+| Third | Colour variants, inventory locations, stock transfers, online vs retail channel, location reports | Local only, tested (not migrated live) |
 
 ---
 
@@ -126,7 +126,7 @@ No new tables or migration: the existing purchase order, production and order mo
 
 ### Order editing
 - Existing (second pass): staff edit before shipment (Edit order button on eligible orders): **size** (another size of the same product at the same price, with stock shown), **quantity**, **delivery address**; refused once shipped. Stock is checked and moved in the same transaction; a sold-out size is refused with "Size L is currently unavailable". Paid online: lower total → refund due; higher total → refused. COD: new amount to collect. Edit history (who, what, before → after, when) and audit.
-- **Colour change: not possible yet.** Products have no colour variants today (third pass); a product is one colour. Once colour variants exist, the edit form will offer colour → sizes of that colour, validated the same way.
+- **Colour change**: available with the third pass for products that come in colours (another colour and / or size of the same product, same price, stock checked).
 
 ### Permissions (reused, none added)
 `procurement.read / manage / receive`, `costs.read`, `production.read`, `orders.read / edit / cod`, `finance.read / manage`, `refunds.create`.
@@ -140,12 +140,67 @@ No new tables or migration: the existing purchase order, production and order mo
 
 ---
 
+## Third pass: locations, transfers, channels, colour variants (local only)
+
+Migration `20261004004000_third_pass.sql`. Nothing is hard-coded: locations are rows staff add. The migration creates ONE location,
+"Chennai Warehouse" (code CHN-WH), and only when no location exists yet. It is the **online location**: its stock is exactly the
+store's existing stock (`product_variants.stock_qty`), so the cart, checkout and orders work as before. Existing catalogue data is **not
+converted**: products keep their sizes without a colour until staff give them one.
+
+### Inventory locations
+- Catalogue → **Locations**: list (units and sizes in stock per location), add / edit (name, code, kind: warehouse / retail branch /
+  other, address, active). Retail Branch 1 and 2 are added here by staff; they are not created by the migration.
+- Rules: exactly one online location; it cannot be deactivated. A location with stock or an open transfer cannot be deactivated.
+  Codes and names are unique.
+- Location page: stock per size (search, include empty sizes), **Change stock here** (the usual reasons; **Retail sale** only at retail
+  locations), recent movements with their transfer.
+- Every change is a stock-ledger row with its location (`inventory_movements.location_id`). The online location's stock equals
+  `stock_qty` at all times (enforced by the database functions and checked in the tests).
+- Stock counts are per location: choose the location when opening a count; one open count per location.
+
+### Stock transfers
+- Catalogue → **Transfers**: New transfer (from, to, a quantity per size from what the sender holds) → **draft** → **Send**
+  (stock leaves the sender: *Transfer out*) → **Mark as received** (stock arrives: *Transfer in*). Cancelling a sent transfer returns
+  the stock to the sender; cancelling a draft moves nothing. A transfer can't be sent without enough stock at the sender.
+- Numbering TR-…; who created / sent / received and when; audited.
+
+### Online vs retail channel
+- `orders.channel` (online / retail), separate from location. Every store order is **online**.
+- In-store sales are recorded as **Retail sale** stock movements at a retail location. No retail orders, prices or takings are
+  invented: a full till / POS is **CLIENT INPUT REQUIRED**.
+
+### Location report
+- Locations → **Report** (date range, India time): per location, stock now, sold online (net of cancellations), retail sales,
+  transfers in / out, other changes. By channel: online orders, units and takings (paid → delivered); retail units (no takings until a POS).
+
+### Colour variants (option 1: one product, colour variants with their own sizes, stock and images)
+- A size can have a colour (`product_variants.colour_slug`, a value of the Colour attribute). A product is either without colours
+  (as today) or every size has a colour. Sizes are unique per product + colour.
+- Product page (admin): **Colour** per size (the SKU never changes), **Add size** asks for the colour on a coloured product
+  (SKU `<PRODUCT>-<COLOUR>-<SIZE>`), **Shows colour** per photo, stock per location per size.
+- Store: the product page shows colour swatches first; the sizes and photos follow the chosen colour; the cart, checkout, order,
+  confirmation email, invoice, packing slip and returns show the colour. Products without colours look exactly as before.
+- Order editing (staff, before shipment) can now move a line to another colour and / or size of the same product.
+- Converting existing products into colour variants is a reviewed, manual step (Sizes → Colour); nothing is migrated automatically.
+
+### Permissions
+New: `locations.manage` (super admin, admin), `inventory.transfer` (super admin, admin, manager, inventory manager).
+Reused: `inventory.read`, `inventory.adjust`, `inventory.count`, `products.write`.
+
+### Client input required
+- A retail till / POS: will branches sell through this system (prices, payments, receipts), or only hold stock?
+- Which location ships online orders (today: Chennai Warehouse, the online location). Should online orders ever ship from a branch?
+- The addresses and codes of Retail Branch 1 and 2 (staff add them under Locations).
+- Which existing products come in several colours, and their colour values (the conversion is manual).
+
+---
+
 ## Full client list — mapping and status
 
 | # | Client note | Status | Notes |
 |---|---|---|---|
-| 1 | Multi-location inventory (Chennai warehouse, retail branches) | Third pass | Database-driven locations, per-location stock on the existing ledger. |
-| 2 | Online vs retail sales channel | Third pass | Kept separate from location. Full retail POS = CLIENT INPUT REQUIRED. |
+| 1 | Multi-location inventory (Chennai warehouse, retail branches) | NEWLY IMPLEMENTED (third pass) | Database-driven locations, per-location stock on the existing ledger, transfers, counts per location. |
+| 2 | Online vs retail sales channel | NEWLY IMPLEMENTED (third pass) · CLIENT INPUT REQUIRED | `orders.channel`, separate from location; retail sales recorded as stock movements. Full retail POS = CLIENT INPUT REQUIRED. |
 | 3 | Full bulk product editor | NEWLY IMPLEMENTED (FP-1) | |
 | 4 | New product defaults to Draft | EXISTING / VERIFIED | `createProduct` has always created drafts; re-tested. |
 | 5 | Product approval / publish workflow | EXISTING / VERIFIED + FP-1 | Publishing checks completeness (single and bulk). A separate approver role = CLIENT INPUT REQUIRED. |
@@ -161,9 +216,9 @@ No new tables or migration: the existing purchase order, production and order mo
 | 15 | PO ↔ production link | NEWLY IMPLEMENTED (FP-8) | |
 | 16 | Multiple selection / bulk operations | NEWLY IMPLEMENTED (FP-1, FP-8) | |
 | 17 | Attributes → customer filters | EXISTING / VERIFIED | Shop filters by attribute, price, size, colour, availability. |
-| 18 | Colour variants and size-chart behaviour | Size charts: NEWLY IMPLEMENTED (FP-7) · Colour variants: third pass | Client chose one product → colour variants with their own sizes, stock and images. Existing catalogue data is not migrated automatically. |
+| 18 | Colour variants and size-chart behaviour | Size charts: NEWLY IMPLEMENTED (FP-7) · Colour variants: NEWLY IMPLEMENTED (third pass) | Client chose one product → colour variants with their own sizes, stock and images. Existing catalogue data is not migrated automatically. |
 | 19 | Product SEO structure | EXISTING / VERIFIED | Slugs, SEO title and description. |
-| 20 | Branch / location reporting | Third pass | |
+| 20 | Branch / location reporting | NEWLY IMPLEMENTED (third pass) | Locations → Report: per location and per channel. |
 | — | Image click → product page | EXISTING / VERIFIED | The whole card is a link (store test `check`). |
 | — | Price fixed / sale option with role | NEWLY IMPLEMENTED (FP-2) | |
 | — | Size options per product type | EXISTING / VERIFIED | Sizes are per product. |
@@ -187,5 +242,6 @@ No new tables or migration: the existing purchase order, production and order mo
 5. Loyalty: points per ₹100, when earned (paid or delivered), value of a point, minimum / maximum per order, expiry; should returns/refunds take points back automatically; what "file option" means (we built a CSV import of opening balances).
 5a. Order editing: may customers edit their own orders; may staff add new products; should the customer be emailed about an edit; how to collect a higher total on an order paid online.
 6. "Product select → generate PO for customer": vendor purchase order or customer quotation?
-7. Retail branches: will branches sell through this ERP (a POS screen) or only hold stock?
+7. Retail branches: will branches sell through this ERP (a POS screen) or only hold stock? Which location ships online orders?
+7a. Colour variants: which existing products come in several colours (converted manually, not automatically)?
 8. Product approval: should publishing need a second person (approver role)?

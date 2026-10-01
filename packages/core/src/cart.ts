@@ -11,40 +11,56 @@ import { basePriceSql, effectivePriceSql } from './sale.ts';
 export type LineProblem = 'unavailable' | 'out_of_stock' | 'insufficient_stock';
 export interface PricedLine {
   variantId: string; productId: string; slug: string; sku: string; name: string; size: string; imagePath: string | null;
+  /** Third pass: the colour (Colour value and its name) of a product that comes in colours; null otherwise. */
+  colour: string | null; colourLabel: string | null;
   unitPaise: number; qty: number; lineTotalPaise: number;
   /** Units that can be bought now (min of stock and the per-line limit); 0 when the size cannot be bought. */
   available: number; problem: LineProblem | null;
 }
 export interface PricedCart { lines: PricedLine[]; totals: CartTotals; canCheckout: boolean; removed: number }
 
+/** "Hoodie, Black, size M" (the colour only for products that come in colours). */
+export const lineLabel = (l: { name: string; size: string; colourLabel?: string | null }) => `${l.name}, ${l.colourLabel ? `${l.colourLabel}, ` : ''}size ${l.size}`;
 const PROBLEM_TEXT: Record<LineProblem, (l: PricedLine) => string> = {
-  unavailable: l => `${l.name}, size ${l.size}, is no longer available.`,
-  out_of_stock: l => `${l.name}, size ${l.size}, is sold out.`,
-  insufficient_stock: l => `Only ${l.available} left of ${l.name}, size ${l.size}.`,
+  unavailable: l => `${lineLabel(l)}, is no longer available.`,
+  out_of_stock: l => `${lineLabel(l)}, is sold out.`,
+  insufficient_stock: l => `Only ${l.available} left of ${lineLabel(l)}.`,
 };
 export const lineProblemText = (l: PricedLine) => (l.problem ? PROBLEM_TEXT[l.problem](l) : '');
 
 type VariantRow = {
   variant_id: string; product_id: string; slug: string; size: string; sku: string; name: string; stock_qty: number; is_active: boolean;
-  unit_paise: number; base_paise: number; image_path: string | null;
+  unit_paise: number; base_paise: number; image_path: string | null; colour_slug: string | null; colour_label: string | null;
 };
 /** Sizes of products on sale, with the price that applies (a size may override its product's price). */
 export const variantQuery = (q: Queryable) => q.selectFrom('product_variants as v').innerJoin('products as p', 'p.id', 'v.product_id')
-  .select(['v.id as variant_id', 'v.product_id', 'p.slug', 'v.size', 'v.sku', 'p.name', 'v.stock_qty', 'v.is_active',
+  .select(['v.id as variant_id', 'v.product_id', 'p.slug', 'v.size', 'v.sku', 'p.name', 'v.stock_qty', 'v.is_active', 'v.colour_slug',
     effectivePriceSql.as('unit_paise'), basePriceSql.as('base_paise'),   // the sale price while a sale runs (client change request)
-    sql<string | null>`(select i.storage_path from public.product_images i where i.product_id = p.id order by i.is_primary desc, i.sort_order limit 1)`.as('image_path')])
+    sql<string | null>`(select av.label from public.attribute_values av where av.attribute_id = 'colour' and av.slug = v.colour_slug)`.as('colour_label'),
+    // The picture of the size's colour first (third pass), then the product's main picture.
+    sql<string | null>`(select i.storage_path from public.product_images i where i.product_id = p.id
+      order by (i.colour_slug is not distinct from v.colour_slug) desc, i.is_primary desc, i.sort_order limit 1)`.as('image_path')])
   .where('p.status', '=', 'active');           // the website role only sees active products anyway (RLS)
 
 function priced(v: VariantRow, qty: number): PricedLine {
   const available = v.is_active ? Math.min(v.stock_qty, MAX_QTY_PER_LINE) : 0;
   const problem: LineProblem | null = !v.is_active ? 'unavailable' : v.stock_qty <= 0 ? 'out_of_stock' : qty > v.stock_qty ? 'insufficient_stock' : null;
   return { variantId: v.variant_id, productId: v.product_id, slug: v.slug, sku: v.sku, name: v.name, size: v.size, imagePath: v.image_path,
+    colour: v.colour_slug, colourLabel: v.colour_slug ? (v.colour_label ?? v.colour_slug) : null,
     unitPaise: v.unit_paise, qty, lineTotalPaise: v.unit_paise * qty, available, problem };
 }
 
-async function variantFor(q: Queryable, productId: string, size: string): Promise<VariantRow> {
-  const v = await variantQuery(q).where('v.product_id', '=', productId).where('v.size', '=', size).executeTakeFirst();
-  if (!v) throw new NotFoundError('That product or size is not available.');
+/** The size of a product in a colour (no colour = a product without colours). */
+const bySize = (q: Queryable, productId: string, size: string, colour?: string | null) => {
+  const base = variantQuery(q).where('v.product_id', '=', productId).where('v.size', '=', size);
+  return colour ? base.where('v.colour_slug', '=', colour) : base.where('v.colour_slug', 'is', null);
+};
+async function variantFor(q: Queryable, productId: string, size: string, colour?: string | null): Promise<VariantRow> {
+  const v = await bySize(q, productId, size, colour).executeTakeFirst();
+  if (!v) {
+    const coloured = !colour && await q.selectFrom('product_variants').select('id').where('product_id', '=', productId).where('colour_slug', 'is not', null).executeTakeFirst();
+    throw new NotFoundError(coloured ? 'Choose a colour.' : 'That product or size is not available.');
+  }
   return v;
 }
 
@@ -77,14 +93,15 @@ export async function getCustomerCart(db: Db, p: CustomerPrincipal, config?: Com
   return priceCart(db, await activeCartId(db, p.customerId), { config, customerId: p.customerId, shipTo: shipTo ?? null, payment: payment ?? null });
 }
 
-const onlyLeft = (v: VariantRow) => `Only ${v.stock_qty} of ${v.name}, size ${v.size}, ${v.stock_qty === 1 ? 'is' : 'are'} available.`;
+const vLabel = (v: VariantRow) => lineLabel({ name: v.name, size: v.size, colourLabel: v.colour_slug ? (v.colour_label ?? v.colour_slug) : null });
+const onlyLeft = (v: VariantRow) => `Only ${v.stock_qty} of ${vLabel(v)}, ${v.stock_qty === 1 ? 'is' : 'are'} available.`;
 
 /** Adds units of a size (the same size merges into one line, at most MAX_QTY_PER_LINE). Refused beyond the stock. */
 export async function addCartLine(db: Db, p: CustomerPrincipal, input: CartLineInput): Promise<{ qty: number; capped: boolean }> {
   return db.transaction().execute(async tx => {
     const cartId = await lockActiveCart(tx, p.customerId);
-    const v = await variantFor(tx, input.productId, input.size);
-    if (!v.is_active || v.stock_qty <= 0) throw new ConflictError(`${v.name}, size ${v.size}, is sold out.`);
+    const v = await variantFor(tx, input.productId, input.size, input.colour);
+    if (!v.is_active || v.stock_qty <= 0) throw new ConflictError(`${vLabel(v)}, is sold out.`);
     const existing = await tx.selectFrom('cart_items').select(['id', 'qty']).where('cart_id', '=', cartId).where('variant_id', '=', v.variant_id).executeTakeFirst();
     const wanted = (existing?.qty ?? 0) + input.qty;
     const qty = Math.min(wanted, MAX_QTY_PER_LINE);
@@ -103,20 +120,20 @@ export async function addCartLine(db: Db, p: CustomerPrincipal, input: CartLineI
 export async function setCartLineQty(db: Db, p: CustomerPrincipal, input: CartLineInput): Promise<void> {
   await db.transaction().execute(async tx => {
     const cartId = await lockActiveCart(tx, p.customerId);
-    const v = await variantFor(tx, input.productId, input.size);
+    const v = await variantFor(tx, input.productId, input.size, input.colour);
     const line = await tx.selectFrom('cart_items').select('id').where('cart_id', '=', cartId).where('variant_id', '=', v.variant_id).executeTakeFirst();
     if (!line) throw new NotFoundError('That item is no longer in your cart.');
-    if (input.qty > v.stock_qty) throw new ConflictError(v.stock_qty > 0 ? onlyLeft(v) : `${v.name}, size ${v.size}, is sold out.`);
+    if (input.qty > v.stock_qty) throw new ConflictError(v.stock_qty > 0 ? onlyLeft(v) : `${vLabel(v)}, is sold out.`);
     await tx.updateTable('cart_items').set({ qty: input.qty }).where('id', '=', line.id).execute();
   });
 }
 
-export async function removeCartLine(db: Db, p: CustomerPrincipal, input: { productId: string; size: string }): Promise<void> {
+export async function removeCartLine(db: Db, p: CustomerPrincipal, input: { productId: string; size: string; colour?: string | null }): Promise<void> {
   const cartId = await activeCartId(db, p.customerId);
   if (!cartId) return;
-  await db.deleteFrom('cart_items').where('cart_id', '=', cartId)
-    .where('variant_id', 'in', db.selectFrom('product_variants').select('id').where('product_id', '=', input.productId).where('size', '=', input.size))
-    .execute();
+  let sizes = db.selectFrom('product_variants').select('id').where('product_id', '=', input.productId).where('size', '=', input.size);
+  sizes = input.colour ? sizes.where('colour_slug', '=', input.colour) : sizes.where('colour_slug', 'is', null);
+  await db.deleteFrom('cart_items').where('cart_id', '=', cartId).where('variant_id', 'in', sizes).execute();
 }
 
 /** Merges a guest (browser) cart after login. Invalid, unknown or sold-out lines are skipped; for a size already in the
@@ -126,9 +143,9 @@ export async function mergeGuestCart(db: Db, p: CustomerPrincipal, raw: unknown[
   let skipped = 0;
   for (const r of raw.slice(0, MAX_LINES_PER_REQUEST)) {
     const x = r as Record<string, unknown> | null;
-    const parsed = cartLineInput.safeParse({ productId: x?.id ?? x?.productId, size: x?.size, qty: x?.qty });
+    const parsed = cartLineInput.safeParse({ productId: x?.id ?? x?.productId, size: x?.size, qty: x?.qty, colour: x?.colour });
     if (!parsed.success) { skipped++; continue; }
-    const k = `${parsed.data.productId}|${parsed.data.size}`, prev = wanted.get(k);
+    const k = `${parsed.data.productId}|${parsed.data.colour ?? ''}|${parsed.data.size}`, prev = wanted.get(k);
     wanted.set(k, prev ? { ...prev, qty: Math.max(prev.qty, parsed.data.qty) } : parsed.data);
   }
   if (!wanted.size) return { merged: 0, skipped };
@@ -137,7 +154,7 @@ export async function mergeGuestCart(db: Db, p: CustomerPrincipal, raw: unknown[
     const existing = new Map((await tx.selectFrom('cart_items').select(['id', 'variant_id', 'qty']).where('cart_id', '=', cartId).execute()).map(i => [i.variant_id, i]));
     let merged = 0;
     for (const w of wanted.values()) {
-      const v = await variantQuery(tx).where('v.product_id', '=', w.productId).where('v.size', '=', w.size).executeTakeFirst();
+      const v = await bySize(tx, w.productId, w.size, w.colour).executeTakeFirst();
       if (!v || !v.is_active || v.stock_qty <= 0) { skipped++; continue; }
       const cur = existing.get(v.variant_id);
       const qty = Math.min(Math.max(cur?.qty ?? 0, w.qty), MAX_QTY_PER_LINE, v.stock_qty);

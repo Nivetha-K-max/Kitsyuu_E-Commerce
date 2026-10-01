@@ -33,7 +33,11 @@ async function dbCheck(label, env, {staff, orders = 0, customers = 0, units = 11
     const r = (await c.query(`select (select count(*)::int from products) products, (select count(*)::int from product_variants) variants,
       (select count(*)::int from product_images) images, (select coalesce(sum(stock_qty),0)::int from product_variants) units,
       (select count(*)::int from product_variants where stock_qty <> 10) not_ten, (select count(*)::int from products where status <> 'active') inactive,
-      (select count(*)::int from product_variants v where v.stock_qty <> (select coalesce(sum(m.delta),0) from inventory_movements m where m.variant_id = v.id)) ledger_mismatch,
+      (select count(*)::int from product_variants v where v.stock_qty <> (select coalesce(sum(m.delta),0) from inventory_movements m where m.variant_id = v.id
+        and (m.location_id is null or m.location_id = (select id from locations where is_online))))
+      -- third pass: every location's stock equals its ledger rows too
+      + (select count(*)::int from location_stock s where s.qty <> (select coalesce(sum(m.delta),0) from inventory_movements m where m.variant_id = s.variant_id
+        and coalesce(m.location_id, (select id from locations where is_online)) = s.location_id)) ledger_mismatch,
       (select count(*)::int from orders) orders, (select count(*)::int from customers) customers, (select count(*)::int from staff_users) staff`)).rows[0];
     const ok = r.products === products && r.variants === variants && r.images === images && r.units === units && (!everySizeTen || r.not_ten === 0) && r.inactive === 0
       && r.ledger_mismatch === 0 && r.orders === orders && r.customers === customers && (staff === undefined || r.staff === staff);
@@ -80,7 +84,10 @@ try {
       // Client second pass: 3 customers, 8 orders (COD, points, edits; one size counted down to 0), all through the ledger.
       : f === 'client-second-pass.test.mjs' ? {customers: 3, orders: 8, units: 1088, everySizeTen: false}
       // Purchase + production + orders: 4 customers with one order each (4 units taken), all through the ledger.
-      : f === 'operations-orders.test.mjs' ? {customers: 4, orders: 4, units: 1096, everySizeTen: false} : {};
+      : f === 'operations-orders.test.mjs' ? {customers: 4, orders: 4, units: 1096, everySizeTen: false}
+      // Third pass: 1 customer, 1 order in colours (bought, then edited to another colour); 1 colour size added; stock moved between
+      // locations and back through the ledger (online stock and every location's stock must equal their ledger rows).
+      : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 
