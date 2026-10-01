@@ -8,6 +8,10 @@
    - the COD fee            each delivery rate's COD fee (none when empty)
    - payments.cod_discount  an amount off for paying on delivery (none when empty)
    - payments.cod_min_order / payments.cod_max_order   the order value range for COD (goods after discounts; none when empty)
+   - payments.cod_discount_percent + payments.cod_discount_min_order (2026-10-01): a % off COD orders of at least that value
+     (e.g. 5% from ₹5,000). It replaces the fixed amount when both are set. payments.cod_discount_with_other says whether it
+     also applies when the order already has another discount (coupon / sale rule / staff); unset = no (never stacked).
+     A COD discount never takes a product below its minimum price (products.min_price_paise).
    Whether COD has a fee, a discount, both or neither is the business's choice; both start empty.
 
    Flow: the customer chooses COD at checkout → the order is placed and goes straight to fulfilment ('processing'),
@@ -23,15 +27,20 @@ import type { ShippingQuote } from './pricing.ts';
 import { applyOrderTransition, lockOrder, releaseOrderStock } from './order-state.ts';
 import { earnForOrder, reverseOrderPoints } from './loyalty.ts';
 
-export interface CodSettings { enabled: boolean; discountPaise: number | null; minOrderPaise: number | null; maxOrderPaise: number | null }
-export const COD_KEYS = ['payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order'] as const;
+export interface CodSettings { enabled: boolean; discountPaise: number | null; minOrderPaise: number | null; maxOrderPaise: number | null;
+  discountPercent: number | null; discountMinOrderPaise: number | null; withOtherDiscounts: boolean }
+export const COD_KEYS = ['payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order',
+  'payments.cod_discount_percent', 'payments.cod_discount_min_order', 'payments.cod_discount_with_other'] as const;
 
 export async function readCodSettings(q: Queryable): Promise<CodSettings> {
   const rows = await q.selectFrom('settings').select(['key', 'value']).where('key', 'in', [...COD_KEYS]).execute();
   const v = new Map(rows.map(r => [r.key, r.value]));
   const money = (x: unknown) => (Number.isInteger(x) && (x as number) >= 0 ? (x as number) : null);
+  const pct = Number(v.get('payments.cod_discount_percent'));
   return { enabled: v.get('payments.cod_enabled') === 'on', discountPaise: money(v.get('payments.cod_discount')),
-    minOrderPaise: money(v.get('payments.cod_min_order')), maxOrderPaise: money(v.get('payments.cod_max_order')) };
+    minOrderPaise: money(v.get('payments.cod_min_order')), maxOrderPaise: money(v.get('payments.cod_max_order')),
+    discountPercent: Number.isFinite(pct) && pct > 0 && pct <= 50 ? pct : null, discountMinOrderPaise: money(v.get('payments.cod_discount_min_order')),
+    withOtherDiscounts: v.get('payments.cod_discount_with_other') === 'yes' };
 }
 
 export interface CodQuote {
@@ -42,25 +51,41 @@ export interface CodQuote {
   /** Why not (shown next to the choice), or null. */
   reason: string | null;
   feePaise: number; discountPaise: number;
+  /** How the COD discount was worked out (shown on the order and invoice), or null. */
+  discountLabel: string | null;
 }
 
 /** Whether COD can be used for an order: the switch, the chosen delivery rate, and the order value range. Pure. */
-export function codQuoteFrom(s: CodSettings, rate: { codAllowed: boolean; codFeePaise: number | null } | null, shipping: ShippingQuote, goodsPaise: number): CodQuote {
-  const no = (reason: string | null): CodQuote => ({ offered: s.enabled, available: false, reason, feePaise: 0, discountPaise: 0 });
+export function codQuoteFrom(s: CodSettings, rate: { codAllowed: boolean; codFeePaise: number | null } | null, shipping: ShippingQuote, goodsPaise: number, otherDiscountPaise = 0): CodQuote {
+  const no = (reason: string | null): CodQuote => ({ offered: s.enabled, available: false, reason, feePaise: 0, discountPaise: 0, discountLabel: null });
   if (!s.enabled) return no(null);
   if (shipping.unavailable) return no(null);
   if (!rate || !rate.codAllowed) return no('Cash on delivery is not available for this address or delivery option.');
   const r = (p: number) => `₹${(p / 100).toFixed(2)}`;
   if (s.minOrderPaise !== null && goodsPaise < s.minOrderPaise) return no(`Cash on delivery is available for orders of ${r(s.minOrderPaise)} or more.`);
   if (s.maxOrderPaise !== null && goodsPaise > s.maxOrderPaise) return no(`Cash on delivery is available for orders up to ${r(s.maxOrderPaise)}.`);
-  return { offered: true, available: true, reason: null, feePaise: rate.codFeePaise ?? 0, discountPaise: Math.min(s.discountPaise ?? 0, Math.max(0, goodsPaise)) };
+  return { offered: true, available: true, reason: null, feePaise: rate.codFeePaise ?? 0, ...codDiscount(s, goodsPaise, otherDiscountPaise) };
 }
 
-export async function codQuote(q: Queryable, shipping: ShippingQuote, goodsPaise: number): Promise<CodQuote> {
+/** The COD discount for goods worth goodsPaise (after other discounts). Pure. */
+export function codDiscount(s: CodSettings, goodsPaise: number, otherDiscountPaise: number): { discountPaise: number; discountLabel: string | null } {
+  const none = { discountPaise: 0, discountLabel: null };
+  const r = (p: number) => `₹${(p / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  if (otherDiscountPaise > 0 && !s.withOtherDiscounts) return none;   // not stacked with other discounts unless the business says so
+  if (s.discountPercent) {
+    if (s.discountMinOrderPaise !== null && goodsPaise < s.discountMinOrderPaise) return none;
+    return { discountPaise: Math.floor(Math.max(0, goodsPaise) * s.discountPercent / 100),
+      discountLabel: `Cash on delivery discount ${s.discountPercent}%${s.discountMinOrderPaise ? ` (orders of ${r(s.discountMinOrderPaise)} or more)` : ''}` };
+  }
+  if (s.discountPaise) return { discountPaise: Math.min(s.discountPaise, Math.max(0, goodsPaise)), discountLabel: 'Cash on delivery discount' };
+  return none;
+}
+
+export async function codQuote(q: Queryable, shipping: ShippingQuote, goodsPaise: number, otherDiscountPaise = 0): Promise<CodQuote> {
   const s = await readCodSettings(q);
-  if (!s.enabled) return codQuoteFrom(s, null, shipping, goodsPaise);
+  if (!s.enabled) return codQuoteFrom(s, null, shipping, goodsPaise, otherDiscountPaise);
   const rate = shipping.rateId ? await q.selectFrom('shipping_rates').select(['cod_allowed', 'cod_fee_paise']).where('id', '=', shipping.rateId).where('is_active', '=', true).executeTakeFirst() : undefined;
-  return codQuoteFrom(s, rate ? { codAllowed: rate.cod_allowed, codFeePaise: rate.cod_fee_paise } : null, shipping, goodsPaise);
+  return codQuoteFrom(s, rate ? { codAllowed: rate.cod_allowed, codFeePaise: rate.cod_fee_paise } : null, shipping, goodsPaise, otherDiscountPaise);
 }
 
 // ---------------------------------------------------------------- staff actions

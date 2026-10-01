@@ -68,7 +68,7 @@ test('vendors and materials: validated, unique, audited; permissions enforced', 
 test('purchase order: draft lines (cost only with costs.read), place, cancel rules, numbering', async () => {
   const po = await createPurchaseOrder(db, manager, createPurchaseOrderInput.parse({vendorId: vendor, expectedOn: '2026-10-10'}), ctx);
   assert.match(po.poNumber, /^PO\/\d{2}-\d{2}\/00001$/);
-  await assert.rejects(setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft'}), ctx), ConflictError, 'no lines');
+  await assert.rejects(setPurchaseOrderStatus(db, root, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft'}), ctx), ConflictError, 'no lines');
   await setPoLine(db, manager, poLineInput.parse({purchaseOrderId: po.id, materialId: denim, qty: '120.5', unitCost: '310'}), ctx);   // manager: cost ignored
   await setPoLine(db, root, poLineInput.parse({purchaseOrderId: po.id, materialId: thread, qty: '40', unitCost: '85.50'}), ctx);
   await setPoLine(db, root, poLineInput.parse({purchaseOrderId: po.id, materialId: denim, qty: '100', unitCost: '310'}), ctx);         // update in place
@@ -77,9 +77,12 @@ test('purchase order: draft lines (cost only with costs.read), place, cancel rul
   const asManager = await getPurchaseOrder(db, manager, po.id), asAccountant = await getPurchaseOrder(db, accountant, po.id);
   assert.ok(asManager.lines.every(l => l.unitCostPaise === undefined) && asManager.totalPaise === undefined, 'costs hidden without costs.read');
   assert.equal(asAccountant.totalPaise, 100 * 31000 + 40 * 8550);
-  await setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft'}), ctx);
+  // 2026-10-01: a draft needs approval (procurement.approve) before a manager can send it to the vendor.
+  await assert.rejects(setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft'}), ctx), ForbiddenError, 'not approved yet');
+  await setPurchaseOrderStatus(db, root, poStatusInput.parse({purchaseOrderId: po.id, status: 'approved', expectedStatus: 'draft'}), ctx);
+  await setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'approved'}), ctx);
   await assert.rejects(setPoLine(db, root, poLineInput.parse({purchaseOrderId: po.id, materialId: thread, qty: '1'}), ctx), ConflictError, 'placed orders are fixed');
-  await assert.rejects(setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft'}), ctx), ConflictError, 'stale');
+  await assert.rejects(setPurchaseOrderStatus(db, manager, poStatusInput.parse({purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'approved'}), ctx), ConflictError, 'stale');
   // A second order that is cancelled before anything arrives.
   const po2 = await createPurchaseOrder(db, manager, createPurchaseOrderInput.parse({vendorId: vendor}), ctx);
   assert.match(po2.poNumber, /00002$/);

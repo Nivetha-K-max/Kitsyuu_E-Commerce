@@ -31,12 +31,14 @@ export default async function AbandonedCheckoutsPage({ searchParams }: { searchP
       )}
       {list.rows.length === 0 ? <Empty title="No abandoned checkouts" kind="abandoned-checkouts">Unpaid orders appear here once they are older than the abandoned-checkout time.</Empty> : (
         <div className="table-wrap"><table data-abandoned-checkouts>
-          <thead><tr><th>Order</th><th>Customer email</th><th>Status</th><th className="num">Total</th><th>Placed</th><th>Reminder</th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Status</th><th className="num">Total</th><th>Placed</th><th>Last activity</th><th>Reminder</th></tr></thead>
           <tbody>{list.rows.map(o => (
             <tr key={o.id} data-abandoned={o.order_number}>
               <td className="mono">{can(actor, 'orders.read') ? <Link href={`/orders/${o.id}`}>{o.order_number}</Link> : o.order_number}</td>
-              <td>{o.email ?? '—'}</td><td><StatusBadge status={o.status} /></td><td className="num money">{formatPaise(o.total_paise)}</td>
+              <td>{o.customer_id && can(actor, 'customers.read') ? <Link href={`/customers/${o.customer_id}`}>{o.name ?? o.email}</Link> : (o.name ?? o.email ?? '—')}{o.name && o.email ? <div className="note">{o.email}</div> : null}</td>
+              <td>{o.units} unit{o.units === 1 ? '' : 's'}<div className="note">{o.items}</div></td><td><StatusBadge status={o.status} /></td><td className="num money">{formatPaise(o.total_paise)}</td>
               <td className="nowrap">{formatDateTime(o.created_at as Date)}</td>
+              <td className="nowrap">{formatDateTime(o.updated_at as Date)}</td>
               <td>{o.reminder_status ? <><StatusBadge status={o.reminder_status} />{o.reminder_sent_at && <div className="note">{formatDateTime(o.reminder_sent_at as Date)}</div>}{o.reminder_error && <div className="note">{o.reminder_error}</div>}</> : <span className="muted">not sent</span>}</td>
             </tr>
           ))}</tbody>

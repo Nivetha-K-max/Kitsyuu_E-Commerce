@@ -156,9 +156,19 @@ export interface CustomerOrderDetail extends CustomerOrderSummary {
   /** Client change request: null when billing is the delivery address. */
   billing: { name: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null } | null;
   /** Second pass: cash on delivery (to collect / collected / refused) and its fee; loyalty points used on the order. */
-  paymentMethod: 'online' | 'cod'; codStatus: 'to_collect' | 'collected' | 'refused' | null; codFeePaise: number;
+  paymentMethod: 'online' | 'cod' | 'cash' | 'card' | 'upi'; codStatus: 'to_collect' | 'collected' | 'refused' | null; codFeePaise: number;
   pointsUsed: number; pointsDiscountPaise: number;
   history: { status: OrderStatus; at: Date }[];
+  /** 2026-10-01: where the order came from (online, or offline at a branch) and a discount given by staff (with its reason). */
+  channel: 'online' | 'retail'; branch: string | null; staffDiscount: { amountPaise: number; reason: string | null } | null;
+  /** Delivery and tracking (the courier, tracking number and link, and what happened so far), once staff have started it. */
+  shipment: { status: string; packingState: string; carrier: string | null; trackingNumber: string | null; trackingUrl: string | null;
+    shippedAt: Date | null; deliveredAt: Date | null; events: { status: string; note: string | null; at: Date }[] } | null;
+  /** The issued tax invoice, if any (the customer can view and print it). */
+  invoice: { number: string; issuedAt: Date } | null;
+  /** Each discount on the order (coupon / rule, staff, cash on delivery, loyalty points) and the delivery option chosen. */
+  discounts: { code: string; label: string; amountPaise: number }[];
+  delivery: { label: string; estimate: string | null; pickup: boolean } | null;
 }
 
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -169,7 +179,7 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
   const o = await db.selectFrom('orders as o')
     .select(['o.id', 'o.order_number', 'o.created_at', 'o.status', 'o.payment_status', 'o.total_paise', 'o.subtotal_paise', 'o.currency', 'o.paid_at', 'o.shipping_address',
       'o.contact', 'o.discount_paise', 'o.shipping_paise', 'o.tax_paise', 'o.prices_include_tax', 'o.payment_expires_at', 'o.customer_id', 'o.billing_address',
-      'o.payment_method', 'o.cod_status', 'o.cod_fee_paise', 'o.loyalty_points_used', 'o.loyalty_discount_paise'])
+      'o.payment_method', 'o.cod_status', 'o.cod_fee_paise', 'o.loyalty_points_used', 'o.loyalty_discount_paise', 'o.channel', 'o.location_id', 'o.staff_discount_paise', 'o.staff_discount_reason', 'o.pricing'])
     .where('o.order_number', '=', orderNumber)
     .where(eb => eb.or([
       eb('o.customer_id', '=', p.customerId),
@@ -177,11 +187,20 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     ]))
     .executeTakeFirst();
   if (!o) throw new NotFoundError('Order not found.');
-  const [items, history] = await Promise.all([
+  const [items, history, shipment, invoice, branch] = await Promise.all([
     db.selectFrom('order_items').select(['sku', 'name', 'size', 'colour', 'image_path', 'product_id', 'unit_price_paise', 'qty', 'line_total_paise'])
       .where('order_id', '=', o.id).orderBy('name').execute(),
     db.selectFrom('order_status_history').select(['to_status', 'created_at']).where('order_id', '=', o.id).orderBy('created_at').execute(),
+    db.selectFrom('shipments as s').leftJoin('couriers as c', 'c.code', 's.carrier_code')
+      .select(['s.id', 's.status', 's.packing_state', 's.carrier_code', 'c.name as carrier_name', 'c.tracking_url_template', 's.tracking_number', 's.tracking_url', 's.shipped_at', 's.delivered_at'])
+      .where('s.order_id', '=', o.id).executeTakeFirst(),
+    db.selectFrom('invoices').select(['invoice_number', 'issued_at']).where('order_id', '=', o.id).where('status', '=', 'issued').orderBy('issued_at', 'desc').executeTakeFirst(),
+    o.location_id ? db.selectFrom('locations').select('name').where('id', '=', o.location_id).executeTakeFirst() : null,
   ]);
+  const events = shipment ? await db.selectFrom('shipment_events').select(['status', 'note', 'created_at']).where('shipment_id', '=', shipment.id).orderBy('created_at').execute() : [];
+  // The courier's link: the one staff recorded, else the courier's template with the tracking number.
+  const trackingUrl = shipment ? (shipment.tracking_url ?? (shipment.tracking_number && shipment.tracking_url_template?.includes('{tracking}')
+    ? shipment.tracking_url_template.replace('{tracking}', encodeURIComponent(shipment.tracking_number)) : null)) : null;
   const a = (o.shipping_address ?? {}) as Record<string, unknown>;
   const c = (o.contact ?? {}) as Record<string, unknown>;
   const actions = customerOrderActions(o, true);
@@ -198,6 +217,39 @@ export async function getCustomerOrder(db: Db, p: CustomerPrincipal, orderNumber
     shipping: { name: text(a.name ?? a.full_name), phone: text(a.phone), line1: text(a.line1), line2: text(a.line2), city: text(a.city), state: text(a.state), pin: text(a.pin), country: text(a.country) },
     history: history.map(h => ({ status: h.to_status, at: h.created_at as Date })),
     paymentMethod: o.payment_method, codStatus: o.cod_status, codFeePaise: o.cod_fee_paise, pointsUsed: o.loyalty_points_used, pointsDiscountPaise: o.loyalty_discount_paise,
+    channel: o.channel, branch: branch?.name ?? null,
+    staffDiscount: o.staff_discount_paise > 0 ? { amountPaise: o.staff_discount_paise, reason: o.staff_discount_reason } : null,
+    shipment: shipment ? { status: shipment.status, packingState: shipment.packing_state, carrier: shipment.carrier_name ?? (shipment.carrier_code === 'manual' ? null : shipment.carrier_code),
+      trackingNumber: shipment.tracking_number, trackingUrl: trackingUrl && /^https?:\/\//.test(trackingUrl) ? trackingUrl : null,
+      shippedAt: shipment.shipped_at as Date | null, deliveredAt: shipment.delivered_at as Date | null,
+      events: events.map(e => ({ status: e.status, note: e.note, at: e.created_at as Date })) } : null,
+    ...pricingView(o.pricing),
+    invoice: invoice?.invoice_number ? { number: invoice.invoice_number, issuedAt: invoice.issued_at as Date } : null,
     billing: o.billing_address ? (b => ({ name: text(b.name), line1: text(b.line1), line2: text(b.line2), city: text(b.city), state: text(b.state), pin: text(b.pin) }))(o.billing_address as Record<string, unknown>) : null,
   };
+}
+
+/** The issued tax invoice of one of the customer's orders (2026-10-01), for viewing and printing in the account.
+    NotFoundError when the order is not theirs or has no issued invoice. */
+export async function getCustomerInvoice(db: Db, p: CustomerPrincipal, orderNumber: string) {
+  const o = await getCustomerOrder(db, p, orderNumber);           // ownership: another customer's order does not exist
+  const inv = await db.selectFrom('invoices as i').innerJoin('orders as o', 'o.id', 'i.order_id')
+    .select(['i.id', 'i.invoice_number', 'i.issued_at', 'i.subtotal_paise', 'i.discount_paise', 'i.shipping_paise', 'i.tax_paise', 'i.total_paise', 'i.prices_include_tax',
+      'i.place_of_supply', 'i.tax_split', 'i.billing_address', 'i.shipping_address', 'i.seller_details', 'o.payment_method', 'o.payment_status', 'o.status as order_status',
+      'o.cod_fee_paise', 'o.created_at as order_date'])
+    .where('o.order_number', '=', orderNumber).where('i.status', '=', 'issued').orderBy('i.issued_at', 'desc').executeTakeFirst();
+  if (!inv || !inv.invoice_number) throw new NotFoundError('No invoice has been issued for this order yet.');
+  const items = await db.selectFrom('invoice_items').select(['description', 'sku', 'hsn_code', 'qty', 'unit_price_paise', 'tax_rate_bp', 'tax_paise', 'line_total_paise'])
+    .where('invoice_id', '=', inv.id).orderBy('position').execute();
+  return { order: o, invoice: inv, items };
+}
+
+/** The discount lines and delivery option kept in orders.pricing when the order was created. */
+export function pricingView(pricing: unknown): Pick<CustomerOrderDetail, 'discounts' | 'delivery'> {
+  const p = (pricing ?? {}) as { discounts?: { code?: string; label?: string; amountPaise?: number }[]; shipping?: { label?: string; estimate?: string | null; method?: string; configured?: boolean; pickup?: boolean } };
+  const discounts = (Array.isArray(p.discounts) ? p.discounts : []).filter(d => typeof d?.label === 'string' && Number(d.amountPaise) > 0)
+    .map(d => ({ code: String(d.code ?? ''), label: d.label!, amountPaise: Number(d.amountPaise) }));
+  const sh = p.shipping;
+  const delivery = sh && sh.configured !== false && sh.method !== 'none' && typeof sh.label === 'string' ? { label: sh.label, estimate: sh.estimate ?? null, pickup: !!sh.pickup } : null;
+  return { discounts, delivery };
 }

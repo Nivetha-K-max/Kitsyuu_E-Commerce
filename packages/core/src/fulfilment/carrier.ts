@@ -12,7 +12,12 @@ export interface CarrierProvider {
   readonly label: string;
   /** A public tracking page for a tracking number, when the carrier has one. */
   trackingUrl(trackingNumber: string): string | null;
+  /** 2026-10-01: a courier API that reports tracking implements this (no courier is connected yet). Returns the latest
+      status of a parcel, or null when the courier has nothing new. Used by syncShipmentTracking (tracking-sync.ts). */
+  track?(trackingNumber: string): Promise<TrackingUpdate | null>;
 }
+/** What a courier reports for a parcel (mapped onto the shipment statuses). */
+export interface TrackingUpdate { status: 'in_transit' | 'delivered' | 'failed_delivery'; at: Date; note?: string | null }
 
 export const manualCarrier: CarrierProvider = { code: 'manual', label: 'Manual courier', trackingUrl: () => null };
 

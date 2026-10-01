@@ -30,12 +30,13 @@ function ZoneFields({ z }: { z?: Zone }) {
   );
 }
 
-function RateFields({ zoneId, r }: { zoneId: string; r?: Rate }) {
+function RateFields({ zoneId, r, locs }: { zoneId: string; r?: Rate; locs: { id: string; name: string }[] }) {
   return (
     <>
       <Hidden name="zoneId" value={zoneId} />{r && <Hidden name="rateId" value={r.id} />}
       <div className="cols">
-        <Field name="name" label="Name" defaultValue={r?.name ?? ''} required hint="Shown at checkout, e.g. Standard." />
+        <Field name="name" label="Name" defaultValue={r?.name ?? ''} required hint="Shown at checkout, e.g. Standard, Express, Same day." />
+        <Field name="description" label="Description (optional)" defaultValue={r?.description ?? ''} hint="Shown under the option at checkout." />
         <Field name="amount" label="Charge (₹)" defaultValue={rupeesField(r?.amount_paise ?? null)} required hint="0 for free delivery." />
         <Field name="freeFrom" label="Free from (₹)" defaultValue={rupeesField(r?.free_from_paise)} />
         <Field name="minOrder" label="Only for orders from (₹)" defaultValue={rupeesField(r?.min_order_paise)} />
@@ -44,6 +45,9 @@ function RateFields({ zoneId, r }: { zoneId: string; r?: Rate }) {
         <Field name="estMax" label="Delivery days to" defaultValue={r?.est_days_max?.toString() ?? ''} />
         <Field name="codFee" label="COD fee (₹)" defaultValue={rupeesField(r?.cod_fee_paise)} hint="Charged when the customer pays cash on delivery (Settings → Payments → Cash on delivery). Leave empty for no fee." />
       </div>
+      {/* 2026-10-01: store pickup — the customer collects the order from this location (no delivery). */}
+      {locs.length > 0 && <Select name="pickupLocationId" label="Store pickup at (optional)" defaultValue={r?.pickup_location_id ?? ''}
+        options={[{ value: '', label: 'No: this is a delivery' }, ...locs.map(l => ({ value: l.id, label: l.name }))]} hint="Choose a location to make this option store pickup there." />}
       <Checkbox name="codAllowed" label="Cash on delivery allowed in this zone" defaultChecked={r?.cod_allowed ?? false} />
       <Checkbox name="active" label="Active" defaultChecked={r?.is_active ?? true} />
     </>
@@ -56,6 +60,7 @@ export default async function ZonesPage() {
   const actor = await requireActor();
   if (!can(actor, 'shipping.read')) return <><PageHead title="Shipping" /><Forbidden permission="shipping.read" /></>;
   const { method, zones } = await listShippingZones(db(), actor);
+  const locs = await db().selectFrom('locations').select(['id', 'name']).where('is_active', '=', true).orderBy('sort_order').orderBy('name').execute();
   const manage = can(actor, 'shipping.manage');
   const methodText = method === 'zones' ? 'Checkout uses these zone rates.' : method === 'flat' ? 'Checkout uses the flat rate from Settings; these rates are not used.' : 'Delivery charges are not set up (Settings → Shipping); these rates are not used.';
   return (
@@ -78,7 +83,7 @@ export default async function ZonesPage() {
                   <td>{r.cod_allowed ? `yes${r.cod_fee_paise ? ` (+${formatPaise(r.cod_fee_paise)})` : ''}` : 'no'}</td>
                   {manage && <td><div className="actions row-actions">
                     <details className="row-edit"><summary className="btn ghost sm">Edit</summary>
-                      <ActionForm action={saveRateAction} submitLabel="Save" className="form compact row-edit-form" id={`rate-${r.id}`} label="Edit rate"><RateFields zoneId={z.id} r={r} /></ActionForm></details>
+                      <ActionForm action={saveRateAction} submitLabel="Save" className="form compact row-edit-form" id={`rate-${r.id}`} label="Edit rate"><RateFields zoneId={z.id} r={r} locs={locs} /></ActionForm></details>
                     <ActionForm action={deleteRateAction} submitLabel="Delete" variant="danger" className="inline-form" id={`rate-del-${r.id}`} label="Delete rate" confirmText={`Delete the rate "${r.name}"?`}>
                       <Hidden name="rateId" value={r.id} /></ActionForm>
                   </div></td>}
@@ -88,7 +93,7 @@ export default async function ZonesPage() {
           )}
           {manage && <div className="actions">
             <details className="row-edit"><summary className="btn ghost sm">Add a rate</summary>
-              <ActionForm action={saveRateAction} submitLabel="Add rate" className="form compact row-edit-form" id={`rate-new-${z.id}`} label="Add rate" resetOnSuccess><RateFields zoneId={z.id} /></ActionForm></details>
+              <ActionForm action={saveRateAction} submitLabel="Add rate" className="form compact row-edit-form" id={`rate-new-${z.id}`} label="Add rate" resetOnSuccess><RateFields zoneId={z.id} locs={locs} /></ActionForm></details>
             <details className="row-edit"><summary className="btn ghost sm">Edit zone</summary>
               <ActionForm action={saveZoneAction} submitLabel="Save zone" className="form compact row-edit-form" id={`zone-${z.id}`} label="Edit zone"><ZoneFields z={z} /></ActionForm></details>
           </div>}

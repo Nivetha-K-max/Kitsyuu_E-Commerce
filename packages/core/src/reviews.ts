@@ -36,17 +36,22 @@ export async function reviewEligibility(q: Queryable): Promise<ReviewEligibility
 export async function customerReviewState(db: Db, p: CustomerPrincipal) {
   const eligibility = await reviewEligibility(db);
   const reviews = await db.selectFrom('reviews as r').innerJoin('products as pr', 'pr.id', 'r.product_id')
-    .select(['r.id', 'r.order_item_id', 'r.product_id', 'pr.name as product_name', 'r.rating', 'r.title', 'r.status', 'r.created_at'])
+    .select(['r.id', 'r.order_item_id', 'r.product_id', 'pr.name as product_name', 'r.rating', 'r.title', 'r.status', 'r.created_at', 'r.variant_label', 'r.moderation_note'])
     .where('r.customer_id', '=', p.customerId).orderBy('r.created_at', 'desc').execute();
+  // 2026-10-01: one review per product (a rejected one can be written again), so a product already reviewed is not offered.
+  const reviewedProducts = new Set(reviews.filter(r => r.status !== 'rejected').map(r => r.product_id));
   const reviewable = eligibility
     ? await db.selectFrom('order_items as i').innerJoin('orders as o', 'o.id', 'i.order_id')
-        .select(['i.id', 'i.product_id', 'i.name', 'i.size', 'o.order_number', 'o.created_at'])
+        .select(['i.id', 'i.product_id', 'i.name', 'i.size', 'i.colour', 'o.order_number', 'o.created_at'])
         .where('o.customer_id', '=', p.customerId).where('o.status', 'in', [...ELIGIBLE_STATUSES[eligibility]])
         .where('i.product_id', 'is not', null)
         .where('i.id', 'not in', db.selectFrom('reviews').select('order_item_id').where('customer_id', '=', p.customerId))
         .orderBy('o.created_at', 'desc').execute()
     : [];
-  return { eligibility, reviews, reviewable };
+  // The latest purchase of each product not reviewed yet.
+  const seen = new Set<string>();
+  const reviewableByProduct = reviewable.filter(i => !reviewedProducts.has(i.product_id!) && !seen.has(i.product_id!) && !!seen.add(i.product_id!));
+  return { eligibility, reviews: reviews.map(r => ({ ...r, moderation_note: r.status === 'rejected' ? r.moderation_note : null })), reviewable: reviewableByProduct };
 }
 
 export type ReviewPhotoUpload = { bytes: Buffer };
@@ -75,7 +80,7 @@ export async function submitReview(db: Db, p: CustomerPrincipal, input: SubmitRe
   const eligibility = await reviewEligibility(db);
   if (!eligibility) throw new ForbiddenError('Reviews are not open yet.');
   const created = await db.transaction().execute(async tx => {
-    const line = await tx.selectFrom('order_items').select(['id', 'product_id', 'order_id']).where('id', '=', input.orderItemId).executeTakeFirst();
+    const line = await tx.selectFrom('order_items').select(['id', 'product_id', 'order_id', 'size', 'colour']).where('id', '=', input.orderItemId).executeTakeFirst();
     // Lock the order row (its status decides eligibility). The website role may not lock order_items, and the unique
     // order_item_id constraint already stops a second review of the same line.
     const order = line && await tx.selectFrom('orders').select(['customer_id', 'status']).where('id', '=', line.order_id).forUpdate().executeTakeFirst();
@@ -85,8 +90,12 @@ export async function submitReview(db: Db, p: CustomerPrincipal, input: SubmitRe
     if (!ELIGIBLE_STATUSES[eligibility].includes(item.status))
       throw new ConflictError(eligibility === 'delivered' ? 'You can review this item once it has been delivered.' : 'You can review this item once it has been paid.');
     if (await tx.selectFrom('reviews').select('id').where('order_item_id', '=', item.id).executeTakeFirst()) throw new ConflictError('You have already reviewed this purchase.');
+    // One review per product and customer (2026-10-01); a rejected review can be written again.
+    if (await tx.selectFrom('reviews').select('id').where('customer_id', '=', p.customerId).where('product_id', '=', item.product_id).where('status', '!=', 'rejected').executeTakeFirst())
+      throw new ConflictError('You have already reviewed this product.');
     const r = await tx.insertInto('reviews').values({ product_id: item.product_id, customer_id: p.customerId, order_item_id: item.id, rating: input.rating,
-      title: input.title, body: input.body, display_name: input.displayName }).returning('id').executeTakeFirstOrThrow();
+      title: input.title, body: input.body, display_name: input.displayName,
+      variant_label: [line!.colour, line!.size].filter(Boolean).join(' / ') || null }).returning('id').executeTakeFirstOrThrow();
     for (const [position, ph] of processed.entries())
       await tx.insertInto('review_photos').values({ review_id: r.id, position, width: ph.width, height: ph.height, bytes: ph.data }).execute();
     await recordAudit(tx, { actorType: 'customer', customerId: p.customerId, action: 'review.submit', entityType: 'reviews', entityId: r.id,
@@ -101,10 +110,10 @@ export async function submitReview(db: Db, p: CustomerPrincipal, input: SubmitRe
 // ---------------------------------------------------------------- public (store)
 /** Approved reviews of one product, newest first, with photo ids (photos are fetched separately). */
 export async function approvedReviews(db: Db, productId: string, limit = 50) {
-  const rows = await db.selectFrom('reviews').select(['id', 'rating', 'title', 'body', 'display_name', 'created_at'])
+  const rows = await db.selectFrom('reviews').select(['id', 'rating', 'title', 'body', 'display_name', 'created_at', 'variant_label'])
     .where('product_id', '=', productId).where('status', '=', 'approved').orderBy('created_at', 'desc').limit(limit).execute();
   const photos = rows.length ? await db.selectFrom('review_photos').select(['id', 'review_id', 'width', 'height']).where('review_id', 'in', rows.map(r => r.id)).orderBy('position').execute() : [];
-  return rows.map(r => ({ id: r.id, rating: r.rating, title: r.title, body: r.body, displayName: r.display_name, createdAt: r.created_at as Date,
+  return rows.map(r => ({ id: r.id, rating: r.rating, title: r.title, body: r.body, displayName: r.display_name, createdAt: r.created_at as Date, variant: r.variant_label,
     photos: photos.filter(x => x.review_id === r.id).map(x => ({ id: x.id, width: x.width, height: x.height })) }));
 }
 

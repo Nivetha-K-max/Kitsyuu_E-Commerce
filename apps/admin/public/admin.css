@@ -1100,3 +1100,18 @@ td .btn.danger:hover{background:var(--danger-soft);color:var(--danger);border-co
 .col-card dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:10px 0 14px}
 .col-card dt{color:var(--muted)}
 .col-card dd{margin:0;font-weight:600}
+
+/* Customer list: more filters (2026-10-01). */
+.more-filters{flex-basis:100%}
+.more-filters>summary{cursor:pointer;font-size:13px;color:var(--muted);padding:4px 0}
+.more-filters [data-more-filters]{margin-top:8px}
+.inline-label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+
+/* 2026-10-01: choosing several products (vendors supply finished products) */
+.product-picker .picker-list { max-height: 18rem; overflow: auto; border: 1px solid var(--border-strong); border-radius: 8px; padding: .4rem .6rem; margin-top: .5rem; min-width: min(28rem, 80vw); }
+.product-picker .picker-list li { padding: .15rem 0; }
+
+/* New product: the sizes table spans the whole form (2026-10-01). */
+.cols-form>.span-2{grid-column:1/-1}
+/* Phones (2026-10-01): a segmented tab whose label is longer than the screen wraps instead of pushing the page sideways. */
+@media(max-width:600px){.tabs{max-width:100%}.tabs .btn{height:auto;min-height:28px;padding:4px 10px;white-space:normal;text-align:left}}

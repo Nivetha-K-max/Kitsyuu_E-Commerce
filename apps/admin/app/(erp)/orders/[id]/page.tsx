@@ -3,12 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, paiseToRupees, uuid } from '@kitsyuu/contracts';
-import { getOrder, listOrderEdits, orderCodState, orderEditOptions } from '@kitsyuu/core';
+import { getOrder, listOrderEdits, orderCodState, orderEditOptions, orderEmails, orderOrigin, pricingView, settingsShipping } from '@kitsyuu/core';
 import { INDIAN_STATES } from '@kitsyuu/contracts';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import OrderStatusForm from '@/components/OrderStatusForm';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
-import { formatDateTime, STATUS_LABEL } from '@/lib/format';
+import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 import { codCancelAction, codCollectAction, editOrderAction, refundOrderEditAction, setPackingStateAction, updateOrderStatusAction, updateShipmentTrackingAction } from '../actions';
 import { refundProvider } from '@/lib/payments';
@@ -25,7 +25,8 @@ const CANCELLED_MONEY: Record<string, [string, string]> = {
   cancelled_paid_refund_recorded: ['Cancelled · paid, manual refund recorded', 'Money was received after cancellation; a manual refund has been recorded.'],
 };
 const COD_LABEL: Record<string, string> = { to_collect: 'To collect on delivery', collected: 'Collected', refused: 'Refused by the customer' };
-type EditSnap = { lines: { sku: string; name: string; size: string; qty: number }[]; address: Record<string, unknown> | null };
+type EditSnap = { lines: { sku: string; name: string; size: string; qty: number }[]; address: Record<string, unknown> | null;
+  contact?: { name?: string | null; email?: string | null; phone?: string | null }; delivery?: string | null; staffDiscountBp?: number | null };
 /** One line per change: sizes and quantities, removed lines, and a new address. */
 function describeEdit(b: EditSnap, a: EditSnap): string {
   const out: string[] = [];
@@ -34,6 +35,11 @@ function describeEdit(b: EditSnap, a: EditSnap): string {
     if (!n) out.push(`${l.name} (${l.size} × ${l.qty}) removed`);
     else if (n.size !== l.size || n.qty !== l.qty) out.push(`${l.name}: ${l.size} × ${l.qty} → ${n.size} × ${n.qty}`);
   }
+  for (const n of a.lines) if (!b.lines.some(x => x.name === n.name)) out.push(`${n.name} (${n.size} × ${n.qty}) added`);
+  const who = (c?: EditSnap['contact']) => [c?.name, c?.email, c?.phone].filter(Boolean).join(', ');
+  if (a.contact && who(b.contact) !== who(a.contact)) out.push(`contact → ${who(a.contact)}`);
+  if (a.delivery !== undefined && a.delivery !== b.delivery) out.push(`delivery → ${a.delivery ?? '—'}`);
+  if (a.staffDiscountBp !== undefined && (a.staffDiscountBp ?? 0) !== (b.staffDiscountBp ?? 0)) out.push(a.staffDiscountBp ? `staff discount → ${a.staffDiscountBp / 100}%` : 'staff discount removed');
   const addr = (x: Record<string, unknown> | null) => [x?.line1, x?.city, x?.pin].filter(Boolean).join(', ');
   if (addr(b.address) !== addr(a.address)) out.push(`delivery address → ${addr(a.address)}`);
   return out.join(' · ') || 'No line changes';
@@ -51,8 +57,8 @@ export default async function OrderPage({ params }: { params: Params }) {
   const intact = d.integrity.linesMatchUnitPrices && d.integrity.linesMatchSubtotal && d.integrity.totalCoversSubtotal;
   const address = [d.shipping.name, d.shipping.line1, d.shipping.line2, [d.shipping.city, d.shipping.state, d.shipping.pin].filter(Boolean).join(', '), d.shipping.country].filter(Boolean);
   // Second pass: cash on delivery, order edits (before shipment) and their refunds.
-  const [cod, edits, editing] = await Promise.all([orderCodState(db(), o.id), listOrderEdits(db(), o.id),
-    can(actor, 'orders.edit') ? orderEditOptions(db(), actor, o.id) : Promise.resolve(null)]);
+  const [cod, edits, editing, origin, emails] = await Promise.all([orderCodState(db(), o.id), listOrderEdits(db(), o.id),
+    can(actor, 'orders.edit') ? orderEditOptions(db(), actor, o.id, { shipping: settingsShipping(() => db()) }) : Promise.resolve(null), orderOrigin(db(), actor, o.id), orderEmails(db(), o.id)]);
   const canCod = can(actor, 'orders.cod');
   const provider = refundProvider();
   // Print invoice (client change request): the issued invoice made from this order's own data (Finance). Without one, staff
@@ -71,6 +77,16 @@ export default async function OrderPage({ params }: { params: Params }) {
         {editing && !editing.blocker && <a className="btn ghost sm" href="#edit-h" data-link="edit-order">Edit order</a>}
         {issued && can(actor, 'finance.read') && <Link className="btn ghost sm" href={`/finance/invoices/${issued.id}`} data-link="print-invoice">Print invoice</Link>}
       </PageHead>
+      {/* 2026-10-01: online or offline (branch), created by staff from a draft, staff discount with its reason. */}
+      {origin && <p className="msg" data-order-origin={origin.channel}>
+        <b>{origin.channel === 'retail' ? `Offline · ${origin.branch}` : 'Online'}</b>{' · Payment: '}{({ online: 'online', cod: 'cash on delivery', cash: 'cash in store', card: 'card in store', upi: 'UPI in store' } as Record<string, string>)[origin.payment_method] ?? origin.payment_method}
+        {origin.created_by ? <> · Created by {origin.created_by}{origin.draft_id ? <> from draft <Link href={`/drafts/${origin.draft_id}`}>{origin.draft_number}</Link></> : null}</> : ' · Placed by the customer'}
+        {(() => { const pv = pricingView(origin.pricing); return <>{pv.delivery && <span data-order-delivery> · {pv.delivery.pickup ? 'Store pickup' : 'Delivery'}: {pv.delivery.label}{pv.delivery.estimate ? ` (${pv.delivery.estimate})` : ''}</span>}
+          {pv.discounts.length > 0 && <span data-order-discounts> · Discounts: {pv.discounts.map(d => `${d.label} −${formatPaise(d.amountPaise)}`).join('; ')}</span>}</>; })()}
+        {origin.staff_discount_paise > 0 && <span data-staff-discount> · Staff discount {origin.staff_discount_bp! / 100}% ({formatPaise(origin.staff_discount_paise)}) on {formatPaise(origin.subtotal_paise)}: “{origin.staff_discount_reason}”, by {origin.discount_by ?? '—'}</span>}
+      </p>}
+      {/* 2026-10-01: the customer emails of this order (sent / failed; none yet = pending or not applicable). */}
+      <p className="note" data-order-emails>Customer emails: {emails.length === 0 ? 'none sent yet' : emails.map(e => `${e.event.replace('.', ' ')} ${e.status === 'sent' ? 'sent' : 'FAILED'} ${formatDateTime(e.created_at as Date)}${e.error ? ` (${e.error})` : ''}`).join(' · ')}</p>
       {d.payment?.cancelled && <p className={`msg ${d.payment.cancelled.kind === 'cancelled_payment_exception' ? 'error' : 'ok'}`} data-cancelled-money={d.payment.cancelled.kind}>
         <b>{CANCELLED_MONEY[d.payment.cancelled.kind][0]}.</b> {CANCELLED_MONEY[d.payment.cancelled.kind][1]}</p>}
 
@@ -223,7 +239,7 @@ export default async function OrderPage({ params }: { params: Params }) {
           <h2 id="edit-h">Edit order</h2>
           {editing.blocker ? <p className="note" data-edit-blocked>{editing.blocker}</p> : (
             <>
-              <p className="note">Change sizes (only sizes at the same price) or quantities (0 removes a line), or the delivery address. Each line keeps the price the customer paid; discounts, delivery (for a new address) and tax are worked out again on the server.
+              <p className="note">Change sizes (only sizes at the same price) or quantities (0 removes a line), add a product, or change the delivery address, delivery option, contact details or staff discount. Each line keeps the price the customer paid; discounts, delivery (for a new address) and tax are worked out again on the server.
                 {o.paymentMethod === 'cod' ? ' The new total is what is collected on delivery.' : ' A lower total leaves a refund due; a higher total cannot be saved (an extra payment cannot be collected).'}</p>
               <ActionForm action={editOrderAction} submitLabel="Save changes" id="order-edit-form" label="Edit order" confirmText="Save these changes? Stock and the order total are updated now.">
                 <Hidden name="orderId" value={o.id} />
@@ -247,6 +263,24 @@ export default async function OrderPage({ params }: { params: Params }) {
                   <Field name="pin" label="PIN code" defaultValue={d.shipping.pin ?? ''} />
                 </div>
                 <p className="note">The address fields are used only when “Change the delivery address” is ticked.</p>
+                <fieldset className="fieldset" data-edit-extra><legend>More changes</legend>
+                  <div className="cols">
+                    {editing.addable.length > 0 && <Select name="addVariantId" label="Add a product (today's price)" options={[{ value: '', label: '—' }, ...editing.addable.map(v => ({ value: v.id, label: v.label }))]} />}
+                    <Field name="addQty" label="Quantity to add" defaultValue="1" />
+                    {editing.delivery.length > 1 && <Select name="deliveryRateId" label="Delivery option" defaultValue={editing.currentRate ?? ''}
+                      options={editing.delivery.map(x => ({ value: x.rateId, label: `${x.label} · ${rupees(x.amountPaise)}` }))} />}
+                  </div>
+                  <Checkbox name="changeContact" label="Change the contact details" />
+                  <div className="cols">
+                    <Field name="contactName" label="Contact name" defaultValue={d.contact.name ?? ''} />
+                    <Field name="contactEmail" label="Contact email" type="email" defaultValue={d.contact.email ?? ''} />
+                    <Field name="contactPhone" label="Contact mobile" defaultValue={d.contact.phone ?? ''} />
+                  </div>
+                  {can(actor, 'orders.discount') && <div className="cols">
+                    <Field name="staffDiscountPercent" label="Staff discount % (0 removes it)" hint="Empty: unchanged. Same maximum and minimum prices as draft orders." />
+                    <Field name="staffDiscountReason" label="Reason for the discount" />
+                  </div>}
+                </fieldset>
                 <TextArea name="note" label="Reason for the change" rows={2} required hint="Kept in the edit history, e.g. Customer asked by phone for size M." />
               </ActionForm>
             </>

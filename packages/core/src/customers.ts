@@ -14,9 +14,12 @@ const like = (q: string) => `%${q.replace(/[\\%_]/g, m => '\\' + m)}%`;
 
 export async function listCustomers(db: Db, actor: StaffPrincipal, query: CustomerListQuery) {
   requirePermission(actor, 'customers.read');
+  const points = sql<number>`coalesce((select la.balance from public.loyalty_accounts la where la.customer_id = s.customer_id), 0)::int`;
+  const hasOrder = (cond: ReturnType<typeof sql>) => sql<boolean>`exists (select 1 from public.orders o where o.customer_id = s.customer_id and o.status not in ('cancelled') and ${cond})`;
   let q = db.selectFrom('v_customer_summary as s').innerJoin('customers as c', 'c.id', 's.customer_id')
     .select(['s.customer_id', 's.email', 's.full_name', 's.status', 's.created_at', 's.last_login_at', 's.orders_count', 's.paid_orders_count',
-      's.lifetime_value_paise', 's.last_order_at', 'c.phone', 'c.email_verified_at']);
+      's.lifetime_value_paise', 's.last_order_at', 'c.phone', 'c.email_verified_at', points.as('points'),
+      sql<boolean>`exists (select 1 from public.newsletter_subscribers n where n.email = lower(s.email) and n.status = 'subscribed')`.as('subscribed')]);
   if (query.q) {
     const l = like(query.q);
     q = q.where(eb => eb.or([eb('s.email', 'ilike', l), eb('s.full_name', 'ilike', l), eb('c.phone', 'ilike', l)]));
@@ -26,13 +29,36 @@ export async function listCustomers(db: Db, actor: StaffPrincipal, query: Custom
   else if (query.verified === 'unverified') q = q.where('c.email_verified_at', 'is', null);
   if (query.orders === 'with') q = q.where('s.orders_count', '>', 0);
   else if (query.orders === 'without') q = q.where('s.orders_count', '=', 0);
-  const rows = await q.orderBy('s.created_at', 'desc').orderBy('s.customer_id').limit(CUSTOMER_PAGE_SIZE + 1).offset((query.page - 1) * CUSTOMER_PAGE_SIZE).execute();
+  // 2026-10-01 filters (all combine). "New" = joined in the last 30 days.
+  if (query.segment === 'new') q = q.where(sql<boolean>`s.created_at >= now() - interval '30 days'`);
+  else if (query.segment === 'existing') q = q.where(sql<boolean>`s.created_at < now() - interval '30 days'`);
+  if (query.channel === 'online') q = q.where(hasOrder(sql`o.channel = 'online'`));
+  else if (query.channel === 'offline') q = q.where(hasOrder(sql`o.channel = 'retail'`));
+  if (query.payment === 'cod') q = q.where(hasOrder(sql`o.payment_method = 'cod'`));
+  else if (query.payment === 'online') q = q.where(hasOrder(sql`o.payment_method = 'online'`));
+  if (query.minOrders !== undefined) q = q.where('s.orders_count', '>=', query.minOrders);
+  if (query.maxOrders !== undefined) q = q.where('s.orders_count', '<=', query.maxOrders);
+  if (query.minSpend !== undefined) q = q.where('s.lifetime_value_paise', '>=', query.minSpend * 100);
+  if (query.minPoints !== undefined) q = q.where(points, '>=', query.minPoints);
+  if (query.maxPoints !== undefined) q = q.where(points, '<=', query.maxPoints);
+  if (query.lastOrderFrom) q = q.where('s.last_order_at', '>=', new Date(query.lastOrderFrom + 'T00:00:00+05:30'));
+  if (query.lastOrderTo) q = q.where('s.last_order_at', '<', sql<Date>`(${query.lastOrderTo}::date + 1)::timestamp at time zone 'Asia/Kolkata'`);
+  if (query.joinedFrom) q = q.where('s.created_at', '>=', new Date(query.joinedFrom + 'T00:00:00+05:30'));
+  if (query.joinedTo) q = q.where('s.created_at', '<', sql<Date>`(${query.joinedTo}::date + 1)::timestamp at time zone 'Asia/Kolkata'`);
+  const subscribed = sql<boolean>`exists (select 1 from public.newsletter_subscribers n where n.email = lower(s.email) and n.status = 'subscribed')`;
+  if (query.subscribed === 'yes') q = q.where(subscribed);
+  else if (query.subscribed === 'no') q = q.where(sql<boolean>`not ${subscribed}`);
+  if (query.place) q = q.where(sql<boolean>`exists (select 1 from public.addresses a where a.customer_id = s.customer_id and (a.city ilike ${like(query.place)} or a.state ilike ${like(query.place)} or a.pin like ${query.place.replace(/[\\%_]/g, '') + '%'}))`);
+  const order = { newest: [sql`s.created_at desc`], spend: [sql`s.lifetime_value_paise desc`], orders: [sql`s.orders_count desc`],
+    last_order: [sql`s.last_order_at desc nulls last`], points: [sql`${points} desc`] }[query.sort];
+  const rows = await q.orderBy(order[0]).orderBy('s.customer_id').limit(CUSTOMER_PAGE_SIZE + 1).offset((query.page - 1) * CUSTOMER_PAGE_SIZE).execute();
   const totals = await db.selectFrom('customers').select([sql<number>`count(*)::int`.as('total'),
     sql<number>`(count(*) filter (where status = 'disabled'))::int`.as('disabled')]).executeTakeFirstOrThrow();
   return {
     rows: rows.slice(0, CUSTOMER_PAGE_SIZE).map(r => ({ id: r.customer_id, email: r.email, fullName: r.full_name, phone: r.phone, status: r.status,
       verified: !!r.email_verified_at, createdAt: r.created_at as Date, lastLoginAt: r.last_login_at as Date | null, ordersCount: r.orders_count,
-      paidOrdersCount: r.paid_orders_count, lifetimeValuePaise: Number(r.lifetime_value_paise), lastOrderAt: r.last_order_at as Date | null })),
+      paidOrdersCount: r.paid_orders_count, lifetimeValuePaise: Number(r.lifetime_value_paise), lastOrderAt: r.last_order_at as Date | null,
+      points: r.points, subscribed: r.subscribed })),
     hasNext: rows.length > CUSTOMER_PAGE_SIZE, totals,
   };
 }

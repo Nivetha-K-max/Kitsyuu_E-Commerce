@@ -199,7 +199,11 @@ try {
   ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable.split(',').filter(k => !k.startsWith('alerts.')).join() === ['carts.abandon_after_hours','checkout.abandoned_after_hours','checkout.cart_refresh_minutes','company.address','company.gstin','company.legal_name','company.phone','company.state','company.support_email','discounts.enabled','discounts.stacking','inventory.low_stock_threshold',
     'loyalty.earn_points_per_100','loyalty.earn_when','loyalty.enabled','loyalty.expiry_months','loyalty.max_redeem_points','loyalty.min_redeem_points','loyalty.point_value_paise',
     'notifications.abandoned_cart','notifications.abandoned_checkout','notifications.order_cancelled','notifications.order_delivered','notifications.order_shipped','notifications.refund_processed','notifications.return_status','notifications.support_reply',
-    'payments.cod_discount','payments.cod_enabled','payments.cod_max_order','payments.cod_min_order','pricing.max_sale_discount_percent','returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method'].join(), editable);   // ERP modules add business switches (all off) and staff alert switches
+    'payments.cod_discount','payments.cod_enabled','payments.cod_max_order','payments.cod_min_order','pricing.max_sale_discount_percent','returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method',
+    // commerce workflows (2026-10-01)
+    'discounts.staff_max_percent','emails.cart_reminder_intro','emails.cart_reminder_subject','notifications.abandoned_cart_auto','notifications.order_packed','notifications.payment_request',
+    'payments.cod_discount_min_order','payments.cod_discount_percent','payments.cod_discount_with_other',
+    ].sort().join(), editable);   // ERP modules add business switches (all off) and staff alert switches
   ok('settings: returns/refunds policy shown as none', /Returns and refunds[\s\S]*None/.test(await text('[data-policies]')));
   const L = '[data-setting="inventory.low_stock_threshold"] form';
   const [orig] = await q(`select value from settings where key = 'inventory.low_stock_threshold'`);

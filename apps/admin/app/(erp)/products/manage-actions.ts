@@ -22,6 +22,10 @@ export async function createProductAction(_: ActionState, form: FormData): Promi
   let productId = '';
   const r = await handle(createProductInput, form, async input => { productId = (await createProduct(db(), actor, input, await requestContext())).productId; return { ok: true }; });
   if (r.ok && productId) { refresh(); redirect(`/products/${productId}?notice=created`); }
+  // Name, slug, category, colour and the size rows are custom fields (components/NewProductFields.tsx) that show no error of
+  // their own: their messages are given in the form message instead.
+  const custom = ["name", "slug", "categoryId", "subcategoryId", "colourLabel", "sizes", "qtys", "form"].map(k => r.fieldErrors?.[k]).filter(Boolean);
+  if (!r.ok && custom.length) return { ...r, message: custom.join(" ") };
   return r;
 }
 

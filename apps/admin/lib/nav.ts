@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { href: '/transfers', label: 'Transfers', permission: 'inventory.read', group: 'Catalogue' },
   { href: '/stock-value', label: 'Stock value', permission: 'costs.read', group: 'Catalogue' },
   { href: '/orders', label: 'Orders', permission: 'orders.read', group: 'Commerce' },
+  { href: '/drafts', label: 'Draft orders', permission: 'orders.read', group: 'Commerce' },
   { href: '/customers', label: 'Customers', permission: 'customers.read', group: 'Commerce' },
   { href: '/payments', label: 'Payments', permission: 'billing.read', group: 'Commerce' },
   { href: '/reviews', label: 'Reviews', permission: 'reviews.read', group: 'Commerce' },

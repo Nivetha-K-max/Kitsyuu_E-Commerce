@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { getInvoice } from '@kitsyuu/core';
+import { getInvoice, pricingView } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import PrintButton from '@/components/PrintButton';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
@@ -27,6 +27,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const seller = (i.seller_details ?? {}) as Json;
   const bill = (i.billing_address ?? {}) as Json;
   const ship = (i.shipping_address ?? {}) as Json;
+  const pv = pricingView(i.pricing);
   const split = (i.tax_split ?? {}) as { type?: string; cgst?: number; sgst?: number; igst?: number; note?: string | null };
   // Second pass: the invoice total is the order total, which includes a cash-on-delivery fee when there is one.
   const codFee = i.total_paise - (i.subtotal_paise - i.discount_paise + i.shipping_paise + (i.prices_include_tax ? 0 : i.tax_paise));
@@ -64,8 +65,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </table></div>
         <table className="totals"><tbody>
           <tr><td>Subtotal</td><td className="num money">{formatPaise(i.subtotal_paise)}</td></tr>
-          {i.discount_paise > 0 && <tr><td>Discount</td><td className="num money">−{formatPaise(i.discount_paise)}</td></tr>}
-          <tr><td>Delivery</td><td className="num money">{formatPaise(i.shipping_paise)}</td></tr>
+          {i.discount_paise > 0 && (pv.discounts.length > 0
+            ? pv.discounts.map((d, n) => <tr key={n} data-invoice-discount={d.code}><td>{d.label}</td><td className="num money">−{formatPaise(d.amountPaise)}</td></tr>)
+            : <tr><td>Discount</td><td className="num money">−{formatPaise(i.discount_paise)}</td></tr>)}
+          <tr><td>{pv.delivery ? `${pv.delivery.pickup ? 'Store pickup' : 'Delivery'}: ${pv.delivery.label}` : 'Delivery'}</td><td className="num money">{formatPaise(i.shipping_paise)}</td></tr>
           {codFee > 0 && <tr><td>Cash on delivery fee</td><td className="num money">{formatPaise(codFee)}</td></tr>}
           {split.type === 'intra' && <><tr><td>CGST</td><td className="num money">{formatPaise(split.cgst ?? 0)}</td></tr><tr><td>SGST</td><td className="num money">{formatPaise(split.sgst ?? 0)}</td></tr></>}
           {split.type === 'inter' && <tr><td>IGST</td><td className="num money">{formatPaise(split.igst ?? 0)}</td></tr>}

@@ -256,6 +256,7 @@ async function swapPositions(_tx: Tx, ids: string[], id: string, direction: 'up'
     A product that cannot take the status (e.g. activating one without a size or image) is reported, not forced. */
 export async function bulkSetProductStatus(db: Db, actor: StaffPrincipal, input: BulkProductStatusInput, ctx: MutationContext) {
   requirePermission(actor, 'products.write');
+  if (input.status === 'active') requirePermission(actor, 'products.publish');   // product approval (2026-10-01): refused up front, not per product
   const done: string[] = [], failed: { productId: string; reason: string }[] = [];
   for (const productId of [...new Set(input.productIds)]) {
     try { await setProductStatus(db, actor, { productId, status: input.status }, ctx); done.push(productId); }

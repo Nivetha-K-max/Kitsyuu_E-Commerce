@@ -11,7 +11,7 @@ import { PriceForm, StockAdjustForm } from '@/components/CatalogueForms';
 import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction } from '../actions';
+import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction, setMinPriceAction } from '../actions';
 import { addColourVariantAction, setImageColourAction, setVariantColourAction } from '../colour-actions';
 import { addRelatedAction, addVariantAction, moveImageAction, moveRelatedAction, removeRelatedAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
@@ -24,7 +24,8 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 const STATUS_HELP: Record<string, string> = {
   active: 'Visible and purchasable in the store.',
-  draft: 'Hidden from the store (not ready yet).',
+  draft: 'Hidden from the store (not ready yet). When it is complete, submit it for approval.',
+  review: 'Submitted for approval: hidden from the store until an admin publishes it.',
   archived: 'Hidden from the store (retired). Nothing is deleted.',
 };
 
@@ -88,17 +89,28 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
             <p className="price-now" data-current-price>₹{paiseToRupees(p.price_paise)}</p>
             {write ? <PriceForm action={updatePriceAction} productId={p.id} currentPaise={p.price_paise} />
               : <p className="note" data-readonly="price">Changing the price needs the products.write permission.</p>}
+            {/* 2026-10-01: the floor for staff discounts on draft orders. */}
+            <p className="note" data-min-price>Minimum price after a staff discount: {p.min_price_paise ? `₹${paiseToRupees(p.min_price_paise)}` : 'none'}</p>
+            {write && (
+              <ActionForm action={setMinPriceAction} submitLabel="Save minimum price" variant="ghost" id="min-price-form" label="Minimum price">
+                <Hidden name="productId" value={p.id} />
+                <Field name="minPrice" label="Minimum price, ₹ (optional)" defaultValue={p.min_price_paise ? paiseToRupees(p.min_price_paise).replace(/,/g, '') : ''} hint="Staff discounts can never take this product below it. Empty: no minimum." />
+              </ActionForm>
+            )}
           </section>
 
           <section className="card" aria-labelledby="status-h" data-section="status">
             <SectionTitle id="status-h">Status</SectionTitle>
             <p className="note">{STATUS_HELP[p.status]}</p>
+            {(p.submitted_at || p.approved_at) && <p className="note" data-approval>{p.submitted_at ? `Submitted ${formatDateTime(p.submitted_at as Date)}${p.submitted_by ? ` by ${p.submitted_by}` : ''}. ` : ''}{p.approved_at ? `Published ${formatDateTime(p.approved_at as Date)}${p.approved_by ? ` by ${p.approved_by}` : ''}.` : ''}</p>}
             {write ? (
               <ActionForm action={setProductStatusAction} submitLabel="Save status" id="status-form" label="Product status"
                 confirmText={p.status === 'active' ? 'Deactivating hides this product from the store. Continue?' : undefined}>
                 <Hidden name="productId" value={p.id} />
                 <Select name="status" label="Status" defaultValue={p.status}
-                  options={[{ value: 'active', label: 'Active (in the store)' }, { value: 'draft', label: 'Draft (hidden)' }, { value: 'archived', label: 'Archived (hidden)' }]} />
+                  options={[...(can(actor, 'products.publish') || p.status === 'active' ? [{ value: 'active', label: 'Published (in the store)' }] : []), { value: 'review', label: 'Submitted for approval (hidden)' },
+                    { value: 'draft', label: 'Draft (hidden)' }, { value: 'archived', label: 'Archived (hidden)' }]} />
+                {!can(actor, 'products.publish') && <p className="note">Publishing in the store is done by an admin (products.publish).</p>}
               </ActionForm>
             ) : <p className="note" data-readonly="status">Changing the status needs the products.write permission.</p>}
           </section>

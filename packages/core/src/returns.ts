@@ -12,6 +12,7 @@
    provider says so; a refusal is recorded as failed and raised as an alert), or recorded by staff as paid outside the
    platform with its reference. A refund is never marked done without one of those. */
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
+import { adjustPointsForRefunds } from './loyalty.ts';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type CustomerPrincipal, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
 import type { PaymentProvider } from './payments/provider.ts';
@@ -306,6 +307,7 @@ export async function markPaymentRefunded(tx: Tx, orderId: string, paymentId: st
   const allProcessed = await tx.selectFrom('refunds').select(sql<number>`coalesce(sum(amount_paise), 0)::int`.as('n')).where('order_id', '=', orderId).where('status', '=', 'processed').executeTakeFirstOrThrow();
   const captured = all.reduce((n, x) => n + x.amount_paise, 0);
   await tx.updateTable('orders').set({ payment_status: allProcessed.n >= captured ? 'refunded' : 'partially_refunded' }).where('id', '=', orderId).execute();
+  await adjustPointsForRefunds(tx, orderId);          // 2026-10-01: points earned on the refunded part are taken back
 }
 
 /** Refunds a return: through the payment provider (when it can refund), or recorded as paid by staff outside the platform

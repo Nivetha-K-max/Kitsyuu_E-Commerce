@@ -19,7 +19,12 @@ const PORT = 3003, BASE = `http://localhost:${PORT}`;
 fs.mkdirSync(OUT, {recursive: true});
 if (!fs.existsSync(ENV_TEST)) { console.error('Missing database/.env.test.local (TEST_PG_ADMIN_URL). See database/README.md → Test database.'); process.exit(1); }
 
-const node = (args, env = {}) => spawnSync(process.execPath, args, {cwd: REPO, encoding: 'utf8', env: {...process.env, ...env}, timeout: 900000});
+/* ONLY=<name>: run only that browser suite (apps/admin/tests/<name>.mjs); the others are reported as skipped. */
+const node = (args, env = {}) => {
+  const suite = /^apps\/admin\/tests\/([a-z0-9-]+)\.mjs$/.exec(args[0] ?? '')?.[1];
+  if (process.env.ONLY && suite && suite !== process.env.ONLY) return {status: 0, stdout: '(skipped: ONLY=' + process.env.ONLY + ')', stderr: ''};
+  return spawnSync(process.execPath, args, {cwd: REPO, encoding: 'utf8', env: {...process.env, ...env}, timeout: 900000});
+};
 const readEnv = f => Object.fromEntries(fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^([A-Z0-9_]+)=(.*)$/)).filter(Boolean).map(m => [m[1], m[2]]));
 const step = (label, r) => { process.stdout.write(`\n== ${label}\n${(r.stdout || '').trim()}\n${(r.stderr || '').trim()}\n`.replace(/\n+$/, '\n')); return r.status === 0; };
 const createDb = () => step('create local test database', node(['--env-file=' + ENV_TEST, 'database/scripts/test-db.mjs', '--create']));
@@ -52,7 +57,8 @@ try {
   const coreDir = path.join(REPO, 'packages/core/test');
   const coreFiles = fs.readdirSync(coreDir).filter(f => f.endsWith('.test.mjs')).sort();
   if (!coreFiles.length) throw new Error('no core test files found');
-  for (const f of coreFiles) {
+  // SKIP_CORE=1: browser tests only (e.g. rerunning them after the core tests already passed).
+  for (const f of process.env.SKIP_CORE ? [] : coreFiles) {
     if (!createDb()) throw new Error('could not create the test database');
     const env = readEnv(path.join(OUT, 'test.env'));
     if (!(await dbCheck(`before ${f}`, env, {staff: 0}))) failed = true;
@@ -87,7 +93,14 @@ try {
       : f === 'operations-orders.test.mjs' ? {customers: 4, orders: 4, units: 1096, everySizeTen: false}
       // Third pass: 1 customer, 1 order in colours (bought, then edited to another colour); 1 colour size added; stock moved between
       // locations and back through the ledger (online stock and every location's stock must equal their ledger rows).
-      : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false} : {};
+      : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false}
+      // Commerce workflows: 4 customers; 3 orders (the one that won the last unit, a staff-created online order, an offline
+      // branch order); online stock moved by sales, corrections and restocks, all through the ledger (branch stock too).
+      : f === 'commerce-workflows.test.mjs' ? {customers: 4, orders: 3, units: 1087, everySizeTen: false}
+      // purchasing-products.test.mjs: 1 COD order (edited: +1 piece), goods received +12 through GRNs → 1100 − pieces sold + 12
+      : f === 'purchasing-products.test.mjs' ? {customers: 2, orders: 1, units: 1109, everySizeTen: false}
+      // new-product-sizes.test.mjs: one product created with sizes M (opening stock 3) and L (0), then shown.
+      : f === 'new-product-sizes.test.mjs' ? {products: 23, variants: 112, units: 1103, everySizeTen: false} : {};
     if (!(await dbCheck(`after ${f}`, env, expect))) failed = true;
   }
 
@@ -154,12 +167,20 @@ try {
     const erpFiles = Object.fromEntries(Object.entries(erpAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const erp = node(['apps/admin/tests/erp.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(erpFiles)});
     if (!step('ERP modules browser tests', erp)) failed = true;
+
+    // ---------- commerce workflows (2026-10-01): branch restock, draft orders (online + offline), staff discounts ----------
+    const wfAccounts = {root: ['wf.root@test.local', 'super_admin'], manager: ['wf.manager@test.local', 'manager'], sales: ['wf.sales@test.local', 'sales'], support: ['wf.support@test.local', 'support']};
+    const wfFiles = Object.fromEntries(Object.entries(wfAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const wf = node(['apps/admin/tests/workflows.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(wfFiles)});
+    if (!step('commerce workflow browser tests', wf)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
   // M8 browser tests move no stock (packing, shipping and delivery do not change stock; no order is cancelled).
   // ERP browser tests (client second pass) add 1 customer to give loyalty points to.
-  if (!(await dbCheck('after all browser tests', env, {orders: 8, customers: 3, units: 1100 - 11 + 3 + 6, products: 23, variants: 111, images: 23}))) failed = true;
+  // Commerce workflow browser tests: 2 orders (online from a draft: 3 units held from the online stock; offline at a branch:
+  // 2 units from the branch's own stock, which is not part of the online total); purchasing: 4 pieces received on a PO (+4).
+  if (!(await dbCheck('after all browser tests', env, {orders: 10, customers: 3, units: 1100 - 11 + 3 + 6 - 3 + 4, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;
 } finally {

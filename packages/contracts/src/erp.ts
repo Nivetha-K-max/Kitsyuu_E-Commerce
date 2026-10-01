@@ -138,6 +138,8 @@ export const shippingRateInput = z.object({
   rateId: optUuid, zoneId: uuid, name: reqText(1, 60, 'Enter a name, e.g. Standard.'),
   amount: money({ zero: true }), freeFrom: money({ optional: true }), minOrder: money({ optional: true, zero: true }), maxOrder: money({ optional: true }),
   codAllowed: checkbox, codFee: money({ optional: true, zero: true }), estMin: optInt(0, 60), estMax: optInt(0, 60), active: checkbox,
+  pickupLocationId: optUuid.transform(v => v ?? null),
+  description: z.string().trim().max(200).optional().transform(v => v || null),
 }).superRefine((v, ctx) => {
   if (v.minOrder !== null && v.maxOrder !== null && v.maxOrder <= v.minOrder) ctx.addIssue({ code: 'custom', path: ['maxOrder'], message: 'Must be above the minimum.' });
   if (v.estMin !== null && v.estMax !== null && v.estMax < v.estMin) ctx.addIssue({ code: 'custom', path: ['estMax'], message: 'Must be at least the minimum.' });
@@ -313,7 +315,8 @@ export const markNotificationsInput = z.object({
 }).superRefine((v, ctx) => { if (!v.all && !v.ids.length) ctx.addIssue({ code: 'custom', message: 'Nothing chosen.' }); });
 
 // ============================== client change request, first pass ==============================
-export const BULK_ACTIONS = ['publish', 'draft', 'archive', 'category', 'collection_add', 'collection_remove', 'attribute_add', 'attribute_remove', 'sale_percent', 'sale_clear'] as const;
+export const BULK_ACTIONS = ['publish', 'draft', 'archive', 'category', 'collection_add', 'collection_remove', 'attribute_add', 'attribute_remove', 'sale_percent', 'sale_clear',
+  'price_set', 'price_percent', 'vendor_add', 'vendor_remove'] as const;   // 2026-10-01: price and vendor too
 export const bulkEditInput = z.object({
   productIds: z.array(productId).min(1, 'Select at least one product.').max(200, 'Select at most 200 products.'),
   action: z.enum(BULK_ACTIONS, { message: 'Choose what to change.' }),
@@ -324,6 +327,7 @@ export const bulkEditInput = z.object({
   collectionIds: ids(z.string().trim().max(64), 50), attributeValues: ids(z.string().trim().max(130), 100),
   percent: z.string().trim().max(6).optional(),
   startsAt: dateTime(), endsAt: dateTime(),
+  price: money({ optional: true }), vendorId: optUuid,
 }).transform((v, ctx) => {
   const fail = (path: string, message: string) => { ctx.addIssue({ code: 'custom', path: [path], message }); return z.NEVER; };
   switch (v.action) {
@@ -348,10 +352,24 @@ export const bulkEditInput = z.object({
       if (v.startsAt && v.endsAt && v.endsAt <= v.startsAt) return fail('endsAt', 'The sale must end after it starts.');
       return { productIds: v.productIds, action: v.action, percent: pct, startsAt: v.startsAt, endsAt: v.endsAt } as const;
     }
-    default:
+    case 'price_set':
+      if (!v.price) return fail('price', 'Enter the new price.');
+      return { productIds: v.productIds, action: v.action, price: v.price } as const;
+    case 'price_percent': {
+      const pct = Number(v.percent);
+      if (!/^-?\d{1,3}(\.\d)?$/.test(v.percent ?? '') || pct === 0 || pct < -90 || pct > 300) return fail('percent', 'Enter a % change between -90 and 300, e.g. 10 or -5.');
+      return { productIds: v.productIds, action: v.action, percent: pct } as const;
+    }
+    case 'vendor_add': case 'vendor_remove':
+      if (!v.vendorId) return fail('vendorId', 'Choose a vendor.');
+      return { productIds: v.productIds, action: v.action, vendorId: v.vendorId } as const;
+    case 'publish': case 'draft': case 'archive': case 'sale_clear':
       return { productIds: v.productIds, action: v.action } as const;
   }
 });
+/** 2026-10-01: a bulk edit is saved as a draft change set first, then reviewed and applied. */
+export const bulkDraftNoteInput = z.object({ note: optText(500) });
+export const bulkDraftIdInput = z.object({ draftId: uuid });
 export const productSaleInput = z.object({
   productId, variantId: optUuid, salePrice: money({ optional: true }), startsAt: dateTime(), endsAt: dateTime(),
 }).superRefine((v, ctx) => { if (v.startsAt && v.endsAt && v.endsAt <= v.startsAt) ctx.addIssue({ code: 'custom', path: ['endsAt'], message: 'The sale must end after it starts.' }); });

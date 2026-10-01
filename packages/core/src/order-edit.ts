@@ -1,7 +1,9 @@
 /* Client change request, second pass: staff edit an order before it ships.
 
    What can change: each line's size (another size of the same product at the same price) and quantity (0 removes the
-   line; at least one line stays), and the delivery address. Nothing is added from outside the order.
+   line; at least one line stays), and the delivery address. 2026-10-01: also a product added (at today's price), the
+   delivery option, the customer's contact details (name / email / mobile) and the staff discount (orders.discount, same
+   maximum and minimum-price rules as a draft order; 0 removes it).
 
    When: an order paid online that is paid or processing, or a cash-on-delivery order that is processing with the cash
    still to collect. Not once it has shipped, has an issued invoice (void it first), or has a refund. The total the page
@@ -28,7 +30,9 @@ import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import type { DiscountLine, ShippingProvider, ShippingQuote } from './pricing.ts';
 import type { PaymentProvider } from './payments/provider.ts';
-import { codQuote } from './cod.ts';
+import { codQuote, readCodSettings } from './cod.ts';
+import { pricedLine, variantQuery } from './cart.ts';
+import { checkStaffDiscount } from './draft-orders.ts';
 import { markPaymentRefunded, refundable } from './returns.ts';
 import { raiseAlertSafely } from './alerts.ts';
 
@@ -43,6 +47,7 @@ export async function orderEditBlocker(q: Queryable, orderId: string): Promise<s
   const cod = o.payment_method === 'cod';
   if (cod ? !(o.status === 'processing' && o.cod_status === 'to_collect') : !(o.status === 'paid' || o.status === 'processing'))
     return o.status === 'pending_payment' || o.status === 'payment_failed' ? 'An order waiting for payment cannot be edited: the customer can cancel it and order again.'
+      : o.status === 'shipped' || o.status === 'delivered' ? 'This order has shipped, so it is locked. Use a return, exchange or refund instead (Returns).'
       : 'Only an order that has not shipped can be edited.';
   // (partially refunded: a refund made for an earlier edit)
   if (!cod && o.payment_status !== 'paid' && o.payment_status !== 'partially_refunded') return 'Only an order that has been paid can be edited.';
@@ -89,32 +94,63 @@ export async function editOrder(db: Db, actor: StaffPrincipal, input: OrderEditI
           throw new ConflictError(`Size ${to.size} of ${item.name} has a different price, so it cannot be swapped here.`);
         next.push({ item, variantId: to.id, sku: to.sku, size: to.size, colour: to.colour_slug ? (to.colour_label ?? to.colour_slug) : null, qty: l.qty });
       }
-      if (!next.length) throw new ConflictError('An order needs at least one item. To remove everything, cancel the order instead.');
-      if (new Set(next.map(n => n.variantId)).size !== next.length) throw new ConflictError('Two lines would be the same size. Change the quantity of one line instead.');
+      // Products added (2026-10-01): at today's price for the size, like a new order.
+      const added: ReturnType<typeof pricedLine>[] = [];
+      for (const a of input.add) {
+        const v = await variantQuery(tx).where('v.id', '=', a.variantId).executeTakeFirst();
+        if (!v || !v.is_active) throw new ConflictError('A size you added is not on sale.');
+        added.push(pricedLine(v, a.qty));
+      }
+      if (!next.length && !added.length) throw new ConflictError('An order needs at least one item. To remove everything, cancel the order instead.');
+      const allVariants = [...next.map(n => n.variantId), ...added.map(a => a.variantId)];
+      if (new Set(allVariants).size !== allVariants.length) throw new ConflictError('Two lines would be the same size. Change the quantity of one line instead.');
 
       const newAddress = input.address ? { name: input.address.fullName, phone: input.address.phone, line1: input.address.line1, line2: input.address.line2,
         city: input.address.city, state: input.address.state, pin: input.address.pin, country: 'IN' } : null;
-      const linesChanged = next.length !== items.length || next.some(n => n.variantId !== n.item.variant_id || n.qty !== n.item.qty);
-      if (!linesChanged && !newAddress) throw new DomainError('invalid', 'Nothing was changed.');
+      const linesChanged = added.length > 0 || next.length !== items.length || next.some(n => n.variantId !== n.item.variant_id || n.qty !== n.item.qty);
+      const oldContact = (o.contact ?? {}) as { name?: string | null; email?: string | null; phone?: string | null };
+      const newContact = input.contact && (input.contact.name !== (oldContact.name ?? null) || input.contact.email !== (oldContact.email ?? null) || input.contact.phone !== (oldContact.phone ?? null))
+        ? { ...oldContact, ...input.contact } : null;
+      const pricingNow = (o.pricing ?? {}) as Pricing;
+      const newRate = input.deliveryRateId && input.deliveryRateId !== (pricingNow.shipping?.rateId ?? null) ? input.deliveryRateId : null;
+      const discountChange = input.staffDiscount && input.staffDiscount.bp !== (o.staff_discount_bp ?? 0) ? input.staffDiscount : null;
+      if (!linesChanged && !newAddress && !newContact && !newRate && !discountChange) throw new DomainError('invalid', 'Nothing was changed.');
+      if (discountChange) requirePermission(actor, 'orders.discount');
 
       // ---- the new amounts
       const pricing = (o.pricing ?? {}) as Pricing;
-      const subtotal = next.reduce((n, x) => n + x.item.unit_price_paise * x.qty, 0);
+      const subtotal = next.reduce((n, x) => n + x.item.unit_price_paise * x.qty, 0) + added.reduce((n, a) => n + a.lineTotalPaise, 0);
       const oldDiscounts = pricing.discounts ?? [];
-      const discounts = oldDiscounts.map(d => d.code === 'LOYALTY' || d.code === 'COD' ? d
+      let discounts = oldDiscounts.map(d => d.code === 'LOYALTY' || d.code === 'COD' ? d
         : { ...d, amountPaise: Math.min(d.amountPaise, Math.floor(d.amountPaise * subtotal / Math.max(1, o.subtotal_paise))) });
+      // The staff discount set again (2026-10-01) on the new lines; 0 removes it.
+      let staffDiscount = discounts.find(d => d.code === 'STAFF')?.amountPaise ?? (o.staff_discount_paise ?? 0);
+      if (discountChange) {
+        discounts = discounts.filter(d => d.code !== 'STAFF');
+        staffDiscount = 0;
+        if (discountChange.bp > 0) {
+          const lines = [...next.map(n => ({ productId: n.item.product_id ?? '', name: n.item.name, size: n.size, colourLabel: n.colour, unitPaise: n.item.unit_price_paise, lineTotalPaise: n.item.unit_price_paise * n.qty })),
+            ...added];
+          staffDiscount = await checkStaffDiscount(tx, lines, discountChange.bp);
+          discounts.push({ code: 'STAFF', label: `Staff discount ${discountChange.bp / 100}%: ${discountChange.reason}`, amountPaise: staffDiscount });
+          // No stacking (payments.cod_discount_with_other): the COD discount goes when a staff discount is given.
+          if (!(await readCodSettings(tx)).withOtherDiscounts) discounts = discounts.filter(d => d.code !== 'COD');
+        }
+      }
       // Orders from before the discount snapshot existed: scale the order's discount the same way.
-      const discount = oldDiscounts.length ? discounts.reduce((n, d) => n + d.amountPaise, 0)
+      const discount = oldDiscounts.length || discountChange ? discounts.reduce((n, d) => n + d.amountPaise, 0)
         : Math.min(o.discount_paise, Math.floor(o.discount_paise * subtotal / Math.max(1, o.subtotal_paise)));
       if (discount > subtotal) throw new ConflictError('The points or cash-on-delivery discount on this order would be more than the items left. Cancel the order instead.');
 
       let shipping = o.shipping_paise, quote: ShippingQuote | null = null;
       const oldShip = (o.shipping_address ?? {}) as Record<string, unknown>;
-      if (newAddress) {
-        quote = await opts.shipping.quote({ lines: next.map(n => ({ productId: n.item.product_id ?? '', variantId: n.variantId, qty: n.qty, unitPaise: n.item.unit_price_paise,
-          lineTotalPaise: n.item.unit_price_paise * n.qty })), subtotalPaise: subtotal,
-          shipTo: { state: newAddress.state, pin: newAddress.pin, country: 'IN', deliveryRateId: pricing.shipping?.rateId ?? null } });
-        if (quote.unavailable) throw new ConflictError(`New address: ${quote.unavailable}`);
+      if (newAddress || newRate) {
+        const to = newAddress ?? { state: String(oldShip.state ?? ''), pin: String(oldShip.pin ?? '') };
+        quote = await opts.shipping.quote({ lines: [...next.map(n => ({ productId: n.item.product_id ?? '', variantId: n.variantId, qty: n.qty, unitPaise: n.item.unit_price_paise,
+          lineTotalPaise: n.item.unit_price_paise * n.qty })), ...added.map(a => ({ productId: a.productId, variantId: a.variantId, qty: a.qty, unitPaise: a.unitPaise, lineTotalPaise: a.lineTotalPaise }))],
+          subtotalPaise: subtotal, shipTo: { state: to.state, pin: to.pin, country: 'IN', deliveryRateId: newRate ?? pricing.shipping?.rateId ?? null } });
+        if (quote.unavailable) throw new ConflictError(newAddress ? `New address: ${quote.unavailable}` : quote.unavailable);
+        if (newRate && quote.rateId !== newRate) throw new ConflictError('That delivery option is not available for this order (its address or amount).');
         if (o.payment_method === 'cod' && !(await codQuote(tx, quote, subtotal - discount)).available)
           throw new ConflictError('Cash on delivery is not available at the new address.');
         shipping = quote.amountPaise;
@@ -130,7 +166,7 @@ export async function editOrder(db: Db, actor: StaffPrincipal, input: OrderEditI
 
       // ---- stock (fewer units back first, then more units taken; refused when a size does not have enough)
       const qtyBy = (list: { variantId: string | null; qty: number }[]) => list.reduce((m, x) => (x.variantId ? m.set(x.variantId, (m.get(x.variantId) ?? 0) + x.qty) : m), new Map<string, number>());
-      const before = qtyBy(items.map(i => ({ variantId: i.variant_id, qty: i.qty }))), after = qtyBy(next);
+      const before = qtyBy(items.map(i => ({ variantId: i.variant_id, qty: i.qty }))), after = qtyBy([...next, ...added]);
       const deltas = [...new Set([...before.keys(), ...after.keys()])].map(v => ({ variantId: v, delta: (after.get(v) ?? 0) - (before.get(v) ?? 0) })).filter(d => d.delta !== 0)
         .sort((a, b) => a.delta - b.delta || a.variantId.localeCompare(b.variantId));
       const stockNote = `Order ${o.order_number} edited`;
@@ -156,17 +192,26 @@ export async function editOrder(db: Db, actor: StaffPrincipal, input: OrderEditI
         if (n.variantId === n.item.variant_id && n.qty === n.item.qty) continue;
         await tx.updateTable('order_items').set({ variant_id: n.variantId, sku: n.sku, size: n.size, colour: n.colour, qty: n.qty, line_total_paise: n.item.unit_price_paise * n.qty }).where('id', '=', n.item.id).execute();
       }
+      if (added.length) await tx.insertInto('order_items').values(added.map(a => ({ order_id: o.id, product_id: a.productId, variant_id: a.variantId, sku: a.sku, name: a.name, size: a.size,
+        colour: a.colourLabel, image_path: a.imagePath, unit_price_paise: a.unitPaise, qty: a.qty, line_total_paise: a.lineTotalPaise }))).execute();
       const newPricing: Pricing = { ...pricing, discounts, ...(quote ? { shipping: quote } : {}) };
       // Amount columns are a snapshot everywhere else; this is the one place that changes them, audited below.
       await sql`update public.orders set subtotal_paise = ${subtotal}, discount_paise = ${discount}, shipping_paise = ${shipping}, tax_paise = ${tax},
         total_paise = ${total}, pricing = ${JSON.stringify(newPricing)}::jsonb
-        ${newAddress ? sql`, shipping_address = ${JSON.stringify(newAddress)}::jsonb` : sql``} where id = ${o.id}`.execute(tx);
+        ${newAddress ? sql`, shipping_address = ${JSON.stringify(newAddress)}::jsonb` : sql``}
+        ${newContact ? sql`, contact = ${JSON.stringify(newContact)}::jsonb` : sql``}
+        ${discountChange ? sql`, staff_discount_paise = ${staffDiscount}, staff_discount_bp = ${discountChange.bp || null}, staff_discount_reason = ${discountChange.bp ? discountChange.reason : null},
+          staff_discount_by = ${discountChange.bp ? actor.staffId : null}` : sql``} where id = ${o.id}`.execute(tx);
 
-      const snapshot = (lines: { sku: string; size: string; qty: number; unit: number; name: string }[], amounts: Record<string, number>, address: unknown) => ({ lines, amounts, address });
+      const snapshot = (lines: { sku: string; size: string; qty: number; unit: number; name: string }[], amounts: Record<string, number>, address: unknown,
+        extra: { contact: unknown; delivery: string | null; staffDiscountBp: number | null }) => ({ lines, amounts, address, ...extra });
       const beforeSnap = snapshot(items.map(i => ({ sku: i.sku, name: i.name, size: i.size, qty: i.qty, unit: i.unit_price_paise })),
-        { subtotal: o.subtotal_paise, discount: o.discount_paise, shipping: o.shipping_paise, tax: o.tax_paise, cod_fee: o.cod_fee_paise, total: o.total_paise }, oldShip);
-      const afterSnap = snapshot(next.map(n => ({ sku: n.sku, name: n.item.name, size: n.size, qty: n.qty, unit: n.item.unit_price_paise })),
-        { subtotal, discount, shipping, tax, cod_fee: o.cod_fee_paise, total }, newAddress ?? oldShip);
+        { subtotal: o.subtotal_paise, discount: o.discount_paise, shipping: o.shipping_paise, tax: o.tax_paise, cod_fee: o.cod_fee_paise, total: o.total_paise }, oldShip,
+        { contact: oldContact, delivery: pricing.shipping?.label ?? null, staffDiscountBp: o.staff_discount_bp ?? null });
+      const afterSnap = snapshot([...next.map(n => ({ sku: n.sku, name: n.item.name, size: n.size, qty: n.qty, unit: n.item.unit_price_paise })),
+        ...added.map(a => ({ sku: a.sku, name: a.name, size: a.size, qty: a.qty, unit: a.unitPaise }))],
+        { subtotal, discount, shipping, tax, cod_fee: o.cod_fee_paise, total }, newAddress ?? oldShip,
+        { contact: newContact ?? oldContact, delivery: (quote ?? pricing.shipping)?.label ?? null, staffDiscountBp: discountChange ? discountChange.bp || null : o.staff_discount_bp ?? null });
       const edit = await tx.insertInto('order_edits').values({ order_id: o.id, staff_id: actor.staffId, note: input.note, before: JSON.stringify(beforeSnap), after: JSON.stringify(afterSnap),
         total_before: o.total_paise, total_after: total, refund_due_paise: refundDue }).returning('id').executeTakeFirstOrThrow();
       await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'order.edit', entityType: 'orders', entityId: o.id,
@@ -251,15 +296,28 @@ export async function refundOrderEdit(db: Db, actor: StaffPrincipal, provider: P
 
 /** What the order page's edit form needs: why the order cannot be edited (or null), and for each line the sizes it can
     change to (active sizes of the same product at the same price). Needs orders.edit. */
-export async function orderEditOptions(db: Db, actor: StaffPrincipal, orderId: string) {
+export async function orderEditOptions(db: Db, actor: StaffPrincipal, orderId: string, opts: { shipping?: ShippingProvider } = {}) {
   requirePermission(actor, 'orders.edit');
   const blocker = await orderEditBlocker(db, orderId);
+  // 2026-10-01: sizes that can be added (active, in stock) and the delivery options for the order's address.
+  const addable = blocker ? [] : (await variantQuery(db).where('v.is_active', '=', true).where('v.stock_qty', '>', 0).orderBy('p.name').orderBy('v.colour_slug').orderBy('v.sort_order').execute())
+    .map(v => { const l = pricedLine(v, 1); return { id: v.variant_id, label: `${l.name} · ${l.colourLabel ? `${l.colourLabel} / ` : ''}${l.size} (${v.sku}) · ₹${(l.unitPaise / 100).toFixed(2)} · ${v.stock_qty} in stock` }; });
+  let delivery: { rateId: string; label: string; amountPaise: number }[] = [], currentRate: string | null = null;
+  if (!blocker && opts.shipping) {
+    const o = await db.selectFrom('orders').select(['subtotal_paise', 'shipping_address', 'pricing']).where('id', '=', orderId).executeTakeFirstOrThrow();
+    const a = (o.shipping_address ?? {}) as Record<string, unknown>, p = (o.pricing ?? {}) as Pricing;
+    currentRate = p.shipping?.rateId ?? null;
+    const lines = await db.selectFrom('order_items').select(['product_id', 'variant_id', 'qty', 'unit_price_paise', 'line_total_paise']).where('order_id', '=', orderId).execute();
+    const q = await opts.shipping.quote({ lines: lines.map(l => ({ productId: l.product_id ?? '', variantId: l.variant_id ?? '', qty: l.qty, unitPaise: l.unit_price_paise, lineTotalPaise: l.line_total_paise })),
+      subtotalPaise: o.subtotal_paise, shipTo: { state: String(a.state ?? ''), pin: String(a.pin ?? ''), country: 'IN', deliveryRateId: currentRate } }).catch(() => null);
+    delivery = (q?.options ?? []).map(x => ({ rateId: x.rateId, label: x.label, amountPaise: x.amountPaise }));
+  }
   const items = await db.selectFrom('order_items').select(['id', 'product_id', 'variant_id', 'name', 'size', 'sku', 'qty']).where('order_id', '=', orderId).orderBy('sku').execute();
   const productIds = [...new Set(items.map(i => i.product_id).filter((x): x is string => !!x))];
   const variants = productIds.length ? await db.selectFrom('product_variants').select(['id', 'product_id', 'size', 'sku', 'price_paise', 'is_active', 'stock_qty', 'sort_order', 'colour_slug', sql<string | null>`(select av.label from public.attribute_values av where av.attribute_id = 'colour' and av.slug = colour_slug)`.as('colour_label')])
     .where('product_id', 'in', productIds).orderBy('sort_order').execute() : [];
   return {
-    blocker,
+    blocker, addable, delivery, currentRate,
     items: items.map(i => {
       const now = variants.find(v => v.id === i.variant_id);
       const sizes = variants.filter(v => v.product_id === i.product_id && (v.id === i.variant_id || (v.is_active && (v.price_paise ?? null) === (now?.price_paise ?? null))))

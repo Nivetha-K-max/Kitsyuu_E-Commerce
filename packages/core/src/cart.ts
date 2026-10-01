@@ -28,7 +28,7 @@ const PROBLEM_TEXT: Record<LineProblem, (l: PricedLine) => string> = {
 };
 export const lineProblemText = (l: PricedLine) => (l.problem ? PROBLEM_TEXT[l.problem](l) : '');
 
-type VariantRow = {
+export type VariantRow = {
   variant_id: string; product_id: string; slug: string; size: string; sku: string; name: string; stock_qty: number; is_active: boolean;
   unit_paise: number; base_paise: number; image_path: string | null; colour_slug: string | null; colour_label: string | null;
 };
@@ -42,7 +42,8 @@ export const variantQuery = (q: Queryable) => q.selectFrom('product_variants as 
       order by (i.colour_slug is not distinct from v.colour_slug) desc, i.is_primary desc, i.sort_order limit 1)`.as('image_path')])
   .where('p.status', '=', 'active');           // the website role only sees active products anyway (RLS)
 
-function priced(v: VariantRow, qty: number): PricedLine {
+/** One cart line priced from its size row (shared with draft orders). */
+export function pricedLine(v: VariantRow, qty: number): PricedLine {
   const available = v.is_active ? Math.min(v.stock_qty, MAX_QTY_PER_LINE) : 0;
   const problem: LineProblem | null = !v.is_active ? 'unavailable' : v.stock_qty <= 0 ? 'out_of_stock' : qty > v.stock_qty ? 'insufficient_stock' : null;
   return { variantId: v.variant_id, productId: v.product_id, slug: v.slug, sku: v.sku, name: v.name, size: v.size, imagePath: v.image_path,
@@ -84,7 +85,7 @@ export async function priceCart(q: Queryable, cartId: string | null, opts: { con
   const byVariant = new Map(rows.map(r => [r.variant_id, r]));
   const gone = items.filter(i => !byVariant.has(i.variant_id));
   if (gone.length) await q.deleteFrom('cart_items').where('id', 'in', gone.map(i => i.id)).execute();
-  const lines = items.filter(i => byVariant.has(i.variant_id)).map(i => priced(byVariant.get(i.variant_id)!, i.qty));
+  const lines = items.filter(i => byVariant.has(i.variant_id)).map(i => pricedLine(byVariant.get(i.variant_id)!, i.qty));
   const totals = await priceOrder(q, lines.filter(l => !l.problem), { ...opts, cartId });
   return { lines, totals, canCheckout: lines.length > 0 && lines.every(l => !l.problem), removed: gone.length };
 }
@@ -169,9 +170,23 @@ export async function mergeGuestCart(db: Db, p: CustomerPrincipal, raw: unknown[
 /** Client change request: how often the store re-syncs a cart that has items with the server (current prices, sale prices,
     stock), from Settings → Checkout → "Cart refresh interval". The client asked for 30 minutes. A refresh never removes or
     reserves anything. */
-export const CART_REFRESH_DEFAULT_MINUTES = 30;
+export const CART_REFRESH_DEFAULT_MINUTES = 60;   // 2026-10-01: every 60 minutes (was 30); Settings → Checkout can change it
 export async function cartRefreshMinutes(q: Queryable): Promise<number> {
   const r = await q.selectFrom('settings').select('value').where('key', '=', 'checkout.cart_refresh_minutes').executeTakeFirst();
   const n = Number(r?.value);
   return Number.isInteger(n) && n >= 5 && n <= 1440 ? n : CART_REFRESH_DEFAULT_MINUTES;
+}
+
+/** A guest's browser cart checked against the stock now (2026-10-01): how many of each line can be bought (capped at the
+    per-line limit) and what is wrong, without storing anything. Only sizes of products on sale are known. */
+export async function checkCartAvailability(q: Queryable, lines: { productId: string; size: string; colour?: string | null; qty: number }[]) {
+  const wanted = lines.slice(0, MAX_LINES_PER_REQUEST * 5);
+  const ids = [...new Set(wanted.map(l => l.productId).filter(id => typeof id === 'string' && id.length <= 40))];
+  const rows = ids.length ? await variantQuery(q).where('v.product_id', 'in', ids).execute() : [];
+  return wanted.map(l => {
+    const v = rows.find(r => r.product_id === l.productId && r.size === l.size && (r.colour_slug ?? null) === (l.colour ?? null));
+    if (!v) return { productId: l.productId, size: l.size, colour: l.colour ?? null, available: 0, problem: 'unavailable' as LineProblem, message: 'This item is no longer available.' };
+    const p = pricedLine(v, Math.max(1, Math.trunc(Number(l.qty)) || 1));
+    return { productId: l.productId, size: l.size, colour: l.colour ?? null, available: p.available, problem: p.problem, message: p.problem ? lineProblemText(p) : null };
+  });
 }

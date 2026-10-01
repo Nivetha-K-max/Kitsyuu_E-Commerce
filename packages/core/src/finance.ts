@@ -181,7 +181,7 @@ export async function getInvoice(db: Db, actor: StaffPrincipal, invoiceId: strin
   const inv = await db.selectFrom('invoices as i').leftJoin('orders as o', 'o.id', 'i.order_id')
     .select(['i.id', 'i.invoice_number', 'i.status', 'i.issued_at', 'i.financial_year', 'i.subtotal_paise', 'i.discount_paise', 'i.shipping_paise', 'i.tax_paise', 'i.total_paise',
       'i.prices_include_tax', 'i.place_of_supply', 'i.tax_split', 'i.billing_address', 'i.shipping_address', 'i.seller_details', 'i.void_reason', 'i.voided_at', 'o.order_number', 'o.id as order_id',
-      'o.payment_method', 'o.payment_status', 'o.status as order_status', 'o.loyalty_points_used', 'o.loyalty_discount_paise', 'o.contact'])
+      'o.payment_method', 'o.payment_status', 'o.status as order_status', 'o.loyalty_points_used', 'o.loyalty_discount_paise', 'o.contact', 'o.pricing'])
     .where('i.id', '=', invoiceId).executeTakeFirst();
   if (!inv) throw new NotFoundError('Invoice not found.');
   const [items, notes] = await Promise.all([

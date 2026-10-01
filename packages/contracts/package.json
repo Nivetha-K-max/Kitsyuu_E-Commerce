@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Validation schemas, shared types and error classes for inputs and API contracts. The only shared package that browser code may import.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./constants": "./src/constants.ts"
   },
   "dependencies": {
     "zod": "^4.6.5"

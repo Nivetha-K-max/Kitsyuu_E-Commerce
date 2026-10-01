@@ -89,7 +89,7 @@ test('one vendor + several materials = ONE purchase order with its lines, prices
   assert.equal(po.totalPaise, 50 * 18000 + 100 * 1250 + 500 * 120, 'line totals add up (a line without a price counts as 0)');
   const e = po.order.expected_on;
   assert.deepEqual([po.order.vendor, po.order.vendor_email, po.order.status, `${e.getFullYear()}-${e.getMonth() + 1}-${e.getDate()}`], ['ABC Textiles', 'orders@abc.test', 'draft', '2026-10-15']);
-  assert.throws(() => purchaseOrderWithLinesInput.parse({...form, qtys: ['', '', '', '']}), /at least one material/);
+  assert.throws(() => purchaseOrderWithLinesInput.parse({...form, qtys: ['', '', '', '']}), /at least one product or material/);
   assert.throws(() => purchaseOrderWithLinesInput.parse({...form, qtys: ['-1', '', '', '']}), /above 0/);
   await q(`update materials set is_active = false where id = $1`, [mats[3].id]);
   await assert.rejects(createPurchaseOrderWithLines(admin, root, input, ctx), /Inactive material: Packaging Material/);

@@ -43,6 +43,7 @@ export default async function PrintPurchaseOrder({ params }: { params: Params })
           <dl className="slip-meta">
             <div><dt>Purchase order</dt><dd className="mono">{o.po_number}</dd></div>
             <div><dt>Date</dt><dd>{formatDateTime((o.ordered_at ?? o.created_at) as Date)}</dd></div>
+            <div><dt>Deliver to</dt><dd>{o.location}</dd></div>
             {o.expected_on && <div><dt>Expected delivery</dt><dd>{formatDay(o.expected_on)}</dd></div>}
             <div><dt>Status</dt><dd>{String(o.status).replace(/_/g, ' ')}</dd></div>
             {o.created_by && <div><dt>Created by</dt><dd>{o.created_by}</dd></div>}

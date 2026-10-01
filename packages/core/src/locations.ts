@@ -92,7 +92,8 @@ export async function getLocationStock(db: Db, actor: StaffPrincipal, input: { l
   const rows = await q.orderBy('p.sku').orderBy('v.colour_slug').orderBy('v.sort_order').execute();
   const movements = await db.selectFrom('inventory_movements as m').innerJoin('product_variants as v', 'v.id', 'm.variant_id').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('staff_users as st', 'st.id', 'm.staff_id').leftJoin('inventory_reasons as r', 'r.code', 'm.reason').leftJoin('stock_transfers as t', 't.id', 'm.transfer_id')
-    .select(['m.id', 'm.created_at', 'm.delta', 'm.reason', 'r.label as reason_label', 'm.balance_after', 'm.note', 'v.sku', 'st.email as staff_email', 't.number as transfer_number', 't.id as transfer_id'])
+    .select(['m.id', 'm.created_at', 'm.delta', 'm.reason', 'r.label as reason_label', 'm.balance_after', 'm.note', 'v.sku', 'st.email as staff_email', 't.number as transfer_number', 't.id as transfer_id',
+      'm.unit_cost_paise', 'm.order_id', 'p.name as product_name', sql<number>`(m.balance_after - m.delta)::int`.as('balance_before')])
     .where(eb => loc.is_online ? eb.or([eb('m.location_id', '=', loc.id), eb('m.location_id', 'is', null)]) : eb('m.location_id', '=', loc.id))
     .orderBy('m.created_at', 'desc').orderBy('m.id', 'desc').limit(50).execute();
   return { location: loc, rows, movements, units: rows.reduce((n, r) => n + r.qty, 0) };
@@ -101,9 +102,11 @@ export async function getLocationStock(db: Db, actor: StaffPrincipal, input: { l
 /** Staff change the stock of one size at one location (a delivery, damage, a correction, an in-store sale…). The online
     location goes through the store's own stock. expectedQty: refused if the quantity changed since the page was opened. */
 export async function adjustLocationStock(db: Db, actor: StaffPrincipal,
-  input: { locationId: string; variantId: string; delta: number; reason: string; note: string | null; expectedQty: number }, ctx: MutationContext) {
+  input: { locationId: string; variantId: string; delta: number; reason: string; note: string | null; expectedQty: number; unitCostPaise?: number | null }, ctx: MutationContext) {
   requirePermission(actor, 'inventory.adjust');
   if (!Number.isInteger(input.delta) || input.delta === 0) throw new DomainError('invalid', 'Enter a whole number other than 0.');
+  // Optional unit cost (2026-10-01): only for stock coming in (a restock / delivery), kept on its ledger row.
+  if (input.unitCostPaise != null && (input.delta < 0 || !Number.isInteger(input.unitCostPaise) || input.unitCostPaise < 0)) throw new DomainError('invalid', 'A unit cost can only be entered for stock coming in.');
   try {
     return await db.transaction().execute(async tx => {
       const reason = await tx.selectFrom('inventory_reasons').select(['code', 'is_system', 'is_active']).where('code', '=', input.reason).executeTakeFirst();
@@ -115,10 +118,11 @@ export async function adjustLocationStock(db: Db, actor: StaffPrincipal,
       if ((cur?.qty ?? 0) !== input.expectedQty) throw new ConflictError('The stock of this size changed since you opened the page. Reload and try again.');
       const r = await sql<{ movement_id: number; balance_after: number }>`select * from public.adjust_location_stock(${input.variantId}::uuid, ${loc.id}::uuid, ${input.delta}::int,
         ${input.reason}, ${actor.staffId}::uuid, ${input.note}::text, null)`.execute(tx);
+      if (input.unitCostPaise != null) await sql`select public.set_movement_unit_cost(${r.rows[0].movement_id}::bigint, ${input.unitCostPaise}::int)`.execute(tx);
       const v = await tx.selectFrom('product_variants').select(['sku']).where('id', '=', input.variantId).executeTakeFirstOrThrow();
       await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'inventory.location_adjust', entityType: 'product_variants', entityId: input.variantId,
         before: { qty: input.expectedQty }, after: { qty: r.rows[0].balance_after },
-        metadata: { location_id: loc.id, location: loc.name, sku: v.sku, delta: input.delta, reason: input.reason, note: input.note, movement_id: r.rows[0].movement_id } });
+        metadata: { location_id: loc.id, location: loc.name, sku: v.sku, delta: input.delta, reason: input.reason, note: input.note, movement_id: r.rows[0].movement_id, ...(input.unitCostPaise != null ? { unit_cost_paise: input.unitCostPaise } : {}) } });
       return { balance: r.rows[0].balance_after };
     });
   } catch (e) {

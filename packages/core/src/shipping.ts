@@ -42,6 +42,9 @@ export type ZoneRate = {
   zoneId: string; zoneName: string; states: string[]; pinPrefixes: string[]; zoneSort: number;
   rateId: string; name: string; amountPaise: number; freeFromPaise: number | null; minOrderPaise: number | null; maxOrderPaise: number | null;
   estMin: number | null; estMax: number | null; rateSort: number;
+  /** Store pickup at a location (2026-10-01), with its name. */
+  pickupAt?: string | null;
+  description?: string | null;
 };
 
 /** The zone for an address: the longest matching PIN prefix wins; otherwise a zone listing the state. Pure. */
@@ -68,22 +71,26 @@ export function quoteFromZoneRates(rates: ZoneRate[], subtotalPaise: number, shi
   const describe = (rate: ZoneRate) => {
     const estimate = rate.estMin !== null && rate.estMax !== null ? `${rate.estMin}–${rate.estMax} days` : rate.estMax !== null ? `up to ${rate.estMax} days` : null;
     const free = rate.freeFromPaise !== null && subtotalPaise >= rate.freeFromPaise;
-    return { rateId: rate.rateId, label: free ? `Free delivery (${rate.name})` : rate.name, amountPaise: free ? 0 : rate.amountPaise, estimate };
+    const description = rate.description ?? null;
+    if (rate.pickupAt) return { rateId: rate.rateId, label: `${rate.name} (${rate.pickupAt})`, amountPaise: free ? 0 : rate.amountPaise, estimate, pickup: true, description };
+    return { rateId: rate.rateId, label: free ? `Free delivery (${rate.name})` : rate.name, amountPaise: free ? 0 : rate.amountPaise, estimate, description };
   };
   const options = eligible.map(describe);
   // The customer's choice if it is one of the options for this address and order value; otherwise the first option.
-  const chosen = options.find(o => o.rateId === shipTo.deliveryRateId) ?? options[0];
-  return { amountPaise: chosen.amountPaise, method: 'zones', label: chosen.label, configured: true, estimate: chosen.estimate, options, rateId: chosen.rateId };
+  // Store pickup is never chosen for the customer (2026-10-01): the default is the first delivery option.
+  const chosen = options.find(o => o.rateId === shipTo.deliveryRateId) ?? options.find(o => !o.pickup) ?? options[0];
+  return { amountPaise: chosen.amountPaise, method: 'zones', label: chosen.label, configured: true, estimate: chosen.estimate, options, rateId: chosen.rateId,
+    ...(chosen.pickup ? { pickup: true } : {}) };
 }
 
 export async function activeZoneRates(q: Queryable): Promise<ZoneRate[]> {
-  const rows = await q.selectFrom('shipping_rates as r').innerJoin('shipping_zones as z', 'z.id', 'r.zone_id')
+  const rows = await q.selectFrom('shipping_rates as r').innerJoin('shipping_zones as z', 'z.id', 'r.zone_id').leftJoin('locations as l', 'l.id', 'r.pickup_location_id')
     .select(['z.id as zone_id', 'z.name as zone_name', 'z.states', 'z.pin_prefixes', 'z.sort_order as zone_sort', 'r.id as rate_id', 'r.name', 'r.amount_paise',
-      'r.free_from_paise', 'r.min_order_paise', 'r.max_order_paise', 'r.est_days_min', 'r.est_days_max', 'r.sort_order as rate_sort'])
+      'r.free_from_paise', 'r.min_order_paise', 'r.max_order_paise', 'r.est_days_min', 'r.est_days_max', 'r.sort_order as rate_sort', 'r.is_pickup', 'l.name as pickup_name', 'r.description'])
     .where('z.is_active', '=', true).where('r.is_active', '=', true).execute();
   return rows.map(r => ({ zoneId: r.zone_id, zoneName: r.zone_name, states: r.states, pinPrefixes: r.pin_prefixes, zoneSort: r.zone_sort, rateId: r.rate_id,
     name: r.name, amountPaise: r.amount_paise, freeFromPaise: r.free_from_paise, minOrderPaise: r.min_order_paise, maxOrderPaise: r.max_order_paise,
-    estMin: r.est_days_min, estMax: r.est_days_max, rateSort: r.rate_sort }));
+    estMin: r.est_days_min, estMax: r.est_days_max, rateSort: r.rate_sort, pickupAt: r.is_pickup ? r.pickup_name ?? 'our store' : null, description: r.description }));
 }
 
 export async function quoteFromZones(q: Queryable, subtotalPaise: number, shipTo: ShipTo | null): Promise<ShippingQuote> {

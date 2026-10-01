@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { can } from '@kitsyuu/auth';
-import { listVendors } from '@kitsyuu/core';
+import { listVendors, vendorProductLinks } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
+import ProductPicker from '@/components/ProductPicker';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
-import { saveVendorAction, setVendorActiveAction } from './actions';
+import { saveVendorAction, setVendorActiveAction, setVendorProductsAction } from './actions';
 
 export const metadata: Metadata = { title: 'Vendors' };
 type Vendor = Awaited<ReturnType<typeof listVendors>>[number];
@@ -26,22 +27,31 @@ function VendorFields({ v }: { v?: Vendor }) {
   );
 }
 
-/* M13: suppliers of fabric, trims and other materials. Vendors are never deleted (purchase orders refer to them). */
+/* M13: suppliers of fabric, trims and other materials; 2026-10-01: and of finished products (chosen several at once). Vendors are never deleted (purchase orders refer to them). */
 export default async function VendorsPage() {
   const actor = await requireActor();
   if (!can(actor, 'procurement.read')) return <><PageHead section="Supply" title="Vendors" /><Forbidden permission="procurement.read" /></>;
-  const vendors = await listVendors(db(), actor);
+  const [vendors, links] = await Promise.all([listVendors(db(), actor), vendorProductLinks(db(), actor)]);
+  const productName = new Map(links.products.map(p => [p.id, p.name]));
   const manage = can(actor, 'procurement.manage');
   return (
     <>
       <PageHead section="Supply" title="Vendors" eyebrow={`${vendors.filter(v => v.is_active).length} active · ${vendors.length} in total`} />
-      {vendors.length === 0 ? <Empty title="No vendors yet" kind="vendors">Add the suppliers you buy fabric, trims and other materials from.</Empty> : (
+      {vendors.length === 0 ? <Empty title="No vendors yet" kind="vendors">Add the suppliers you buy finished products, fabric, trims and other materials from.</Empty> : (
         <div className="table-wrap"><table data-vendors-table>
-          <thead><tr><th>Vendor</th><th>Contact</th><th className="num">Open orders</th><th>Status</th>{manage && <th>Actions</th>}</tr></thead>
+          <thead><tr><th>Vendor</th><th>Contact</th><th>Products supplied</th><th className="num">Open orders</th><th>Status</th>{manage && <th>Actions</th>}</tr></thead>
           <tbody>{vendors.map(v => (
             <tr key={v.id} data-vendor={v.name}>
               <td><b>{v.name}</b>{v.gstin && <div className="note mono">GSTIN {v.gstin}</div>}{v.address && <div className="note">{v.address}</div>}</td>
               <td>{v.contact ?? '—'}{v.email && <div className="note">{v.email}</div>}{v.phone && <div className="note">{v.phone}</div>}</td>
+              <td data-vendor-products>{(() => { const ids = links.byVendor.get(v.id) ?? []; const names = ids.map(id => productName.get(id)).filter(Boolean);
+                return <>{ids.length ? <><b>{ids.length}</b><div className="note">{names.slice(0, 3).join(', ')}{names.length > 3 ? ` +${names.length - 3} more` : ''}</div></> : <span className="note">None chosen</span>}
+                  {manage && <details className="row-edit"><summary className="btn ghost sm">Choose products</summary>
+                    <ActionForm action={setVendorProductsAction} submitLabel="Save products" className="form compact row-edit-form" id={`vendor-products-${v.id}`} label={`Products ${v.name} supplies`}>
+                      <Hidden name="vendorId" value={v.id} />
+                      <ProductPicker products={links.products} selected={ids} idPrefix={`vp-${v.id}`} />
+                    </ActionForm>
+                  </details>}</>; })()}</td>
               <td className="num">{v.open_orders}</td>
               <td><span className={`badge ${v.is_active ? 'active' : 'disabled'}`}>{v.is_active ? 'Active' : 'Inactive'}</span></td>
               {manage && <td><div className="actions row-actions">

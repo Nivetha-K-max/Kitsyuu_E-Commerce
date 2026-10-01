@@ -17,8 +17,10 @@ export interface ShippingQuote {
   unavailable?: string; estimate?: string | null;
   /** Client change request: the delivery options the customer can choose from (e.g. Standard, Express) and which one applies. */
   options?: DeliveryOption[]; rateId?: string | null;
+  /** 2026-10-01: the chosen option is collecting the order from a store (no delivery address is used for it). */
+  pickup?: boolean;
 }
-export interface DeliveryOption { rateId: string; label: string; amountPaise: number; estimate: string | null }
+export interface DeliveryOption { rateId: string; label: string; amountPaise: number; estimate: string | null; pickup?: boolean; description?: string | null }
 /** Works out the shipping charge for an order. Real carriers / rate tables plug in here. */
 export interface ShippingProvider {
   readonly code: string;
@@ -94,9 +96,12 @@ export async function priceOrder(q: Queryable, lines: PriceableLine[], opts: { c
   // Second pass: cash on delivery (its discount and fee) and loyalty points, in that order, on the goods after discounts.
   let codFeePaise = 0, payment: CartTotals['payment'];
   if (opts.payment) {
-    const cod = await codQuote(q, shipping, subtotalPaise - discountPaise);
+    const cod = await codQuote(q, shipping, subtotalPaise - discountPaise, discountPaise);
     if (opts.payment.method === 'cod' && cod.available) {
-      if (cod.discountPaise > 0) { discounts.push({ code: 'COD', label: 'Cash on delivery discount', amountPaise: cod.discountPaise }); discountPaise += cod.discountPaise; }
+      // Never below a product's minimum price (2026-10-01): the COD discount only uses the room above the products' floors.
+      const room = cod.discountPaise > 0 ? await discountRoom(q, lines, subtotalPaise) - discountPaise : 0;
+      cod.discountPaise = Math.max(0, Math.min(cod.discountPaise, room));
+      if (cod.discountPaise > 0) { discounts.push({ code: 'COD', label: cod.discountLabel ?? 'Cash on delivery discount', amountPaise: cod.discountPaise }); discountPaise += cod.discountPaise; }
       codFeePaise = cod.feePaise;
     }
     let loyalty: LoyaltyQuote | null = null;
@@ -120,4 +125,14 @@ export async function priceOrder(q: Queryable, lines: PriceableLine[], opts: { c
     ...(config.discountSource ? { coupon } : {}),
     codFeePaise, ...(payment ? { payment } : {}),
   };
+}
+
+/** How much the order's goods can be discounted in total without any product going below its minimum price
+    (products.min_price_paise; a product without one has no floor). */
+export async function discountRoom(q: Queryable, lines: PriceableLine[], subtotalPaise: number): Promise<number> {
+  const ids = [...new Set(lines.map(l => l.productId))];
+  if (!ids.length) return 0;
+  const mins = new Map((await q.selectFrom('products').select(['id', 'min_price_paise']).where('id', 'in', ids).execute()).map(r => [r.id, r.min_price_paise]));
+  const floor = lines.reduce((n, l) => n + (mins.get(l.productId) ? Math.min(l.lineTotalPaise, mins.get(l.productId)! * l.qty) : 0), 0);
+  return subtotalPaise - floor;
 }

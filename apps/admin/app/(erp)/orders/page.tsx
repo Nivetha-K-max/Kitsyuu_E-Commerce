@@ -76,7 +76,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
               <td className="num">{o.units}<div className="note">{o.lines} line{o.lines === 1 ? '' : 's'}</div></td>
               <td className="num money" data-total>₹{paiseToRupees(o.total_paise)}</td>
               <td>{o.payment_status ? <StatusBadge status={o.payment_status} /> : <span className="note">—</span>}</td>
-              <td><StatusBadge status={o.status} />{o.payment_method === 'cod' && <div className="note">cash on delivery</div>}</td>
+              <td><StatusBadge status={o.status} />{o.payment_method === 'cod' && <div className="note">cash on delivery</div>}
+                {o.channel === 'retail' && <div className="note" data-order-channel="retail">Offline · {o.branch}</div>}</td>
               {query.view === 'abandoned' && <><td className="nowrap">{formatDateTime(o.updated_at)}</td><td>{o.reminder ? o.reminder : <span className="note">not sent</span>}</td></>}
               <td className="num"><Link className="btn ghost sm" href={`/orders/${o.id}`} aria-label={`View order ${o.order_number}`}>View</Link></td>
             </tr>))}

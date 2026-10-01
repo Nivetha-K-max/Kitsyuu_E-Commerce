@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { setVendorActiveInput, vendorInput, type ActionState } from '@kitsyuu/contracts';
-import { saveVendor, setVendorActive } from '@kitsyuu/core';
+import { setVendorActiveInput, vendorInput, vendorProductsInput, type ActionState } from '@kitsyuu/contracts';
+import { saveVendor, setVendorActive, setVendorProducts } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -20,6 +20,16 @@ export async function setVendorActiveAction(_: ActionState, form: FormData): Pro
   const r = await handle(setVendorActiveInput, form, async input => {
     await setVendorActive(db(), actor, input, await requestContext());
     return { ok: true, message: input.active ? 'Vendor is active.' : 'Vendor is inactive (kept for history).' };
+  });
+  if (r.ok) revalidatePath('/vendors');
+  return r;
+}
+
+export async function setVendorProductsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(vendorProductsInput, form, async input => {
+    const res = await setVendorProducts(db(), actor, input, await requestContext());
+    return { ok: true, message: `${res.total} product${res.total === 1 ? '' : 's'} supplied (${res.added} added, ${res.removed} removed).` };
   });
   if (r.ok) revalidatePath('/vendors');
   return r;

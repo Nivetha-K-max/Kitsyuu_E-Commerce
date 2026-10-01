@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { codCancelInput, codCollectInput, orderEditInput, orderEditRefundInput, packingStateInput, paiseToRupees, shipmentTrackingInput, updateOrderStatusInput, type ActionState } from '@kitsyuu/contracts';
-import { cancelCodOrder, editOrder, notifyOrderDelivered, notifyOrderStatus, recordCodCollected, refundOrderEdit, setPackingState, settingsShipping, updateOrderStatus, updateShipmentTracking } from '@kitsyuu/core';
+import { cancelCodOrder, editOrder, notifyOrderDelivered, notifyOrderPacked, notifyOrderStatus, recordCodCollected, refundOrderEdit, setPackingState, settingsShipping, updateOrderStatus, updateShipmentTracking } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { refundProvider } from '@/lib/payments';
 import { STATUS_LABEL } from '@/lib/format';
@@ -28,6 +28,8 @@ export async function setPackingStateAction(_: ActionState, form: FormData): Pro
   const actor = await requireActor();
   const r = await handle(packingStateInput, form, async input => {
     const res = await setPackingState(db(), actor, input, await requestContext());
+    // 2026-10-01: the "order packed" email (Settings → Customer emails; off by default). Never blocks the change.
+    if (res.packingState === 'packed') await notifyOrderPacked(db(), mailer(), input.orderId, process.env.STORE_URL || null);
     return { ok: true, message: `${res.orderNumber}: packing is ${STATUS_LABEL[res.packingState].toLowerCase()}.` };
   });
   if (r.ok) { revalidatePath('/orders', 'layout'); revalidatePath('/dashboard'); }

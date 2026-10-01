@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, uuid } from '@kitsyuu/contracts';
-import { customerBasket, getCustomer, getCustomerLoyalty, listCustomerNotes, LOYALTY_KIND_LABELS } from '@kitsyuu/core';
+import { customerBasket, customerOrderWorkflows, getCustomer, getCustomerLoyalty, listCustomerNotes, LOYALTY_KIND_LABELS } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
@@ -23,8 +23,9 @@ export default async function CustomerPage({ params }: { params: Params }) {
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const d = await getCustomer(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
-  const [notes, basket, loyalty] = await Promise.all([listCustomerNotes(db(), actor, id), customerBasket(db(), actor, id),
-    can(actor, 'loyalty.read') ? getCustomerLoyalty(db(), actor, id) : Promise.resolve(null)]);
+  const [notes, basket, loyalty, flows] = await Promise.all([listCustomerNotes(db(), actor, id), customerBasket(db(), actor, id),
+    can(actor, 'loyalty.read') ? getCustomerLoyalty(db(), actor, id) : Promise.resolve(null),
+    can(actor, 'orders.read') ? customerOrderWorkflows(db(), actor, id) : Promise.resolve(null)]);
   const c = d.customer;
   const activeSessions = d.sessions.filter(s => s.active).length;
   const disabling = c.status === 'active';
@@ -32,6 +33,7 @@ export default async function CustomerPage({ params }: { params: Params }) {
     <>
       <PageHead section="Commerce" title={c.fullName || c.email} eyebrow={c.email} crumbs={crumbs}>
         <span className="head-status" data-customer-status={c.status}><span className="head-status-label">Account</span><StatusBadge status={c.status} /></span>
+        {can(actor, 'orders.create') && c.status === 'active' && <Link className="btn sm" href={`/drafts?customer=${c.id}#dn-h`} data-link="new-draft">New draft order</Link>}
       </PageHead>
 
       <dl className="kpis minor" aria-label="Customer figures" data-customer-kpis>
@@ -127,6 +129,47 @@ export default async function CustomerPage({ params }: { params: Params }) {
         </section>
       </div>
 
+      {/* 2026-10-01: draft orders, abandoned checkouts (placed, not paid) and every discount on this customer's orders. */}
+      {flows && (
+        <div className="grid two">
+          <section className="card" aria-labelledby="cdr-h" data-section="customer-drafts">
+            <h2 id="cdr-h">Draft orders</h2>
+            {flows.drafts.length === 0 ? <Empty title="No draft orders" compact /> : (
+              <div className="table-wrap"><table data-customer-drafts>
+                <thead><tr><th>Draft</th><th>Updated</th><th className="num">Units</th><th>Status</th></tr></thead>
+                <tbody>{flows.drafts.map(x => (
+                  <tr key={x.id}><td className="mono"><Link className="row-link" href={`/drafts/${x.id}`}>{x.number}</Link></td><td className="nowrap">{formatDateTime(x.updated_at as Date)}</td>
+                    <td className="num">{formatNumber(x.units)}</td><td>{x.status === 'confirmed' && x.order_id ? <Link href={`/orders/${x.order_id}`}>{x.order_number}</Link> : <StatusBadge status={x.status === 'open' ? 'draft' : x.status} />}</td></tr>))}
+                </tbody></table></div>
+            )}
+          </section>
+          <section className="card" aria-labelledby="cab-h" data-section="customer-abandoned">
+            <h2 id="cab-h">Abandoned checkouts</h2>
+            <p className="note">Orders placed and not paid (the items are held until the payment time runs out).</p>
+            {flows.unpaid.length === 0 ? <Empty title="None" compact /> : (
+              <div className="table-wrap"><table data-customer-abandoned>
+                <thead><tr><th>Order</th><th>Placed</th><th className="num">Units</th><th className="num">Total</th><th>Reminder</th></tr></thead>
+                <tbody>{flows.unpaid.map(x => (
+                  <tr key={x.id}><td className="mono"><Link className="row-link" href={`/orders/${x.id}`}>{x.order_number}</Link></td><td className="nowrap">{formatDateTime(x.created_at as Date)}</td>
+                    <td className="num">{formatNumber(x.units)}</td><td className="num money">{formatPaise(x.total_paise)}</td>
+                    <td>{x.reminder_status ? `${x.reminder_status}${x.reminder_sent_at ? ' ' + formatDateTime(x.reminder_sent_at as Date) : ''}` : 'Not sent'}</td></tr>))}
+                </tbody></table></div>
+            )}
+          </section>
+          <section className="card" aria-labelledby="cdi-h" data-section="customer-discounts">
+            <h2 id="cdi-h">Discount history</h2>
+            {flows.discounts.length === 0 ? <Empty title="No discounts" compact /> : (
+              <div className="table-wrap"><table data-customer-discounts>
+                <thead><tr><th>When</th><th>Order</th><th>Discount</th><th className="num">Amount</th><th>By</th></tr></thead>
+                <tbody>{flows.discounts.map((x, i) => (
+                  <tr key={i} data-discount-kind={x.kind}><td className="nowrap">{formatDateTime(x.at)}</td><td className="mono"><Link href={`/orders/${x.orderId}`}>{x.orderNumber}</Link></td>
+                    <td>{x.label}</td><td className="num money">−{formatPaise(x.amountPaise)}</td><td>{x.by ?? '—'}</td></tr>))}
+                </tbody></table></div>
+            )}
+          </section>
+        </div>
+      )}
+
       <div className="grid two">
         <section className="card" aria-labelledby="notes-h" data-section="notes">
           <h2 id="notes-h">Service notes</h2>
@@ -155,7 +198,8 @@ export default async function CustomerPage({ params }: { params: Params }) {
       {loyalty && (
         <section className="card" id="loyalty" aria-labelledby="loy-h" data-section="loyalty">
           <h2 id="loy-h">Loyalty points</h2>
-          <p data-loyalty-balance><b>{formatNumber(loyalty.balance)}</b> points</p>
+          <p data-loyalty-balance><b>{formatNumber(loyalty.balance)}</b> points available</p>
+          <p className="note" data-loyalty-totals>Earned {formatNumber(loyalty.totals.earned)} · used {formatNumber(loyalty.totals.used)} · expired {formatNumber(loyalty.totals.expired)}{loyalty.totals.reversed ? ` · taken back ${formatNumber(loyalty.totals.reversed)}` : ''}</p>
           {loyalty.rows.length === 0 ? <p className="empty">No point changes yet.</p> : (
             <div className="table-wrap"><table data-loyalty-history>
               <thead><tr><th>When</th><th>Change</th><th className="num">Points</th><th>Details</th></tr></thead>

@@ -39,7 +39,8 @@ export async function poStatusAction(_: ActionState, form: FormData): Promise<Ac
   const actor = await requireActor();
   const r = await handle(poStatusInput, form, async input => {
     await setPurchaseOrderStatus(db(), actor, input, await requestContext());
-    return { ok: true, message: input.status === 'ordered' ? 'Order placed.' : 'Order cancelled.' };
+    const said = { approved: 'Order approved.', ordered: 'Order sent to the vendor.', cancelled: 'Order cancelled.', closed: 'Order closed.', draft: 'Order is a draft again.' } as const;
+    return { ok: true, message: said[input.status] };
   });
   if (r.ok) refresh(String(form.get('purchaseOrderId')));
   return r;
@@ -51,7 +52,7 @@ export async function receiveGoodsAction(_: ActionState, form: FormData): Promis
     .filter(l => l.qty !== '');
   const r = await handle(receiveGoodsInput, form, async input => {
     const res = await receiveGoods(db(), actor, input, await requestContext());
-    return { ok: true, message: res.status === 'received' ? 'Delivery recorded. The order is fully received.' : 'Delivery recorded. Some items are still to come.' };
+    return { ok: true, message: `${res.receiptNumber} recorded. ${res.status === 'received' ? 'The order is fully received.' : 'Some items are still to come.'}` };
   }, { lines });
   if (r.ok) refresh(String(form.get('purchaseOrderId')));
   return r;

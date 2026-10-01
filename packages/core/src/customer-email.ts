@@ -14,6 +14,10 @@ export const CUSTOMER_EMAILS = {
   'support.reply': 'notifications.support_reply',
   'cart.reminder': 'notifications.abandoned_cart',
   'checkout.reminder': 'notifications.abandoned_checkout',
+  // Commerce workflows (2026-10-01): workflow-emails.ts.
+  'order.packed': 'notifications.order_packed',
+  'order.payment_request': 'notifications.payment_request',
+  'cart.auto_reminder': 'notifications.abandoned_cart_auto',
 } as const;
 export type CustomerEmailEvent = keyof typeof CUSTOMER_EMAILS;
 

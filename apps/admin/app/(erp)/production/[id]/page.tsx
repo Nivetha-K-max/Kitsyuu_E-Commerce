@@ -34,7 +34,7 @@ export default async function ProductionOrderPage({ params }: { params: Params }
   const short = needs?.needs.filter(n => n.active && (n.shortfall ?? 0) > 0) ?? [];
   return (
     <>
-      <PageHead section="Supply" title={o.number} crumbs={crumbs} eyebrow={`${o.product} · ${o.variant_sku} · size ${o.size} · ${o.qty_planned} piece(s) planned`}>
+      <PageHead section="Supply" title={o.number} crumbs={crumbs} eyebrow={`${o.product} · ${o.variant_sku} · size ${o.size} · ${o.qty_planned} piece(s) planned${o.batch_ref ? ` · batch ${o.batch_ref}` : ''}`}>
         <StatusBadge status={o.status} />
       </PageHead>
       {o.status === 'cancelled' && <p className="msg" data-cancelled>Cancelled{o.cancel_note ? `: ${o.cancel_note}` : '.'}</p>}

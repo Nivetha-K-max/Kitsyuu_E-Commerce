@@ -93,11 +93,13 @@ test('create product: draft, generated id, audited; duplicates and bad input ref
     assert.equal(createProductInput.safeParse({name: 'N', sku: 'KTS-X-1', categoryId: 'tops', price: '1', ...bad}).success, false, JSON.stringify(bad));
 });
 
-test('a product can only be activated with an offered size and a primary image', async () => {
-  await assert.rejects(setProductStatus(db, manager, {productId: P, status: 'active'}, ctx), /offered size/);
+test('a product can only be submitted / published with an offered size and a primary image', async () => {
+  // 2026-10-01: managers submit for approval; only products.publish (admins) publish.
+  await assert.rejects(setProductStatus(db, manager, {productId: P, status: 'active'}, ctx), ForbiddenError);
+  await assert.rejects(setProductStatus(db, manager, {productId: P, status: 'review'}, ctx), /offered size/);
   const v = await addVariant(db, manager, addVariantInput.parse({productId: P, size: 'm'}), ctx);
   assert.equal(v.sku, 'KTS-OUT-900-M');
-  await assert.rejects(setProductStatus(db, manager, {productId: P, status: 'active'}, ctx), /image/);
+  await assert.rejects(setProductStatus(db, manager, {productId: P, status: 'review'}, ctx), /image/);
 });
 
 test('sizes: added at 0 units (stock only via the ledger), unique per product, audited', async () => {
@@ -174,8 +176,11 @@ test('images: upload to local storage, first is primary, primary switch, order, 
   await moveImage(db, manager, {imageId: b.imageId, direction: 'up'}, ctx);
   assert.deepEqual((await q(`select id from product_images where product_id = $1 order by sort_order`, [P])).map(r => r.id), [b.imageId, a.imageId]);
   await updateImageAlt(db, manager, {imageId: a.imageId, alt: 'Front view'}, ctx);
-  await setProductStatus(db, manager, {productId: P, status: 'active'}, ctx);
-  assert.equal((await q(`select status from products where id = $1`, [P]))[0].status, 'active', 'activation succeeds with size + primary image');
+  await setProductStatus(db, manager, {productId: P, status: 'review'}, ctx);
+  assert.equal((await q(`select status from products where id = $1`, [P]))[0].status, 'review', 'submitted for approval (complete)');
+  await setProductStatus(db, root, {productId: P, status: 'active'}, ctx);
+  assert.deepEqual(await q(`select status, approved_by is not null approved, submitted_by is not null submitted from products where id = $1`, [P]),
+    [{status: 'active', approved: true, submitted: true}], 'published by an admin; who submitted and who approved are kept');
   await removeImage(db, store, manager, b.imageId, ctx);
   assert.equal(fs.existsSync(path.join(DIR, b.storagePath)), false, 'file removed');
   assert.deepEqual((await q(`select id from product_images where product_id = $1 and is_primary`, [P])).map(r => r.id), [a.imageId], 'next image promoted to primary');

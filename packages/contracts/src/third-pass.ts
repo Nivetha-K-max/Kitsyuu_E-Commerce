@@ -25,7 +25,14 @@ export const locationAdjustInput = z.object({
   reason: z.string().trim().min(1, 'Choose a reason.').max(40),
   note: optText(300),
   expectedQty: z.coerce.number().int().min(0),
-});
+  // 2026-10-01: what one unit cost (rupees), for stock coming in; optional.
+  unitCost: z.string().trim().max(20).optional().transform((v, ctx) => {
+    if (!v) return null;
+    const m = /^(\d{1,8})(?:\.(\d{1,2}))?$/.exec(v.replace(/^₹\s*/, '').replace(/,/g, ''));
+    if (!m) { ctx.addIssue({ code: 'custom', message: 'Enter the unit cost in rupees, e.g. 850 or 850.50.' }); return z.NEVER; }
+    return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
+  }),
+}).transform(({ unitCost, ...rest }) => ({ ...rest, unitCostPaise: unitCost }));
 
 export const transferIdInput = z.object({ transferId: uuid });
 export const transferCancelInput = z.object({ transferId: uuid, note: z.string().trim().min(1, 'Give a reason; it is kept in the history.').max(300) });

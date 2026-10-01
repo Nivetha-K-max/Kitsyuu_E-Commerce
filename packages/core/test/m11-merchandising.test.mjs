@@ -43,7 +43,7 @@ async function anon(sqlText) {
   } finally { await c.query('rollback'); c.release(); }
 }
 
-let manager, support, P;
+let manager, support, admin, P;
 
 test('migration 2200: existing collections stay active and visible; nothing else changed', async () => {
   // (Men, Women and Sale were added hidden and empty by the client change request; the store still sees only New Arrivals.)
@@ -52,6 +52,7 @@ test('migration 2200: existing collections stay active and visible; nothing else
   assert.ok((await anon(`select count(*)::int n from collection_products`))[0].n > 0);
   assert.deepEqual(await q(`select count(*)::int n from products where seo_title is not null or seo_description is not null`), [{n: 0}]);
   manager = await staff('m11.manager@test.local', 'manager');     // categories.write + products.write
+  admin = await staff('m11.admin@test.local', 'admin');           // + products.publish (2026-10-01)
   support = await staff('m11.support@test.local', 'support');     // read only
   P = (await q(`select id from products order by id`)).map(r => r.id);
 });
@@ -104,10 +105,11 @@ test('bulk status: each product checked like one-by-one; a product that cannot b
   assert.deepEqual(await bulkSetProductStatus(db, manager, {productIds: [x, y, x], status: 'draft'}, ctx), {done: [x, y], failed: []});
   assert.deepEqual(await q(`select status from products where id in ($1, $2)`, [x, y]), [{status: 'draft'}, {status: 'draft'}]);
   await q(`update product_variants set is_active = false where product_id = $1`, [y]);        // y now has no size to sell
-  const r = await bulkSetProductStatus(db, manager, {productIds: [x, y], status: 'active'}, ctx);
+  await assert.rejects(bulkSetProductStatus(db, manager, {productIds: [x], status: 'active'}, ctx), ForbiddenError, 'publishing needs products.publish');
+  const r = await bulkSetProductStatus(db, admin, {productIds: [x, y], status: 'active'}, ctx);
   assert.deepEqual(r.done, [x]); assert.equal(r.failed[0].productId, y);
   await q(`update product_variants set is_active = true where product_id = $1`, [y]);
-  assert.deepEqual((await bulkSetProductStatus(db, manager, {productIds: [y], status: 'active'}, ctx)).done, [y]);
+  assert.deepEqual((await bulkSetProductStatus(db, admin, {productIds: [y], status: 'active'}, ctx)).done, [y]);
   assert.deepEqual(await q(`select count(*)::int n from products where status <> 'active'`), [{n: 0}]);
 });
 

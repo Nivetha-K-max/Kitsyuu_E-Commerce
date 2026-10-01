@@ -120,7 +120,7 @@ export interface SettingsTable {
   updated_at: Generated<Timestamp>;
 }
 
-export type ProductStatus = 'active' | 'draft' | 'archived';
+export type ProductStatus = 'active' | 'draft' | 'review' | 'archived';   // review: submitted for approval (migration 20261006004200)
 
 // Catalogue. Product and category ids are the stable text ids (ky-proto-001, tops.hoodies); never regenerated.
 export interface CategoriesTable { id: string; label: string; parent_id: string | null; sort_order: number; is_active: Generated<boolean>; description: Generated<string>; created_at: Generated<Timestamp>; }
@@ -135,9 +135,9 @@ export interface ReviewsTable {
 export interface ReviewPhotosTable { id: Generated<string>; review_id: string; position: number; content_type: Generated<string>; width: number; height: number; bytes: Buffer; created_at: Generated<Timestamp>; }
 export interface VendorsTable { id: Generated<string>; name: string; contact: string | null; email: string | null; phone: string | null; gstin: string | null; address: string | null; notes: string | null; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
 export interface MaterialsTable { id: Generated<string>; code: string; name: string; unit: string; stock_qty: Generated<string>; reorder_level: string | null; notes: string | null; is_active: Generated<boolean>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
-export type PoStatusDb = 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+export type PoStatusDb = 'draft' | 'approved' | 'ordered' | 'partially_received' | 'received' | 'closed' | 'cancelled';
 export interface PurchaseOrdersTable { id: Generated<string>; po_number: string; vendor_id: string; status: Generated<PoStatusDb>; expected_on: string | null; notes: string | null; ordered_at: Timestamp | null; created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; }
-export interface PurchaseOrderLinesTable { id: Generated<string>; purchase_order_id: string; material_id: string; qty_ordered: string; qty_received: Generated<string>; unit_cost_paise: number | null; position: Generated<number>; }
+export interface PurchaseOrderLinesTable { id: Generated<string>; purchase_order_id: string; material_id: string | null; qty_ordered: string; qty_received: Generated<string>; unit_cost_paise: number | null; position: Generated<number>; }
 export interface GoodsReceiptsTable { id: Generated<string>; purchase_order_id: string; received_at: Generated<Timestamp>; received_by: string | null; note: string | null; }
 export interface GoodsReceiptLinesTable { id: Generated<string>; goods_receipt_id: string; purchase_order_line_id: string; qty: string; }
 export interface MaterialMovementsTable { id: Generated<string>; material_id: string; delta: string; balance_after: string; reason: string; goods_receipt_id: string | null; staff_id: string | null; note: string | null; created_at: Generated<Timestamp>; }
@@ -561,7 +561,7 @@ export interface Database {
 }
 
 // ============================== client change request, second pass (migration 20261002003800) ==============================
-export type PaymentMethod = 'online' | 'cod';
+export type PaymentMethod = 'online' | 'cod' | 'cash' | 'card' | 'upi';   // cash, card, upi: offline orders paid in a branch (migration 20261005004100)
 export type CodStatus = 'to_collect' | 'collected' | 'refused';
 export interface OrdersTable {
   payment_method: ColumnType<PaymentMethod, PaymentMethod | undefined, never>; cod_status: CodStatus | null;
@@ -611,3 +611,44 @@ export interface Database {
   locations: LocationsTable; location_stock: LocationStockTable; stock_transfers: StockTransfersTable; stock_transfer_lines: StockTransferLinesTable;
 }
 export interface OrderItemsTable { colour: string | null }
+
+// ============================== commerce workflows (migration 20261005004100) ==============================
+export interface OrdersTable {
+  location_id: ColumnType<string | null, string | null | undefined, never>; created_by: ColumnType<string | null, string | null | undefined, never>;
+  staff_discount_paise: ColumnType<number, number | undefined, never>; staff_discount_bp: ColumnType<number | null, number | null | undefined, never>;
+  staff_discount_reason: ColumnType<string | null, string | null | undefined, never>; staff_discount_by: ColumnType<string | null, string | null | undefined, never>;
+  draft_order_id: string | null;
+}
+export type DraftOrderStatus = 'open' | 'confirmed' | 'cancelled';
+export interface DraftOrdersTable {
+  id: Generated<string>; number: string; status: Generated<DraftOrderStatus>; channel: Generated<'online' | 'retail'>; location_id: string | null;
+  customer_id: string | null; contact: ColumnType<unknown, string | undefined, string | undefined>;
+  shipping_address: ColumnType<unknown, string | null | undefined, string | null | undefined>; billing_address: ColumnType<unknown, string | null | undefined, string | null | undefined>;
+  discount_bp: number | null; discount_reason: string | null; note: string | null; owner_id: string | null; order_id: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>; confirmed_at: Timestamp | null; cancelled_at: Timestamp | null;
+}
+export interface DraftOrderItemsTable { id: Generated<string>; draft_id: string; variant_id: string; qty: number; created_at: Generated<Timestamp> }
+export interface ProductsTable { min_price_paise: number | null }
+export interface InventoryMovementsTable { unit_cost_paise: number | null }
+export interface CartRecoveryTable { auto_reminded_at: Timestamp | null }
+export interface Database { draft_orders: DraftOrdersTable; draft_order_items: DraftOrderItemsTable }
+
+// ============================== purchasing finished products, approvals, bulk drafts (migration 20261006004200) ==============================
+export interface VendorProductsTable { vendor_id: string; product_id: string; vendor_sku: string | null; created_by: string | null; created_at: Generated<Timestamp> }
+export interface PurchaseOrdersTable {
+  location_id: string | null; approved_at: Timestamp | null; approved_by: string | null; closed_at: Timestamp | null; closed_by: string | null; close_note: string | null;
+}
+export interface PurchaseOrderLinesTable { variant_id: string | null }
+export interface GoodsReceiptsTable { receipt_number: string | null; vendor_ref: string | null; location_id: string | null }
+export interface InventoryMovementsTable { goods_receipt_id: string | null }
+export interface ProductsTable { submitted_at: Timestamp | null; submitted_by: string | null; approved_at: Timestamp | null; approved_by: string | null }
+export type BulkEditStatus = 'draft' | 'applied' | 'cancelled';
+export interface BulkEditDraftsTable {
+  id: Generated<string>; number: string; status: Generated<BulkEditStatus>; product_ids: string[]; changes: ColumnType<unknown, string, string>;
+  preview: ColumnType<unknown, string | null | undefined, string | null>; result: ColumnType<unknown, string | null | undefined, string | null>; note: string | null;
+  created_by: string | null; created_at: Generated<Timestamp>; applied_by: string | null; applied_at: Timestamp | null; cancelled_at: Timestamp | null;
+}
+export interface ProductionOrdersTable { batch_ref: string | null }
+export interface ShippingRatesTable { is_pickup: Generated<boolean>; pickup_location_id: string | null; description: string | null }
+export interface ReviewsTable { variant_label: string | null }
+export interface Database { vendor_products: VendorProductsTable; bulk_edit_drafts: BulkEditDraftsTable }

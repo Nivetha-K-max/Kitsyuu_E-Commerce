@@ -327,7 +327,7 @@ test('order edit: before shipment only; quantities and sizes at the paid price; 
   assert.match(await orderEditBlocker(admin, o.id), /issued invoice/);
   await voidInvoice(admin, root, {invoiceId: inv.id, reason: 'Order edited'}, ctx);
   await advance(root, o.order_number, ['processing', 'shipped']);
-  assert.match(await orderEditBlocker(admin, o.id), /not shipped/);
+  assert.match(await orderEditBlocker(admin, o.id), /has shipped, so it is locked. Use a return, exchange or refund/, 'shipped: locked, pointing to returns');
 });
 
 test('order edit: a COD order can grow (collected on delivery), with no refund', async () => {

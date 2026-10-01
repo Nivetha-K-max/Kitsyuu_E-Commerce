@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { consumeMaterialInput, createProductionOrderInput, productionInputInput, productionStatusInput, qualityCheckInput, raiseProductionPoInput, type ActionState } from '@kitsyuu/contracts';
-import { consumeMaterial, createProductionOrder, raisePurchaseOrderForProduction, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
+import { consumeMaterialInput, createProductionBatchInput, createProductionOrderInput, linkProductionPoInput, productionInputInput, productionStatusInput, qualityCheckInput, raiseProductionPoInput, type ActionState } from '@kitsyuu/contracts';
+import { consumeMaterial, createProductionOrder, createProductionOrders, linkProductionToPurchaseOrder, raisePurchaseOrderForProduction, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -16,6 +16,27 @@ export async function createProductionOrderAction(_: ActionState, form: FormData
   let id = '';
   const r = await handle(createProductionOrderInput, form, async input => { id = (await createProductionOrder(db(), actor, input, await requestContext())).id; });
   if (id) { refresh(); redirect(`/production/${id}`); }
+  return r;
+}
+/** 2026-10-01: several sizes planned at once, as one batch. */
+export async function createProductionBatchAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(createProductionBatchInput, form, async input => {
+    const res = await createProductionOrders(db(), actor, input, await requestContext());
+    return { ok: true, message: `Planned ${res.orders.length} production order${res.orders.length === 1 ? '' : 's'} (${res.orders.map(o => o.number).join(', ')})${res.batchRef ? `, batch ${res.batchRef}` : ''}.` };
+  });
+  if (r.ok) refresh();
+  return r;
+}
+/** 2026-10-01: link the selected production orders to a purchase order (a record only; no stock moves). */
+export async function linkProductionPoAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  if (!form.getAll('productionOrderIds[]').length) return { ok: false, message: 'Select at least one production order.' };
+  const r = await handle(linkProductionPoInput, form, async input => {
+    const res = await linkProductionToPurchaseOrder(db(), actor, input, await requestContext());
+    return { ok: true, message: `Linked ${res.linked} to ${res.poNumber}${res.already ? ` (${res.already} already linked)` : ''}.` };
+  });
+  if (r.ok) { refresh(); revalidatePath('/purchase-orders', 'layout'); }
   return r;
 }
 export async function productionInputAction(_: ActionState, form: FormData): Promise<ActionState> {

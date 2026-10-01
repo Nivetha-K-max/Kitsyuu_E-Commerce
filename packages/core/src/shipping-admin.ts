@@ -61,14 +61,20 @@ export async function saveShippingZone(db: Db, actor: StaffPrincipal, input: { z
 export type ShippingRateInput = {
   rateId?: string; zoneId: string; name: string; amount: number | null; freeFrom: number | null; minOrder: number | null; maxOrder: number | null;
   codAllowed: boolean; codFee: number | null; estMin: number | null; estMax: number | null; active: boolean;
+  /** Store pickup (2026-10-01): customers collect from this location instead of a delivery. */
+  pickupLocationId?: string | null;
+  /** Shown under the option at checkout (2026-10-01). */
+  description?: string | null;
 };
 export async function saveShippingRate(db: Db, actor: StaffPrincipal, input: ShippingRateInput, ctx: MutationContext) {
   requirePermission(actor, 'shipping.manage');
   const row = { zone_id: input.zoneId, name: input.name, amount_paise: input.amount ?? 0, free_from_paise: input.freeFrom, min_order_paise: input.minOrder,
     max_order_paise: input.maxOrder, cod_allowed: input.codAllowed, cod_fee_paise: input.codAllowed ? input.codFee : null, est_days_min: input.estMin,
-    est_days_max: input.estMax, is_active: input.active };
+    est_days_max: input.estMax, is_active: input.active, is_pickup: !!input.pickupLocationId, pickup_location_id: input.pickupLocationId ?? null, description: input.description ?? null };
   return db.transaction().execute(async tx => {
     if (!(await tx.selectFrom('shipping_zones').select('id').where('id', '=', input.zoneId).executeTakeFirst())) throw new NotFoundError('Zone not found.');
+    if (input.pickupLocationId && !(await tx.selectFrom('locations').select('id').where('id', '=', input.pickupLocationId).where('is_active', '=', true).executeTakeFirst()))
+      throw new NotFoundError('Choose an active location for store pickup.');
     const clash = await tx.selectFrom('shipping_rates').select('id').where('zone_id', '=', input.zoneId).where(sql`lower(name)`, '=', input.name.toLowerCase()).executeTakeFirst();
     if (clash && clash.id !== input.rateId) throw new ConflictError('This zone already has a rate with this name.');
     if (!input.rateId) {

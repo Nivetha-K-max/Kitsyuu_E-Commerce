@@ -266,22 +266,34 @@ const history = (q: Queryable, customerId: string, limit: number) =>
     .select(['t.id', 't.points', 't.kind', 't.reason', 't.created_at', 't.expires_at', 't.remaining', 't.staff_id', 'o.id as order_id', 'o.order_number'])
     .where('t.customer_id', '=', customerId).orderBy('t.created_at', 'desc').orderBy('t.id').limit(limit).execute();
 
+/** Totals by kind (2026-10-01): earned (orders, imports, staff additions), used at checkout, expired, and taken back
+    (order cancelled / refunded, or a staff deduction). Used points given back for a cancelled order count as not used. */
+export async function loyaltyTotals(q: Queryable, customerId: string) {
+  const r = await q.selectFrom('loyalty_transactions').select([
+    sql<number>`coalesce(sum(points) filter (where kind in ('earn', 'import') or (kind = 'adjust' and points > 0)), 0)::int`.as('earned'),
+    sql<number>`(coalesce(-sum(points) filter (where kind = 'redeem'), 0) - coalesce(sum(points) filter (where kind = 'restore'), 0))::int`.as('used'),
+    sql<number>`coalesce(-sum(points) filter (where kind = 'expire'), 0)::int`.as('expired'),
+    sql<number>`coalesce(-sum(points) filter (where kind = 'reverse' or (kind = 'adjust' and points < 0)), 0)::int`.as('reversed'),
+  ]).where('customer_id', '=', customerId).executeTakeFirst();
+  return { earned: r?.earned ?? 0, used: Math.max(0, r?.used ?? 0), expired: r?.expired ?? 0, reversed: r?.reversed ?? 0 };
+}
+
 /** The customer's own points (account page). */
 export async function getMyLoyalty(db: Db, p: CustomerPrincipal) {
-  const [s, balance, rows] = await Promise.all([readLoyaltySettings(db), loyaltyBalance(db, p.customerId), history(db, p.customerId, 50)]);
+  const [s, balance, rows, totals] = await Promise.all([readLoyaltySettings(db), loyaltyBalance(db, p.customerId), history(db, p.customerId, 50), loyaltyTotals(db, p.customerId)]);
   const soon = await db.selectFrom('loyalty_transactions').select([sql<number>`coalesce(sum(remaining), 0)::int`.as('n'), sql<Date | null>`min(expires_at)`.as('at')])
     .where('customer_id', '=', p.customerId).where('remaining', '>', 0).where('expires_at', 'is not', null).where('expires_at', '>', sql<Date>`now()`)
     .where('expires_at', '<=', sql<Date>`now() + interval '30 days'`).executeTakeFirst();
-  return { settings: s, balance, rows: rows.map(({ staff_id: _, ...r }) => r), expiringSoon: soon?.n ? { points: soon.n, at: soon.at } : null };
+  return { settings: s, balance, totals, rows: rows.map(({ staff_id: _, ...r }) => r), expiringSoon: soon?.n ? { points: soon.n, at: soon.at } : null };
 }
 
 /** Staff: one customer's balance and history (customer page). */
 export async function getCustomerLoyalty(db: Db, actor: StaffPrincipal, customerId: string) {
   requirePermission(actor, 'loyalty.read');
-  const [balance, rows] = await Promise.all([loyaltyBalance(db, customerId), history(db, customerId, 100)]);
+  const [balance, rows, totals] = await Promise.all([loyaltyBalance(db, customerId), history(db, customerId, 100), loyaltyTotals(db, customerId)]);
   const ids = [...new Set(rows.map(r => r.staff_id).filter((x): x is string => !!x))];
   const staff = new Map(ids.length ? (await db.selectFrom('staff_users').select(['id', 'email']).where('id', 'in', ids).execute()).map(s => [s.id, s.email]) : []);
-  return { balance, rows: rows.map(r => ({ ...r, staff_email: r.staff_id ? staff.get(r.staff_id) ?? null : null })) };
+  return { balance, totals, rows: rows.map(r => ({ ...r, staff_email: r.staff_id ? staff.get(r.staff_id) ?? null : null })) };
 }
 
 /** Staff: customers with points (Loyalty page), biggest balances first, and the latest point changes. */
@@ -296,4 +308,26 @@ export async function listLoyaltyAccounts(db: Db, actor: StaffPrincipal, query: 
     .select(['t.id', 't.points', 't.kind', 't.reason', 't.created_at', 'c.id as customer_id', 'c.email', 'o.id as order_id', 'o.order_number'])
     .orderBy('t.created_at', 'desc').orderBy('t.id').limit(30).execute();
   return { rows: rows.slice(0, 50), hasNext: rows.length > 50, totals, recent, settings: await readLoyaltySettings(db) };
+}
+
+const REFUND_REASON = 'Refund adjustment';
+/** Refunds and returns (2026-10-01): the points an order earned are taken back in proportion to what was refunded of the
+    amount they were earned on (subtotal after discounts). Worked out again from the total refunded each time, so calling it
+    twice never takes points twice; never more than the order earned, never below the customer's balance (points already
+    spent cannot be taken back). A fully cancelled order keeps using reverseOrderPoints. */
+export async function adjustPointsForRefunds(tx: Tx, orderId: string): Promise<number> {
+  const earn = await tx.selectFrom('loyalty_transactions').select(['id', 'customer_id', 'points']).where('order_id', '=', orderId).where('kind', '=', 'earn').executeTakeFirst();
+  if (!earn) return 0;
+  if (await tx.selectFrom('loyalty_transactions').select('id').where('reverses_id', '=', earn.id).executeTakeFirst()) return 0;   // already reversed in full
+  const o = await tx.selectFrom('orders').select(['order_number', 'subtotal_paise', 'discount_paise']).where('id', '=', orderId).executeTakeFirstOrThrow();
+  const refunded = (await tx.selectFrom('refunds').select(sql<number>`coalesce(sum(amount_paise), 0)::int`.as('n')).where('order_id', '=', orderId).where('status', '=', 'processed').executeTakeFirstOrThrow()).n;
+  const base = Math.max(1, o.subtotal_paise - o.discount_paise);
+  const target = Math.min(earn.points, Math.floor(earn.points * Math.min(refunded, base) / base));
+  const done = -((await tx.selectFrom('loyalty_transactions').select(sql<number>`coalesce(sum(points), 0)::int`.as('n')).where('order_id', '=', orderId)
+    .where('kind', '=', 'adjust').where('reason', 'like', `${REFUND_REASON}%`).executeTakeFirstOrThrow()).n);
+  const balance = await lockLoyaltyAccount(tx, earn.customer_id);
+  const take = Math.min(target - done, balance);
+  if (take <= 0) return 0;
+  await takePoints(tx, { customerId: earn.customer_id, points: -take, kind: 'adjust', orderId, reason: `${REFUND_REASON}: order ${o.order_number}` });
+  return take;
 }

@@ -167,7 +167,7 @@ test('checkout: the customer chooses Standard or Express (server re-checks it); 
   await set(root, 'shipping.method', 'none');
   // Cart refresh (the client clarified: no item limit; a cart with items re-syncs every 30 minutes). The store reads the
   // interval as the website role; items from different products are not limited.
-  assert.equal(await cartRefreshMinutes(web), 30, 'the client’s 30 minutes until a value is set');
+  assert.equal(await cartRefreshMinutes(web), 60, 'every 60 minutes until a value is set (2026-10-01; was 30)');
   await set(root, 'checkout.cart_refresh_minutes', '45');
   assert.equal(await cartRefreshMinutes(web), 45);
   await emptyCart(asha);

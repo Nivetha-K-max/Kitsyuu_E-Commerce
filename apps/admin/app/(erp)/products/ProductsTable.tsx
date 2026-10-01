@@ -17,18 +17,18 @@ import { Icon } from '@/components/icons';
 import { StatusPill } from '@/components/StatusPill';
 
 export interface ProductRowView {
-  id: string; sku: string; name: string; status: 'active' | 'draft' | 'archived'; categoryLabel: string; subcategoryLabel: string | null;
+  id: string; sku: string; name: string; status: 'active' | 'draft' | 'review' | 'archived'; categoryLabel: string; subcategoryLabel: string | null;
   pricePaise: number; isFeatured: boolean; imageUrl: string | null; variants: number; sellableVariants: number; stockUnits: number;
   attentionVariants: number; storeUrl: string | null;
 }
 type Category = { id: string; label: string; parent_id: string | null };
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
-export interface ProductFilters { q: string; category: string; status: 'all' | 'active' | 'inactive' | 'draft' | 'archived'; pmin: string; pmax: string;
+export interface ProductFilters { q: string; category: string; status: 'all' | 'active' | 'inactive' | 'draft' | 'review' | 'archived'; pmin: string; pmax: string;
   /** Client change request: filter by collection and by availability (combine with the others). */
   collection: string; stock: 'all' | 'in_stock' | 'low' | 'out' }
 
 const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const STATUS_FILTERS = [{ value: 'active', label: 'Active' }, { value: 'draft', label: 'Draft' }, { value: 'archived', label: 'Archived' }, { value: 'inactive', label: 'Draft or archived' }] as const;
+const STATUS_FILTERS = [{ value: 'active', label: 'Active' }, { value: 'draft', label: 'Draft' }, { value: 'review', label: 'Awaiting approval' }, { value: 'archived', label: 'Archived' }, { value: 'inactive', label: 'Not in the store' }] as const;
 const STOCK_FILTERS = [{ value: 'in_stock', label: 'In stock' }, { value: 'low', label: 'Low or out of stock (a size)' }, { value: 'out', label: 'Sold out' }] as const;
 
 export default function ProductsTable({ rows, categories, collections = [], filters, canWrite, bulkAction, statusAction }: {

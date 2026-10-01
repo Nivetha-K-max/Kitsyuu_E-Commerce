@@ -6,7 +6,7 @@ import { NotFoundError } from '@kitsyuu/contracts';
 import { LOCATION_KINDS, getLocationStock, listAdjustmentReasons } from '@kitsyuu/core';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
-import { formatDateTime, formatNumber } from '@/lib/format';
+import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { adjustLocationStockAction, saveLocationAction } from '../actions';
 
@@ -27,6 +27,9 @@ export default async function LocationPage({ params, searchParams }: { params: P
     .catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const adjust = can(actor, 'inventory.adjust') && l.is_active;
   const reasons = adjust ? await listAdjustmentReasons(db(), actor, { retail: l.kind === 'retail' && !l.is_online }) : [];
+  // The form offers every size (with what is here now), not only the sizes already in stock here: a new branch receives its
+  // first stock from this page too.
+  const formRows = !adjust ? [] : (!all && !q) ? (await getLocationStock(db(), actor, { locationId: id, inStockOnly: false })).rows : rows;
   return (
     <>
       <PageHead section="Catalogue" title={l.name} crumbs={crumbs}
@@ -56,16 +59,17 @@ export default async function LocationPage({ params, searchParams }: { params: P
         )}
       </section>
 
-      {adjust && rows.length > 0 && (
+      {adjust && formRows.length > 0 && (
         <section className="card form-panel" aria-labelledby="la-h" data-section="location-adjust">
           <h2 id="la-h">Change stock here</h2>
           <p className="note">For deliveries, damage, corrections{reasons.some(r => r.code === 'retail_sale') ? ' and in-store sales (Retail sale)' : ''}. Transfers between locations are made under <Link href="/transfers">Transfers</Link>.</p>
           <ActionForm action={adjustLocationStockAction} submitLabel="Update stock" id="location-adjust-form" label="Change stock at this location" resetOnSuccess>
             <Hidden name="locationId" value={l.id} />
-            <Select name="variant" label="Size" required options={[{ value: '', label: 'Choose a size…' }, ...rows.map(r => ({ value: `${r.variant_id}:${r.qty}`, label: `${r.label} (${r.sku}) · ${r.qty} here` }))]} />
+            <Select name="variant" label="Size" required options={[{ value: '', label: 'Choose a size…' }, ...formRows.map(r => ({ value: `${r.variant_id}:${r.qty}`, label: `${r.label} (${r.sku}) · ${r.qty} here` }))]} />
             <Field name="delta" label="Change" required hint="e.g. 5 to add, -2 to take away" />
             <Select name="reason" label="Reason" required options={[{ value: '', label: 'Choose a reason…' }, ...reasons.map(r => ({ value: r.code, label: r.label }))]} />
-            <Field name="note" label="Note (optional)" />
+            <Field name="note" label="Note (optional)" hint='e.g. "Received 20 units from supplier."' />
+            <Field name="unitCost" label="Unit cost, ₹ (optional, stock coming in)" hint="What one unit cost, kept with this delivery in the stock history." />
           </ActionForm>
         </section>
       )}
@@ -74,14 +78,16 @@ export default async function LocationPage({ params, searchParams }: { params: P
         <SectionTitle id="lm-h">Recent movements here</SectionTitle>
         {movements.length === 0 ? <Empty compact title="No movements yet" /> : (
           <div className="table-wrap"><table data-location-movements>
-            <thead><tr><th>When</th><th>SKU</th><th>Reason</th><th className="num">Change</th><th className="num">After</th><th>By</th></tr></thead>
+            <thead><tr><th>When</th><th>Item</th><th>Reason</th><th className="num">Before</th><th className="num">Change</th><th className="num">After</th><th className="num">Unit cost</th><th>By</th></tr></thead>
             <tbody>{movements.map(m => (
               <tr key={String(m.id)}>
                 <td>{formatDateTime(m.created_at as Date)}</td>
-                <td className="mono">{m.sku}</td>
+                <td>{m.product_name}<div className="note mono">{m.sku}</div></td>
                 <td>{m.reason_label ?? m.reason}{m.transfer_id ? <> · <Link href={`/transfers/${m.transfer_id}`}>{m.transfer_number}</Link></> : null}{m.note ? <div className="note">{m.note}</div> : null}</td>
+                <td className="num">{m.balance_before}</td>
                 <td className="num">{m.delta > 0 ? `+${m.delta}` : m.delta}</td>
                 <td className="num">{m.balance_after}</td>
+                <td className="num">{m.unit_cost_paise != null ? formatPaise(m.unit_cost_paise) : '—'}</td>
                 <td>{m.staff_email ?? '—'}</td>
               </tr>
             ))}</tbody>

@@ -2,8 +2,8 @@
 /* Product, price and stock mutations. The actor always comes from the session; core services check permissions,
    lock the row, and write the audit record in the same transaction as the change. */
 import { revalidatePath } from 'next/cache';
-import { adjustStockInput, bulkProductStatusInput, paiseToRupees, setProductAttributesInput, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
-import { adjustStock, bulkSetProductStatus, setProductAttributes, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
+import { adjustStockInput, bulkProductStatusInput, paiseToRupees, productMinPriceInput, setProductAttributesInput, setProductStatusInput, updatePriceInput, updateProductInput, type ActionState } from '@kitsyuu/contracts';
+import { adjustStock, bulkSetProductStatus, setProductAttributes, setProductMinPrice, setProductStatus, updateProduct, updateProductPrice } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -69,5 +69,16 @@ export async function bulkStatusAction(_: ActionState, form: FormData): Promise<
     return { ok: failed.length === 0, message: `${done.length} product${done.length === 1 ? '' : 's'} updated.${failed.length ? ` Not changed: ${failed.map(f => `${f.productId} (${f.reason})`).join('; ')}` : ''}` };
   });
   refresh();
+  return r;
+}
+
+/** The product's minimum price after a staff discount (2026-10-01). Empty removes it. */
+export async function setMinPriceAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(productMinPriceInput, form, async input => {
+    await setProductMinPrice(db(), actor, { productId: input.productId, minPricePaise: input.minPrice }, await requestContext());
+    return { ok: true, message: input.minPrice === null ? 'Minimum price removed.' : `Minimum price set to ₹${paiseToRupees(input.minPrice)}.` };
+  });
+  if (r.ok) revalidatePath(`/products/${String(form.get('productId'))}`);
   return r;
 }

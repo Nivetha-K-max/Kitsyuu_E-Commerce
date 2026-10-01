@@ -28,7 +28,11 @@ export async function listAbandonedCheckouts(db: Db, actor: StaffPrincipal, opts
   requirePermission(actor, 'carts.read');
   const hours = await abandonedCheckoutHours(db);
   const rows = await abandonedQuery(db, hours)
-    .select(['o.id', 'o.order_number', 'o.status', 'o.total_paise', 'o.created_at', sql<string | null>`o.contact->>'email'`.as('email'),
+    .select(['o.id', 'o.order_number', 'o.status', 'o.total_paise', 'o.created_at', 'o.updated_at', sql<string | null>`o.contact->>'email'`.as('email'),
+      sql<string | null>`o.contact->>'name'`.as('name'), 'o.customer_id',
+      // 2026-10-01: what is in it (units and the first items), for staff following up.
+      sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
+      sql<string>`(select string_agg(i.name || ' · ' || coalesce(i.colour || ' / ', '') || i.size || ' × ' || i.qty, ', ' order by i.name) from public.order_items i where i.order_id = o.id)`.as('items'),
       'r.status as reminder_status', 'r.sent_at as reminder_sent_at', 'r.error as reminder_error'])
     .orderBy('o.created_at', 'desc').limit(41).offset((opts.page - 1) * 40).execute();
   const total = await abandonedQuery(db, hours).select(sql<number>`count(*)::int`.as('n')).executeTakeFirstOrThrow();

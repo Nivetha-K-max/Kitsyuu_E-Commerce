@@ -240,7 +240,12 @@ test('settings: typed registry, locked business rules, audited edits of safe set
     'checkout.abandoned_after_hours', 'checkout.cart_refresh_minutes', 'notifications.abandoned_checkout', 'pricing.max_sale_discount_percent',
     // client change request, second pass (cash on delivery and loyalty points: off / empty until the business decides)
     'payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order', 'loyalty.enabled', 'loyalty.earn_points_per_100',
-    'loyalty.earn_when', 'loyalty.point_value_paise', 'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months'];
+    'loyalty.earn_when', 'loyalty.point_value_paise', 'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months',
+    // commerce workflows (2026-10-01): staff discount limit, order emails, automatic cart reminder and its wording
+    'discounts.staff_max_percent', 'notifications.order_packed', 'notifications.payment_request', 'notifications.abandoned_cart_auto',
+    'emails.cart_reminder_subject', 'emails.cart_reminder_intro',
+    // purchasing / products workflows (2026-10-01): COD % discount with its minimum and stacking rule
+    'payments.cod_discount_percent', 'payments.cod_discount_min_order', 'payments.cod_discount_with_other'];
   assert.deepEqual(all.filter(i => i.editable && !i.key.startsWith('alerts.')).map(i => i.key).sort(), ['company.address', 'company.gstin', 'company.legal_name', 'company.phone', 'company.support_email',
     'inventory.low_stock_threshold', 'notifications.order_cancelled', 'notifications.order_shipped', 'reviews.eligibility', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method', ...erpKeys].sort(), 'editable settings');
   assert.ok(all.filter(i => i.key.startsWith('alerts.')).every(i => i.editable && i.type.kind === 'choice'), 'staff alert switches');

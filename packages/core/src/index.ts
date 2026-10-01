@@ -31,7 +31,7 @@ export {
   type CartTotals, type CommerceConfig, type ShippingProvider, type ShippingQuote, type DiscountRule, type DiscountLine, type TaxRate, type ShipTo, type DeliveryOption,
 } from './pricing.ts';
 export {
-  getCustomerCart, addCartLine, setCartLineQty, removeCartLine, mergeGuestCart, priceCart, lineProblemText,
+  getCustomerCart, addCartLine, setCartLineQty, removeCartLine, mergeGuestCart, priceCart, lineProblemText, checkCartAvailability,
   type PricedCart, type PricedLine, type LineProblem,
 } from './cart.ts';
 export { getWishlist, setWishlisted, mergeGuestWishlist } from './wishlist.ts';
@@ -67,12 +67,12 @@ export {
 } from './reviews.ts';
 // ---------- M13: vendors, materials, purchasing ----------
 export {
-  listVendors, saveVendor, setVendorActive, listMaterials, saveMaterial, adjustMaterialStock, materialLedger, materialMovements,
+  listVendors, saveVendor, setVendorActive, vendorProducts, vendorProductLinks, setVendorProducts, getGoodsReceipt, purchasableSizes, listMaterials, saveMaterial, adjustMaterialStock, materialLedger, materialMovements,
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, createPurchaseOrderWithLines, setPoLine, removePoLine, setPurchaseOrderStatus, receiveGoods, PO_TRANSITIONS, type PoStatus,
 } from './procurement.ts';
 // ---------- M14: production and quality control ----------
 export {
-  listProductionOrders, getProductionOrder, createProductionOrder, setProductionInput, consumeMaterial, setProductionStatus, recordQualityCheck,
+  listProductionOrders, getProductionOrder, createProductionOrder, createProductionOrders, linkProductionToPurchaseOrder, setProductionInput, consumeMaterial, setProductionStatus, recordQualityCheck,
   listProducibleVariants, PRODUCTION_TRANSITIONS, type ProductionStatus,
 } from './production.ts';
 // ---------- M15: stock counts and stock value ----------
@@ -139,7 +139,7 @@ export {
 export { abandonAfterHours, listCarts, getCart, setCartRecovery, sendCartReminder, wishlistReport, listWishlists, CART_PAGE_SIZE } from './carts-admin.ts';
 // ---------- client change request, first pass ----------
 export { effectivePrice, effectivePriceSql, basePriceSql, saleRunningSql, setProductSale, maxSaleDiscountPercent, type SaleInput } from './sale.ts';
-export { bulkEditProducts, BULK_MAX_PRODUCTS, type BulkAction } from './bulk-products.ts';
+export { bulkEditProducts, BULK_MAX_PRODUCTS, type BulkAction, createBulkEditDraft, listBulkEditDrafts, getBulkEditDraft, applyBulkEditDraft, cancelBulkEditDraft, type BulkPreviewRow } from './bulk-products.ts';
 export { setProductCategory } from './products.ts';
 export { abandonedCheckoutHours, listAbandonedCheckouts, sendAbandonedCheckoutReminders, ABANDONED_CHECKOUT_DEFAULT_HOURS, type ReminderRun } from './checkout-reminders.ts';
 export {
@@ -150,7 +150,7 @@ export { productionMaterialNeeds, procurementStatus, type ProcurementStatus, pur
 export { BRAND_COPY_KEY, BRAND_COPY_FIELDS, BRAND_COPY_DEFAULTS, mergeBrandCopy, getBrandCopyAdmin, saveBrandCopy, type BrandCopy, type BrandCopyKey } from './site-copy.ts';
 export { cartRefreshMinutes, CART_REFRESH_DEFAULT_MINUTES } from './cart.ts';
 // ---------- client change request, second pass ----------
-export { readCodSettings, codQuote, codQuoteFrom, recordCodCollected, cancelCodOrder, orderCodState, COD_KEYS, type CodQuote, type CodSettings } from './cod.ts';
+export { readCodSettings, codQuote, codDiscount, codQuoteFrom, recordCodCollected, cancelCodOrder, orderCodState, COD_KEYS, type CodQuote, type CodSettings } from './cod.ts';
 export {
   readLoyaltySettings, quoteLoyalty, pointsForAmount, loyaltyBalance, adjustLoyaltyPoints, parseLoyaltyImport, importLoyaltyPoints, expireLoyaltyPoints,
   getMyLoyalty, getCustomerLoyalty, listLoyaltyAccounts, LOYALTY_KEYS, LOYALTY_KIND_LABELS, LOYALTY_IMPORT_MAX_LINES, type LoyaltyQuote, type LoyaltySettings,
@@ -165,3 +165,13 @@ export {
 export { listColours, addColourVariant, setVariantColour, setImageColour, colourLabel } from './colour-variants.ts';
 export { lineLabel } from './cart.ts';
 export { RETAIL_ONLY_REASONS } from './inventory.ts';
+
+// Commerce workflows (2026-10-01): draft / staff-created / offline orders, staff discounts, workflow emails.
+export { getCustomerInvoice, pricingView } from './customer-account.ts';
+export { listDraftOrders, getDraftOrder, draftSizeOptions, orderOrigin, customerOrderWorkflows, createDraftOrder, setDraftItem, setDraftAddresses, setDraftDiscount, setDraftNote, cancelDraftOrder, confirmDraftOrder,
+  checkStaffDiscount, staffDiscountMaxBp, IN_STORE_PAYMENTS, type DraftPayment, type Address as DraftAddress } from './draft-orders.ts';
+export { sendOrderPlacedEmail, orderEmails, type OrderEmailResult } from './notifications.ts';
+export { notifyOrderPacked, notifyPaymentRequest, sendAbandonedCartReminders, abandonedCartDelayMinutes, type CartReminderRun } from './workflow-emails.ts';
+export { setProductMinPrice } from './products.ts';
+export { syncShipmentTracking, type TrackingSyncRun } from './fulfilment/tracking-sync.ts';
+export { adjustPointsForRefunds, loyaltyTotals } from './loyalty.ts';

@@ -23,13 +23,15 @@ export const PRODUCTION_TRANSITIONS: Record<ProductionStatus, readonly Productio
   cancelled: [],
 };
 
-export async function listProductionOrders(db: Db, actor: StaffPrincipal, query: { status?: ProductionStatus }) {
+export async function listProductionOrders(db: Db, actor: StaffPrincipal, query: { status?: ProductionStatus; batch?: string }) {
   requirePermission(actor, 'production.read');
   let q = db.selectFrom('production_orders as o').innerJoin('product_variants as v', 'v.id', 'o.variant_id').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('qc_results as r', 'r.production_order_id', 'o.id')
     .select(['o.id', 'o.number', 'o.status', 'o.qty_planned', 'o.due_on', 'o.created_at', 'o.completed_at', 'p.name as product', 'p.sku', 'v.size', 'v.sku as variant_sku',
-      'r.qty_passed', 'r.qty_rejected']);
+      'r.qty_passed', 'r.qty_rejected', 'o.batch_ref',
+      sql<string | null>`(select string_agg(po.po_number, ', ' order by po.po_number) from public.production_purchase_orders x join public.purchase_orders po on po.id = x.purchase_order_id where x.production_order_id = o.id)`.as('purchase_orders')]);
   if (query.status) q = q.where('o.status', '=', query.status);
+  if (query.batch) q = q.where('o.batch_ref', '=', query.batch);
   return q.orderBy('o.created_at', 'desc').limit(200).execute();
 }
 
@@ -37,7 +39,7 @@ export async function getProductionOrder(db: Db, actor: StaffPrincipal, id: stri
   requirePermission(actor, 'production.read');
   const o = await db.selectFrom('production_orders as o').innerJoin('product_variants as v', 'v.id', 'o.variant_id').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('staff_users as s', 's.id', 'o.created_by')
-    .select(['o.id', 'o.number', 'o.status', 'o.qty_planned', 'o.due_on', 'o.notes', 'o.started_at', 'o.completed_at', 'o.cancel_note', 'o.created_at',
+    .select(['o.id', 'o.number', 'o.status', 'o.qty_planned', 'o.due_on', 'o.notes', 'o.started_at', 'o.completed_at', 'o.cancel_note', 'o.created_at', 'o.batch_ref',
       'o.variant_id', 'p.id as product_id', 'p.name as product', 'p.sku', 'v.size', 'v.sku as variant_sku', 'v.stock_qty', 's.email as created_by'])
     .where('o.id', '=', id).executeTakeFirst();
   if (!o) throw new NotFoundError('Production order not found.');
@@ -62,6 +64,57 @@ export async function createProductionOrder(db: Db, actor: StaffPrincipal, input
       .returning('id').executeTakeFirstOrThrow();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'production.create', entityType: 'production_orders', entityId: o.id, after: { number: n, variant_sku: v.sku, qty: input.qty } });
     return { id: o.id, number: n };
+  });
+}
+
+/** Several production orders in one go (2026-10-01), one per size, sharing a batch reference (given, or the first
+    order's number) so they can be found and linked together. One transaction: all are planned, or none. */
+export async function createProductionOrders(db: Db, actor: StaffPrincipal,
+  input: { lines: { variantId: string; qty: number }[]; dueOn: string | null; notes: string | null; batchRef: string | null }, ctx: MutationContext) {
+  requirePermission(actor, 'production.manage');
+  const lines = input.lines.filter(l => l.qty > 0);
+  if (!lines.length) throw new DomainError('invalid', 'Enter how many pieces for at least one size.');
+  if (lines.length > 100) throw new DomainError('invalid', 'Plan at most 100 sizes at a time.');
+  if (new Set(lines.map(l => l.variantId)).size !== lines.length) throw new DomainError('invalid', 'A size is listed twice.');
+  return db.transaction().execute(async tx => {
+    const found = await tx.selectFrom('product_variants').select(['id', 'sku']).where('id', 'in', lines.map(l => l.variantId)).execute();
+    if (found.length !== lines.length) throw new NotFoundError('One of the sizes no longer exists. Reload and try again.');
+    const sku = new Map(found.map(v => [v.id, v.sku]));
+    const made: { id: string; number: string }[] = [];
+    let batch = input.batchRef?.trim() || null;
+    for (const l of lines) {
+      const { n } = (await sql<{ n: string }>`select public.next_document_number('production_order', 'PR') as n`.execute(tx)).rows[0];
+      if (!batch && lines.length > 1) batch = n;
+      const o = await tx.insertInto('production_orders').values({ number: n, variant_id: l.variantId, qty_planned: l.qty, due_on: input.dueOn, notes: input.notes, created_by: actor.staffId })
+        .returning('id').executeTakeFirstOrThrow();
+      made.push({ id: o.id, number: n });
+      await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'production.create', entityType: 'production_orders', entityId: o.id, after: { number: n, variant_sku: sku.get(l.variantId), qty: l.qty } });
+    }
+    if (batch) await tx.updateTable('production_orders').set({ batch_ref: batch }).where('id', 'in', made.map(m => m.id)).execute();
+    return { orders: made, batchRef: batch };
+  });
+}
+
+/** Links several production orders to an existing purchase order (2026-10-01): materials bought for them, or finished
+    products bought in alongside them. The link is a record only (shown on both sides); it changes no stock and makes
+    nothing wait for anything. Completed / cancelled production and cancelled POs cannot be linked. Already linked = kept. */
+export async function linkProductionToPurchaseOrder(db: Db, actor: StaffPrincipal, input: { productionOrderIds: string[]; purchaseOrderId: string }, ctx: MutationContext) {
+  requirePermission(actor, 'production.manage');
+  requirePermission(actor, 'procurement.read');
+  const ids = [...new Set(input.productionOrderIds)];
+  if (!ids.length) throw new DomainError('invalid', 'Select at least one production order.');
+  return db.transaction().execute(async tx => {
+    const po = await tx.selectFrom('purchase_orders').select(['id', 'po_number', 'status']).where('id', '=', input.purchaseOrderId).forShare().executeTakeFirst();
+    if (!po) throw new NotFoundError('Purchase order not found.');
+    if (po.status === 'cancelled') throw new ConflictError(`${po.po_number} is cancelled.`);
+    const orders = await tx.selectFrom('production_orders').select(['id', 'number', 'status']).where('id', 'in', ids).forShare().execute();
+    if (orders.length !== ids.length) throw new NotFoundError('One of the production orders no longer exists. Reload and try again.');
+    const closed = orders.filter(o => o.status === 'completed' || o.status === 'cancelled');
+    if (closed.length) throw new ConflictError(`${closed.map(o => o.number).join(', ')} ${closed.length === 1 ? 'is' : 'are'} already finished or cancelled.`);
+    const added = await tx.insertInto('production_purchase_orders').values(orders.map(o => ({ production_order_id: o.id, purchase_order_id: po.id, created_by: actor.staffId })))
+      .onConflict(oc => oc.columns(['production_order_id', 'purchase_order_id']).doNothing()).returning('production_order_id').execute();
+    for (const a of added) await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'production.purchase_order_link', entityType: 'production_orders', entityId: a.production_order_id, metadata: { po_number: po.po_number } });
+    return { linked: added.length, already: orders.length - added.length, poNumber: po.po_number };
   });
 }
 
@@ -145,6 +198,6 @@ export async function recordQualityCheck(db: Db, actor: StaffPrincipal, input: {
 export async function listProducibleVariants(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'production.read');
   const rows = await db.selectFrom('product_variants as v').innerJoin('products as p', 'p.id', 'v.product_id')
-    .select(['v.id', 'v.size', 'v.stock_qty', 'p.sku', 'p.name']).where('p.status', '!=', 'archived').orderBy('p.sku').orderBy('v.sort_order').execute();
-  return rows.map(r => ({ id: r.id, label: `${r.sku} · ${r.name} · ${r.size} (in stock ${r.stock_qty})` }));
+    .select(['v.id', 'v.size', 'v.stock_qty', 'v.sku as variant_sku', 'p.sku', 'p.name']).where('p.status', '!=', 'archived').orderBy('p.sku').orderBy('v.sort_order').execute();
+  return rows.map(r => ({ id: r.id, label: `${r.sku} · ${r.name} · ${r.size} (in stock ${r.stock_qty})`, sku: r.variant_sku, name: `${r.name} · ${r.size}`, stock: r.stock_qty }));
 }

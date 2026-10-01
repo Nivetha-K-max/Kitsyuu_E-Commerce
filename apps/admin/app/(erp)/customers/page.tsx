@@ -11,17 +11,23 @@ import FilterForm from '@/components/FilterForm';
 export const metadata: Metadata = { title: 'Customers' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+/** Every filter in the URL (2026-10-01: segments, channel, payment, counts, spend, points, dates, subscription, place, sort). */
+const KEYS = ['q', 'status', 'verified', 'orders', 'segment', 'channel', 'payment', 'minOrders', 'maxOrders', 'minSpend', 'minPoints', 'maxPoints',
+  'lastOrderFrom', 'lastOrderTo', 'joinedFrom', 'joinedTo', 'subscribed', 'place', 'sort'] as const;
+const DEFAULTS: Record<string, string> = { status: 'all', verified: 'all', orders: 'all', segment: 'all', channel: 'all', payment: 'all', subscribed: 'all', sort: 'newest' };
 
 export default async function CustomersPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'customers.read')) return <><PageHead section="Commerce" title="Customers" /><Forbidden permission="customers.read" /></>;
   const sp = await searchParams;
-  const parsed = customerListQuery.safeParse({ q: one(sp.q), status: one(sp.status), verified: one(sp.verified), orders: one(sp.orders), page: one(sp.page) });
-  const query: CustomerListQuery = parsed.success ? parsed.data : { q: undefined, status: 'all', verified: 'all', orders: 'all', page: 1 };
+  const raw = Object.fromEntries(KEYS.map(k => [k, one(sp[k])]));
+  const parsed = customerListQuery.safeParse({ ...raw, page: one(sp.page) });
+  const query: CustomerListQuery = parsed.success ? parsed.data : customerListQuery.parse({});
   const { rows, hasNext, totals } = await listCustomers(db(), actor, query);
-  const filtered = !!(query.q || query.status !== 'all' || query.verified !== 'all' || query.orders !== 'all');
-  const link = (page: number) => `/customers?${new URLSearchParams({ ...Object.fromEntries(Object.entries({ q: query.q, status: query.status, verified: query.verified, orders: query.orders })
-    .filter(([, v]) => v && v !== 'all') as [string, string][]), page: String(page) })}`;
+  const active = Object.entries(raw).filter(([k, v]) => v && v !== DEFAULTS[k]) as [string, string][];
+  const filtered = active.length > 0;
+  const link = (page: number) => `/customers?${new URLSearchParams({ ...Object.fromEntries(active), page: String(page) })}`;
+  const v = (k: string) => raw[k] ?? '';
   return (
     <>
       <PageHead section="Commerce" title="Customers"
@@ -42,6 +48,29 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
         <select id="c-orders" name="orders" className="input" defaultValue={query.orders}>
           <option value="all">With or without orders</option><option value="with">Has orders</option><option value="without">No orders</option>
         </select>
+        <details className="more-filters" open={active.some(([k]) => !['q', 'status', 'verified', 'orders'].includes(k)) || undefined}>
+          <summary>More filters</summary>
+          <div className="actions" data-more-filters>
+            <select name="segment" className="input" aria-label="New or existing" defaultValue={v('segment') || 'all'}>
+              <option value="all">New and existing</option><option value="new">New (joined in the last 30 days)</option><option value="existing">Existing (joined earlier)</option></select>
+            <select name="channel" className="input" aria-label="Where they bought" defaultValue={v('channel') || 'all'}>
+              <option value="all">Online or offline</option><option value="online">Bought online</option><option value="offline">Bought in a branch</option></select>
+            <select name="payment" className="input" aria-label="How they paid" defaultValue={v('payment') || 'all'}>
+              <option value="all">Any payment</option><option value="cod">Used cash on delivery</option><option value="online">Paid online</option></select>
+            <input name="minOrders" className="input" inputMode="numeric" placeholder="Orders from" aria-label="At least this many orders" defaultValue={v('minOrders')} />
+            <input name="maxOrders" className="input" inputMode="numeric" placeholder="Orders up to" aria-label="At most this many orders" defaultValue={v('maxOrders')} />
+            <input name="minSpend" className="input" inputMode="numeric" placeholder="Spent at least ₹" aria-label="Spent at least (rupees)" defaultValue={v('minSpend')} />
+            <input name="minPoints" className="input" inputMode="numeric" placeholder="Points from" aria-label="Loyalty points at least" defaultValue={v('minPoints')} />
+            <input name="maxPoints" className="input" inputMode="numeric" placeholder="Points up to" aria-label="Loyalty points at most" defaultValue={v('maxPoints')} />
+            <label className="inline-label">Last order <input type="date" name="lastOrderFrom" className="input" aria-label="Last order from" defaultValue={v('lastOrderFrom')} /> – <input type="date" name="lastOrderTo" className="input" aria-label="Last order to" defaultValue={v('lastOrderTo')} /></label>
+            <label className="inline-label">Joined <input type="date" name="joinedFrom" className="input" aria-label="Joined from" defaultValue={v('joinedFrom')} /> – <input type="date" name="joinedTo" className="input" aria-label="Joined to" defaultValue={v('joinedTo')} /></label>
+            <select name="subscribed" className="input" aria-label="Newsletter" defaultValue={v('subscribed') || 'all'}>
+              <option value="all">Subscribed or not</option><option value="yes">Subscribed to emails</option><option value="no">Not subscribed</option></select>
+            <input name="place" className="input" placeholder="City, state or PIN" aria-label="City, state or PIN (saved addresses)" defaultValue={v('place')} />
+            <select name="sort" className="input" aria-label="Sort" defaultValue={v('sort') || 'newest'}>
+              <option value="newest">Newest first</option><option value="spend">Highest spend</option><option value="orders">Most orders</option><option value="last_order">Last order</option><option value="points">Most points</option></select>
+          </div>
+        </details>
         <button className="btn ghost" type="submit">Apply</button>
         {filtered && <Link className="btn link" href="/customers">Clear</Link>}
       </FilterForm>
@@ -52,7 +81,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
         </Empty>
       ) : (
         <div className="table-wrap"><table data-customers-table>
-          <thead><tr><th>Customer</th><th>Status</th><th className="num">Orders</th><th className="num">Paid orders</th><th className="num">Lifetime value</th><th>Last order</th><th>Joined</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Status</th><th className="num">Orders</th><th className="num">Paid orders</th><th className="num">Lifetime value</th><th className="num">Points</th><th>Last order</th><th>Joined</th></tr></thead>
           <tbody>{rows.map(c => (
             <tr key={c.id} data-customer-row={c.email}>
               <td><Link className="row-link" href={`/customers/${c.id}`}>{c.fullName || c.email}</Link>
@@ -61,6 +90,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
               <td className="num" data-orders-count>{formatNumber(c.ordersCount)}</td>
               <td className="num">{formatNumber(c.paidOrdersCount)}</td>
               <td className="num money" data-lifetime-value>{formatPaise(c.lifetimeValuePaise)}</td>
+              <td className="num" data-points>{formatNumber(c.points)}{c.subscribed ? <div className="note">subscribed</div> : null}</td>
               <td className="nowrap">{formatDateTime(c.lastOrderAt)}</td>
               <td className="nowrap">{formatDateTime(c.createdAt)}</td>
             </tr>))}

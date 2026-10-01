@@ -85,7 +85,7 @@ export const priceInput = z.string().max(20).transform((v, ctx) => {
 export const productListQuery = z.object({
   q: z.string().trim().max(80).optional().transform(v => v || undefined),
   category: categoryId.optional().or(z.literal('').transform(() => undefined)),
-  status: z.enum(['all', 'active', 'inactive', 'draft', 'archived']).default('all'),
+  status: z.enum(['all', 'active', 'inactive', 'draft', 'review', 'archived']).default('all'),
   /** Filters that combine with the others: a collection, and availability of the sellable sizes. */
   collection: z.string().trim().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).optional().or(z.literal('').transform(() => undefined)),
   stock: z.enum(['all', 'in_stock', 'low', 'out']).default('all'),
@@ -112,7 +112,7 @@ export const updateProductInput = z.object({
   isFeatured: z.enum(['on', 'off']).default('off').transform(v => v === 'on'),
 });
 
-export const setProductStatusInput = z.object({ productId, status: z.enum(['active', 'draft', 'archived']) });
+export const setProductStatusInput = z.object({ productId, status: z.enum(['active', 'draft', 'review', 'archived']) });
 export const updatePriceInput = z.object({
   productId,
   price: priceInput,
@@ -230,6 +230,8 @@ export const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(-[a-z0-9]+
 /** Store URL slug from a product name (used when the slug field is left blank). */
 export const slugify = (name: string) => name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 
+/** Size labels become part of the SKU (product SKU + '-' + size), so they are short and simple. */
+export const sizeLabel = z.string().trim().regex(/^[A-Za-z0-9]{1,8}$/, 'Use 1–8 letters or digits, e.g. XS, M, 32, FREE.').transform(v => v.toUpperCase());
 export const createProductInput = z.object({
   name: z.string().trim().min(2, 'Enter a product name.').max(120),
   sku,
@@ -239,13 +241,27 @@ export const createProductInput = z.object({
   price: priceInput,
   description: z.string().trim().max(4000).default(''),
   colourLabel: z.string().trim().max(80).transform(v => v || null).default(''),
+  /** 2026-10-01: sizes created with the product, each with its opening stock (sizes[] / qtys[] rows; empty rows ignored). */
+  sizes: z.array(z.string().trim().max(20)).max(30).optional().transform(v => v ?? []),
+  qtys: z.array(z.string().trim().max(7)).max(30).optional().transform(v => v ?? []),
+}).transform((v, ctx) => {
+  const { sizes: labels, qtys, ...rest } = v;
+  const sizes: { size: string; qty: number }[] = [];
+  for (const [i, raw] of labels.entries()) {
+    if (!raw) continue;
+    const size = sizeLabel.safeParse(raw);
+    if (!size.success) { ctx.addIssue({ code: 'custom', path: ['sizes'], message: `Size "${raw}": use 1–8 letters or digits, e.g. XS, M, 32, FREE.` }); return z.NEVER; }
+    const q = (qtys[i] ?? '').trim() === '' ? 0 : Number(qtys[i]);
+    if (!Number.isInteger(q) || q < 0 || q > 100000) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: `Size ${size.data}: enter a whole quantity (0 or more).` }); return z.NEVER; }
+    if (sizes.some(x => x.size === size.data)) { ctx.addIssue({ code: 'custom', path: ['sizes'], message: `Size ${size.data} is listed twice.` }); return z.NEVER; }
+    sizes.push({ size: size.data, qty: q });
+  }
+  return { ...rest, sizes };
 });
 
 export const newArrivalInput = z.object({ productId, member: onOff });
 export const moveNewArrivalInput = z.object({ productId, direction });
 
-/** Size labels become part of the SKU (product SKU + '-' + size), so they are short and simple. */
-export const sizeLabel = z.string().trim().regex(/^[A-Za-z0-9]{1,8}$/, 'Use 1–8 letters or digits, e.g. XS, M, 32, FREE.').transform(v => v.toUpperCase());
 export const addVariantInput = z.object({ productId, size: sizeLabel });
 /** '' = no override (use the product price); otherwise the same rules and messages as priceInput. */
 const optionalPrice = z.string().max(20).transform((v, ctx): number | null => {
@@ -363,13 +379,8 @@ const optionalMobile = z.string().trim().max(20).transform(v => v === '' ? null 
   .pipe(z.union([z.null(), indianMobile]));
 export const customerProfileInput = z.object({ fullName, phone: optionalMobile.default('') });
 
-export const INDIAN_STATES = [
-  'Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
-  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir',
-  'Jharkhand', 'Karnataka', 'Kerala', 'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
-  'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-] as const;
+import { INDIAN_STATES } from './constants.ts';   // zod-free, also importable alone (@kitsyuu/contracts/constants)
+export { INDIAN_STATES };
 const optionalLine = z.string().trim().max(200).transform(v => v === '' ? null : v);
 export const addressInput = z.object({
   addressId: uuid.optional(),                            // present when editing
@@ -444,11 +455,23 @@ const page = z.coerce.number().int().min(1).max(10_000).default(1);
 const searchText = z.string().trim().max(80).optional().transform(v => v || undefined);
 const requiredNote = (what: string) => z.string().trim().min(3, `Give a reason; it is kept in the ${what}.`).max(500, 'Keep it under 500 characters.');
 
+/** Customer list filters (2026-10-01: segments, channel, payment method, order count, spend, points, dates, subscription,
+    city / state, sort). Every filter is optional and they combine (AND). Empty or malformed values are ignored. */
+const optInt = z.string().trim().max(9).optional().transform(v => (v && /^\d+$/.test(v) ? Number(v) : undefined));
+const optDate = z.string().trim().max(10).optional().transform(v => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined));
 export const customerListQuery = z.object({
   q: searchText,
   status: z.enum(['all', 'active', 'disabled']).default('all'),
   verified: z.enum(['all', 'verified', 'unverified']).default('all'),
   orders: z.enum(['all', 'with', 'without']).default('all'),
+  segment: z.enum(['all', 'new', 'existing']).catch('all').default('all'),
+  channel: z.enum(['all', 'online', 'offline']).catch('all').default('all'),
+  payment: z.enum(['all', 'cod', 'online']).catch('all').default('all'),
+  minOrders: optInt, maxOrders: optInt, minSpend: optInt, minPoints: optInt, maxPoints: optInt,
+  lastOrderFrom: optDate, lastOrderTo: optDate, joinedFrom: optDate, joinedTo: optDate,
+  subscribed: z.enum(['all', 'yes', 'no']).catch('all').default('all'),
+  place: z.string().trim().max(60).optional().transform(v => v || undefined),
+  sort: z.enum(['newest', 'spend', 'orders', 'last_order', 'points']).catch('newest').default('newest'),
   page,
 });
 export const customerIdInput = z.object({ customerId: uuid });
@@ -561,6 +584,8 @@ export const vendorInput = z.object({
   address: optText(400),
   notes: optText(1000),
 });
+/** The finished products a vendor supplies (2026-10-01), chosen several at once. */
+export const vendorProductsInput = z.object({ vendorId: uuid, productIds: z.array(productId).max(500).optional().transform(v => v ?? []) });
 export const setVendorActiveInput = z.object({ vendorId: uuid, active: z.enum(['true', 'false']).transform(v => v === 'true') });
 export const materialInput = z.object({
   materialId: uuid.optional().or(z.literal('').transform(() => undefined)),
@@ -587,41 +612,53 @@ export const purchaseOrderWithLinesInput = z.object({
   vendorId: uuid,
   expectedOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
   notes: optText(1000),
+  /** 2026-10-01: where product lines are received (empty = the online stock). */
+  locationId: uuid.optional().or(z.literal('').transform(() => undefined)),
   materialIds: z.array(uuid).max(200).optional().transform(v => v ?? []),
-  qtys: z.array(z.string().trim().max(20)).max(200).optional().transform(v => v ?? []),
-  costs: z.array(z.string().trim().max(20)).max(200).optional().transform(v => v ?? []),
+  /** 2026-10-01: one entry per row, "v:<product size id>" or "m:<material id>" (replaces materialIds when present). */
+  items: z.array(z.string().regex(/^[vm]:[0-9a-f-]{36}$/i, 'Reload the page and try again.')).max(400).optional().transform(v => v ?? []),
+  qtys: z.array(z.string().trim().max(20)).max(400).optional().transform(v => v ?? []),
+  costs: z.array(z.string().trim().max(20)).max(400).optional().transform(v => v ?? []),
 }).transform((v, ctx) => {
-  if (v.materialIds.length !== v.qtys.length || v.materialIds.length !== v.costs.length) { ctx.addIssue({ code: 'custom', message: 'Reload the page and try again.' }); return z.NEVER; }
-  const lines = [];
-  for (const [i, materialId] of v.materialIds.entries()) {
+  const ids = v.items.length ? v.items : v.materialIds.map(id => `m:${id}`);
+  if (ids.length !== v.qtys.length || ids.length !== v.costs.length) { ctx.addIssue({ code: 'custom', message: 'Reload the page and try again.' }); return z.NEVER; }
+  const lines: { materialId?: string; variantId?: string; qty: number; unitCostPaise: number | null }[] = [];
+  for (const [i, item] of ids.entries()) {
     if (!v.qtys[i]) continue;
+    const isProduct = item.startsWith('v:'), id = item.slice(2);
     const qty = Number(v.qtys[i]), cost = v.costs[i] ? Number(v.costs[i].replace(/[₹,\s]/g, '')) : null;
     if (!Number.isFinite(qty) || qty <= 0 || qty > 1e9 || Math.round(qty * 1000) !== qty * 1000) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Quantities must be numbers above 0 (up to 3 decimals).' }); return z.NEVER; }
     if (cost !== null && (!Number.isFinite(cost) || cost < 0)) { ctx.addIssue({ code: 'custom', path: ['costs'], message: 'Enter unit prices in rupees.' }); return z.NEVER; }
-    lines.push({ materialId, qty, unitCostPaise: cost === null ? null : Math.round(cost * 100) });
+    if (isProduct && !Number.isInteger(qty)) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Products are ordered in whole pieces.' }); return z.NEVER; }
+    lines.push({ ...(isProduct ? { variantId: id } : { materialId: id }), qty, unitCostPaise: cost === null ? null : Math.round(cost * 100) });
   }
-  if (!lines.length) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Enter a quantity for at least one material.' }); return z.NEVER; }
-  if (new Set(lines.map(l => l.materialId)).size !== lines.length) { ctx.addIssue({ code: 'custom', message: 'A material is listed twice.' }); return z.NEVER; }
-  return { vendorId: v.vendorId, expectedOn: v.expectedOn, notes: v.notes, lines };
+  if (!lines.length) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Enter a quantity for at least one product or material.' }); return z.NEVER; }
+  if (new Set(lines.map(l => l.variantId ?? l.materialId)).size !== lines.length) { ctx.addIssue({ code: 'custom', message: 'An item is listed twice.' }); return z.NEVER; }
+  return { vendorId: v.vendorId, expectedOn: v.expectedOn, notes: v.notes, locationId: v.locationId ?? null, lines };
 });
 export const poLineInput = z.object({
   purchaseOrderId: uuid,
-  materialId: uuid,
+  /** "v:<product size id>" or "m:<material id>" (2026-10-01); materialId alone still works. */
+  item: z.string().regex(/^[vm]:[0-9a-f-]{36}$/i).optional(),
+  materialId: uuid.optional(),
   qty: materialQty.refine(n => n > 0, 'Enter a quantity above zero.'),
   unitCost: z.string().trim().optional(),
-}).transform(({ unitCost, ...rest }) => ({ ...rest, unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
+}).transform(({ unitCost, item, materialId, ...rest }) => ({ ...rest, ...(item?.startsWith('v:') ? { variantId: item.slice(2) } : { materialId: item ? item.slice(2) : materialId }),
+  unitCostPaise: unitCost ? Math.round(Number(unitCost.replace(/[₹,\s]/g, '')) * 100) : null }))
   .refine(v => v.unitCostPaise === null || (Number.isInteger(v.unitCostPaise) && v.unitCostPaise >= 0), { message: 'Enter the unit cost in rupees.', path: ['unitCost'] });
 export const removePoLineInput = z.object({ purchaseOrderId: uuid, lineId: uuid });
 export const poStatusInput = z.object({
   purchaseOrderId: uuid,
-  status: z.enum(['ordered', 'cancelled']),
-  expectedStatus: z.enum(['draft', 'ordered', 'partially_received', 'received', 'cancelled']),
+  status: z.enum(['approved', 'ordered', 'cancelled', 'closed', 'draft']),
+  expectedStatus: z.enum(['draft', 'approved', 'ordered', 'partially_received', 'received', 'closed', 'cancelled']),
   note: optText(300),
 });
 export const receiveGoodsInput = z.object({
   purchaseOrderId: uuid,
   lines: z.array(z.object({ lineId: uuid, qty: materialQty.refine(n => n > 0, 'Quantities must be above zero.') })).max(200),
   note: optText(500),
+  /** The vendor's delivery note / invoice number (2026-10-01). */
+  vendorRef: optText(60),
 });
 export type VendorInputT = z.infer<typeof vendorInput>;
 
@@ -632,6 +669,29 @@ export const createProductionOrderInput = z.object({
   qty: z.coerce.number({ message: 'Enter how many pieces.' }).int('Enter whole pieces.').min(1, 'Enter how many pieces.').max(100000),
   dueOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
   notes: z.string().trim().max(1000).optional().transform(v => v || null),
+});
+/** Several sizes at once (2026-10-01): items[] "v:<size id>" with qtys[] (costs[] from the shared row picker is ignored). */
+export const createProductionBatchInput = z.object({
+  items: z.array(z.string().regex(/^v:[0-9a-f-]{36}$/i, 'Reload the page and try again.')).max(400).optional().transform(v => v ?? []),
+  qtys: z.array(z.string().trim().max(10)).max(400).optional().transform(v => v ?? []),
+  dueOn: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable()),
+  notes: z.string().trim().max(1000).optional().transform(v => v || null),
+  batchRef: z.string().trim().max(40).optional().transform(v => v || null),
+}).transform((v, ctx) => {
+  if (v.items.length !== v.qtys.length) { ctx.addIssue({ code: 'custom', message: 'Reload the page and try again.' }); return z.NEVER; }
+  const lines = [];
+  for (const [i, item] of v.items.entries()) {
+    if (!v.qtys[i]) continue;
+    const qty = Number(v.qtys[i]);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 100000) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Enter whole pieces (1 or more).' }); return z.NEVER; }
+    lines.push({ variantId: item.slice(2), qty });
+  }
+  if (!lines.length) { ctx.addIssue({ code: 'custom', path: ['qtys'], message: 'Enter how many pieces for at least one size.' }); return z.NEVER; }
+  return { lines, dueOn: v.dueOn, notes: v.notes, batchRef: v.batchRef };
+});
+export const linkProductionPoInput = z.object({
+  productionOrderIds: z.array(uuid).min(1, 'Select at least one production order.').max(200),
+  purchaseOrderId: z.string().uuid({ message: 'Choose a purchase order.' }),
 });
 export const productionInputInput = z.object({
   productionOrderId: uuid, materialId: uuid,
@@ -707,6 +767,13 @@ export const orderEditInput = z.object({
   changeAddress: checked,
   fullName: z.string().trim().max(120).optional(), phone: z.string().trim().max(20).optional(), line1: z.string().trim().max(200).optional(),
   line2: z.string().trim().max(200).optional(), city: z.string().trim().max(80).optional(), state: z.string().trim().max(60).optional(), pin: z.string().trim().max(10).optional(),
+  /** 2026-10-01: a size added, the delivery option, contact details and the staff discount. */
+  addVariantId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
+  addQty: z.string().trim().max(3).optional(),
+  deliveryRateId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
+  changeContact: checked,
+  contactName: z.string().trim().max(120).optional(), contactEmail: z.string().trim().toLowerCase().max(254).optional(), contactPhone: z.string().trim().max(20).optional(),
+  staffDiscountPercent: z.string().trim().max(6).optional(), staffDiscountReason: z.string().trim().max(200).optional(),
 }).transform((v, ctx) => {
   if (v.itemIds.length !== v.variantIds.length || v.itemIds.length !== v.qtys.length || !v.itemIds.length) { ctx.addIssue({ code: 'custom', message: 'Reload the order and try again.' }); return z.NEVER; }
   const lines = v.itemIds.map((itemId, i) => ({ itemId, variantId: v.variantIds[i], qty: Number(v.qtys[i]) }));
@@ -717,7 +784,28 @@ export const orderEditInput = z.object({
     if (!a.success) { for (const i of a.error.issues) ctx.addIssue({ code: 'custom', path: i.path, message: i.message }); return z.NEVER; }
     address = a.data;
   }
-  return { orderId: v.orderId, expectedTotalPaise: v.expectedTotalPaise, note: v.note, lines, address };
+  const add = [];
+  if (v.addVariantId) {
+    const q = Number(v.addQty || '1');
+    if (!Number.isInteger(q) || q < 1 || q > 10) { ctx.addIssue({ code: 'custom', path: ['addQty'], message: 'Enter a quantity from 1 to 10.' }); return z.NEVER; }
+    add.push({ variantId: v.addVariantId, qty: q });
+  }
+  let contact = null;
+  if (v.changeContact) {
+    const email = v.contactEmail || null, phone = v.contactPhone || null;
+    if (email && !z.email().safeParse(email).success) { ctx.addIssue({ code: 'custom', path: ['contactEmail'], message: 'Enter a valid email address.' }); return z.NEVER; }
+    if (phone && !/^(\+91[\s-]?)?[6-9]\d{9}$/.test(phone.replace(/\s/g, ''))) { ctx.addIssue({ code: 'custom', path: ['contactPhone'], message: 'Enter a 10-digit Indian mobile number.' }); return z.NEVER; }
+    if (!email && !phone) { ctx.addIssue({ code: 'custom', path: ['contactEmail'], message: 'Keep an email or a mobile number.' }); return z.NEVER; }
+    contact = { name: v.contactName || null, email, phone };
+  }
+  let staffDiscount = null;
+  if (v.staffDiscountPercent) {
+    const pct = Number(v.staffDiscountPercent);
+    if (!/^\d{1,2}(\.\d{1,2})?$/.test(v.staffDiscountPercent) || pct >= 100) { ctx.addIssue({ code: 'custom', path: ['staffDiscountPercent'], message: 'Enter a % from 0 (remove) to 99.' }); return z.NEVER; }
+    if (pct > 0 && !v.staffDiscountReason) { ctx.addIssue({ code: 'custom', path: ['staffDiscountReason'], message: 'Give the reason for the discount.' }); return z.NEVER; }
+    staffDiscount = { bp: Math.round(pct * 100), reason: v.staffDiscountReason || '' };
+  }
+  return { orderId: v.orderId, expectedTotalPaise: v.expectedTotalPaise, note: v.note, lines, address, add, deliveryRateId: v.deliveryRateId ?? null, contact, staffDiscount };
 });
 export type OrderEditInput = z.infer<typeof orderEditInput>;
 export const orderEditRefundInput = z.object({ editId: uuid, mode: z.enum(['provider', 'manual']), reference: optNote(100) })
@@ -725,3 +813,4 @@ export const orderEditRefundInput = z.object({ editId: uuid, mode: z.enum(['prov
 
 // Third pass: locations, transfers, colour variants.
 export * from './third-pass.ts';
+export * from './workflows.ts';
