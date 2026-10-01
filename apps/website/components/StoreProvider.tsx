@@ -64,6 +64,8 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
   const router = useRouter();
   const [refreshMinutes, setRefreshMinutes] = useState(initialRefresh);
   const [syncTick, setSyncTick] = useState(0);
+  /** 2026-10-01: the guest cart checked against the stock now (/api/cart/check): key id|colour|size → what can be bought. */
+  const [guestStock, setGuestStock] = useState<Map<string, { available: number; message: string | null }> | null>(null);
   const lastSync = useRef(Date.now());
   const [rawCart, setRawCart] = useState<unknown[]>([]);
   const [rawWish, setRawWish] = useState<unknown[]>([]);
@@ -81,6 +83,9 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(''), 4200);
   }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  /** The last saved cart received, as text: an identical reload (each navigation) changes nothing and re-renders nothing. */
+  const savedJson = useRef('');
 
   useEffect(() => {
     const load = () => { setRawCart(readList(KEYS.cart)); setRawWish(readList(KEYS.wish)); };
@@ -117,7 +122,9 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
       }
       if (!live) return;
       if (!store && savedStatusRef.current === 'ready') return;          // a reload failed: keep showing the last saved state
-      setSaved(store); setSavedStatus(store ? 'ready' : 'failed');
+      const json = JSON.stringify(store);
+      if (json !== savedJson.current) { savedJson.current = json; setSaved(store); }
+      setSavedStatus(store ? 'ready' : 'failed');
       if (!store && savedStatusRef.current !== 'failed') toast('Your saved cart could not be loaded right now. Items you add are kept in this browser for now.');
       savedStatusRef.current = store ? 'ready' : 'failed';
       lastSync.current = Date.now();
@@ -137,7 +144,7 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
     const due = () => {
       if (Date.now() - lastSync.current < refreshMinutes * 60_000) return;
       lastSync.current = Date.now();
-      if (auth.status === 'user') setSyncTick(t => t + 1); else router.refresh();
+      if (auth.status === 'user') setSyncTick(t => t + 1); else { router.refresh(); setSyncTick(t => t + 1); }
     };
     const timer = setInterval(due, 60_000);
     const onShow = () => { if (document.visibilityState === 'visible') due(); };
@@ -153,11 +160,41 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
   /** Same line: product, colour (third pass) and size. */
   const same = (l: { id: string; size: string; colour?: string | null }, id: string, size: string, colour?: string | null) => l.id === id && l.size === size && (l.colour ?? null) === (colour ?? null);
 
-  /* Guest lines: unknown products or sizes are dropped; name, SKU, image and price always come from the catalogue. */
-  const guestLines = useMemo(() => rawCart
+  /* Guest lines: unknown products or sizes are dropped; name, SKU, image and price always come from the catalogue. A size
+     that sold out stays in the cart with a message (2026-10-01; it used to disappear silently), and the stock check below
+     says when fewer are left than the cart holds. */
+  const guestRaw = useMemo(() => rawCart
     .filter((l): l is { id: string; size: string; qty: unknown; colour?: string | null } => !!l && typeof (l as CartLine).id === 'string')
-    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && (v.colour ?? null) === (l.colour ?? null) && v.available))
-    .map(l => lineFor(idx.byId.get(l.id)!, l.size, l.qty, l.colour)), [rawCart, idx, lineFor]);
+    .filter(l => idx.byId.get(l.id)?.variants.some(v => v.size === l.size && (v.colour ?? null) === (l.colour ?? null))), [rawCart, idx]);
+  const guestLines = useMemo<ShownLine[]>(() => guestRaw.map(l => {
+    const line: ShownLine = lineFor(idx.byId.get(l.id)!, l.size, l.qty, l.colour);
+    const live = guestStock?.get(`${l.id}|${l.colour ?? ''}|${l.size}`);
+    const listed = idx.byId.get(l.id)!.variants.some(v => v.size === l.size && (v.colour ?? null) === (l.colour ?? null) && v.available);
+    if (live) { line.available = live.available; line.problem = live.message; }
+    else if (!listed) { line.available = 0; line.problem = `${line.name}, ${line.colourLabel ? `${line.colourLabel}, ` : ''}size ${line.size}, is sold out.`; }
+    return line;
+  }), [guestRaw, idx, lineFor, guestStock]);
+  /* Guest stock check: on the pages that show the cart lines (cart, checkout), after the cart changes, every refresh interval
+     (syncTick) and when the tab is shown again. Nothing is reserved; checkout checks again on the server. A failed check keeps
+     the catalogue's view. Not run on product pages, so it never re-renders the buy form while someone is choosing. */
+  const showsCart = path === '/cart' || path.startsWith('/checkout');
+  const guestKey = guestRaw.map(l => `${l.id}|${l.colour ?? ''}|${l.size}|${String(l.qty)}`).join(',');
+  useEffect(() => {
+    if (saved || !localReady || !guestRaw.length || !showsCart) { setGuestStock(null); return; }
+    // Performance (2026-10-01): quantity taps in quick succession send one check (after 350 ms), and a check overtaken
+    // by a newer one is aborted.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      void fetch('/api/cart/check', { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', signal: ctl.signal,
+        body: JSON.stringify({ lines: guestRaw.map(l => ({ productId: l.id, size: l.size, colour: l.colour ?? null, qty: clampQty(l.qty) })) }) })
+        .then(r => (r.ok ? r.json() : null)).then((j: { lines?: { productId: string; size: string; colour: string | null; available: number; message: string | null }[] | null } | null) => {
+          if (ctl.signal.aborted || !j?.lines) return;
+          setGuestStock(new Map(j.lines.map(x => [`${x.productId}|${x.colour ?? ''}|${x.size}`, { available: x.available, message: x.message }])));
+        }).catch(() => {});
+    }, 350);
+    return () => { clearTimeout(timer); ctl.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, localReady, guestKey, syncTick, showsCart]);
   const savedLines = useMemo<ShownLine[]>(() => (saved?.cart.lines ?? []).map(l => ({
     id: l.id, sku: l.sku, name: l.name, size: l.size, colour: l.colour ?? null, colourLabel: l.colourLabel ?? null, qty: l.qty, price: l.price, available: l.available, problem: l.problem,
     image: idx.byId.get(l.id)?.media?.primary?.src || null,
@@ -207,11 +244,13 @@ export default function StoreProvider({ catalogue, children, refreshMinutes: ini
     write(KEYS.wish, next); setRawWish(next); return on;
   }, [saved, wishIds, apply, write]);
 
-  const value: StoreState = {
+  /* Performance (2026-10-01): one value object per real change. A toast, a timer tick or an unchanged reload re-renders
+     the provider only, not every component that reads the store (header, each wishlist heart, grids, cart). */
+  const value = useMemo<StoreState>(() => ({
     idx, ready, mode, lines, wishIds, toast, addToCart, setQty, removeLine, toggleWish,
     serverCart: saved?.cart ?? null,
     cartCount: lines.reduce((n, l) => n + l.qty, 0),
     subtotal: saved ? saved.cart.totals.subtotal : lines.reduce((s, l) => s + l.price * l.qty, 0),
-  };
+  }), [idx, ready, mode, lines, wishIds, toast, addToCart, setQty, removeLine, toggleWish, saved]);
   return <Ctx.Provider value={value}>{children}<p className="st-toast" role="status" aria-live="polite">{toastMsg}</p></Ctx.Provider>;
 }

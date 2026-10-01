@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cartRefreshMinutes } from '@kitsyuu/core';
+import { CART_REFRESH_DEFAULT_MINUTES, cartRefreshMinutes } from '@kitsyuu/core';
 import { currentCustomer, db } from '@/lib/server';
 import { customerStore } from '@/lib/store-state';
 
@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const me = await currentCustomer();
-    // Client change request: how often the store re-syncs a cart that has items (default 30 minutes).
-    const refreshMinutes = await cartRefreshMinutes(db()).catch(() => 30);
+    // Client change request: how often the store re-syncs a cart that has items (60 minutes unless set).
+    const refreshMinutes = await cartRefreshMinutes(db()).catch(() => CART_REFRESH_DEFAULT_MINUTES);
     const body = me ? { status: 'customer' as const, refreshMinutes, ...(await customerStore(me)) } : { status: 'guest' as const, refreshMinutes };
     return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {

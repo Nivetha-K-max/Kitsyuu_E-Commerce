@@ -23,6 +23,11 @@ export default async function PointsPage() {
         <div className="st-plp-aside"><p data-points-balance><b>{l.balance}</b> points</p></div></header>
       {!s.enabled ? <p className="st-note" data-points-off>Loyalty points are not active at the moment.{l.balance > 0 ? ' Your points are kept.' : ''}</p>
         : rules.length > 0 && <ul className="st-erp-list" data-points-rules>{rules.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+      <dl className="st-points-totals" data-points-totals>
+        <div><dt>Available</dt><dd>{l.balance}</dd></div><div><dt>Earned</dt><dd>{l.totals.earned}</dd></div>
+        <div><dt>Used</dt><dd>{l.totals.used}</dd></div><div><dt>Expired</dt><dd>{l.totals.expired}</dd></div>
+        {l.totals.reversed > 0 && <div><dt>Taken back</dt><dd>{l.totals.reversed}</dd></div>}
+      </dl>
       {l.expiringSoon && <p className="st-form-alert" role="status" data-points-expiring>{l.expiringSoon.points} points expire on {formatDate(l.expiringSoon.at as Date)}.</p>}
       {l.rows.length === 0 ? <p className="st-empty-inline" data-no-points>No points yet.</p> : (
         <ul className="st-erp-list" data-points-history>{l.rows.map(r => (

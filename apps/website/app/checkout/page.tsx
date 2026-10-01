@@ -91,7 +91,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
           ) : (
             <CheckoutForm idempotencyKey={randomBytes(16).toString('hex')} expectedTotalPaise={t.totalPaise} totalLabel={rupees(t.totalPaise)}
               selectedAddressId={chosen?.id} policy={returnsPolicy(returns)} blocked={t.shipping.unavailable ?? codBlocked}
-              deliveryOptions={(t.shipping.options ?? []).map(o => ({ id: o.rateId, label: `${o.label} · ${o.amountPaise > 0 ? rupees(o.amountPaise) : 'free'}${o.estimate ? ` · ${o.estimate}` : ''}` }))}
+              deliveryOptions={(t.shipping.options ?? []).map(o => ({ id: o.rateId, label: `${o.label} · ${o.amountPaise > 0 ? rupees(o.amountPaise) : 'free'}${o.estimate ? ` · ${o.estimate}` : ''}${o.description ? ` — ${o.description}` : ''}` }))}
               selectedDeliveryId={t.shipping.rateId ?? null} payment={payment ?? undefined}
               addresses={addresses.map(a => ({ id: a.id, isDefault: a.isDefault,
                 label: `${a.fullName}, ${a.line1}${a.line2 ? ', ' + a.line2 : ''}, ${a.city}, ${a.state} ${a.pin} · ${a.phone}` }))} />

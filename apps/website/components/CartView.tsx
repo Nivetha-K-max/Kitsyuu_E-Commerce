@@ -41,14 +41,33 @@ export function Totals({ cart, subtotal, count }: { cart: StoreCart | null; subt
 export default function CartView() {
   const { idx, ready, lines, cartCount, subtotal, setQty, removeLine, toast, serverCart, mode } = useStore();
   const focusNext = useRef<string | null>(null);
-  useEffect(() => {
+  const applyFocus = () => {
     if (!focusNext.current) return;
     const sel = focusNext.current; focusNext.current = null;
     (document.querySelector<HTMLElement>(sel) || document.getElementById('st-page-title'))?.focus();
-  });
+  };
+  useEffect(applyFocus);
+  /** Focus goes back where it belongs once the change has been drawn; it no longer waits for an unrelated re-render (the
+      store only re-renders the cart when the cart itself changes). */
+  const focusSoon = (target: string) => {
+    document.querySelector<HTMLElement>(target)?.focus();   // at once when the control is still there (e.g. the + button)
+    focusNext.current = target; requestAnimationFrame(() => requestAnimationFrame(applyFocus));   // and again once redrawn
+  };
   const key = (l: ShownLine) => `${l.id}|${l.colour ?? ''}|${l.size}`;
   const sel = (k: string, inner: string) => `[data-line="${CSS.escape(k)}"] ${inner}`;
-  if (!ready) return <div className="st-wrap"><p className="st-status">Loading…</p></div>;
+  // Until this browser's cart is read: the heading and a reserved area, so the page does not jump when the lines arrive.
+  if (!ready) return <div className="st-wrap"><PageHead label="Cart" title="Cart" /><div className="st-loading-area"><p className="st-status">Loading your cart…</p></div></div>;
+  /* 2026-10-01: lines that cannot be bought as they are (sold out, fewer left, no longer sold). "Update my cart" lowers each
+     to what is left or removes it; checkout stays closed until then (the server refuses it anyway). */
+  const problems = lines.filter(l => l.problem);
+  const blocked = serverCart ? !serverCart.canCheckout : problems.length > 0;
+  const fixCart = async () => {
+    for (const l of problems) {
+      if ((l.available ?? 0) > 0) await setQty(l.id, l.size, l.available!, l.colour);
+      else await removeLine(l.id, l.size, l.colour);
+    }
+    toast('Your cart now has only what is in stock.');
+  };
 
   return (
     <div className="st-wrap">
@@ -61,7 +80,7 @@ export default function CartView() {
               const max = Math.min(MAX_QTY, l.available ?? MAX_QTY);
               const step = async (d: number) => {
                 const next = await setQty(l.id, l.size, l.qty + d, l.colour);
-                focusNext.current = sel(k, `[data-line-step="${d}"]:not(:disabled)`);
+                focusSoon(sel(k, `[data-line-step="${d}"]:not(:disabled)`));
                 if (next) toast(`${l.name}, size ${l.size}: quantity ${next.qty}.`);
               };
               return (
@@ -77,14 +96,14 @@ export default function CartView() {
                     <div className="st-qty" role="group" aria-label={`Quantity for ${l.name}, size ${l.size}`}>
                       <button type="button" data-line-step="-1" aria-label="Decrease quantity" disabled={l.qty <= 1} onClick={() => step(-1)}>−</button>
                       <input type="number" inputMode="numeric" min={1} max={max} defaultValue={l.qty} key={l.qty} data-line-qty="" aria-label="Quantity"
-                        onBlur={e => { if (Number(e.target.value) !== l.qty) { void setQty(l.id, l.size, Number(e.target.value), l.colour); focusNext.current = sel(k, '[data-line-qty]'); } }}
+                        onBlur={e => { if (Number(e.target.value) !== l.qty) { void setQty(l.id, l.size, Number(e.target.value), l.colour); focusSoon(sel(k, '[data-line-qty]')); } }}
                         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
                       <button type="button" data-line-step="1" aria-label="Increase quantity" disabled={l.qty >= max} onClick={() => step(1)}>+</button>
                     </div>
                     <button className="st-line-remove" type="button" data-line-remove="" onClick={async () => {
                       const nb = lines[n + 1] || lines[n - 1];
-                      focusNext.current = nb ? sel(key(nb), '[data-line-remove]') : '#st-page-title';
-                      await removeLine(l.id, l.size, l.colour); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
+                      const target = nb ? sel(key(nb), '[data-line-remove]') : '#st-page-title';
+                      await removeLine(l.id, l.size, l.colour); focusSoon(target); toast(`Removed ${l.name}, size ${l.size}, from your cart.`);
                     }}>Remove<span className="sr-only"> {l.name}, size {l.size}</span></button>
                   </div>
                   <p className="st-line-total"><span className="sr-only">Line total </span>{formatMoney(l.price * l.qty)}</p>
@@ -95,8 +114,11 @@ export default function CartView() {
           <aside className="st-summary" aria-labelledby="st-summary-title">
             <h2 id="st-summary-title">Summary</h2>
             <Totals cart={serverCart} subtotal={subtotal} count={cartCount} />
-            {serverCart && !serverCart.canCheckout
-              ? <p className="st-form-alert" role="alert" data-cart-blocked>Some items cannot be bought as they are. Update or remove them to check out.</p>
+            {blocked
+              ? <>
+                  <p className="st-form-alert" role="alert" data-cart-blocked>Some items cannot be bought as they are. Update or remove them to check out.</p>
+                  {problems.length > 0 && <button className="button st-checkout" type="button" data-cart-fix onClick={() => void fixCart()}>Update my cart to what is in stock</button>}
+                </>
               : <Link className="button st-checkout" href={url.checkout}>Checkout</Link>}
             <p className="st-note">{mode === 'customer'
               ? 'Prices are checked again when you place your order.'

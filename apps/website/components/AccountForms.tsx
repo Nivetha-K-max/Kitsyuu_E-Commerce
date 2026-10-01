@@ -1,7 +1,7 @@
 'use client';
 /* Customer account forms (M6). The server actions (app/account/actions.ts) validate everything and act only on the
    signed-in customer's own rows. */
-import { INDIAN_STATES } from '@kitsyuu/contracts';
+import { INDIAN_STATES } from '@kitsyuu/contracts/constants';   // not the package root: that would ship zod to the browser
 import type { CustomerAddress } from '@kitsyuu/core';
 import { ActionForm, CheckField, Field, Hidden, SelectField } from './forms';
 import {

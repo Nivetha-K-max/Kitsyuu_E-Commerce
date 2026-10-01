@@ -32,17 +32,25 @@ export default function ShopResults({ productIds, tabs, isNew, base, initialSort
   // A facet with a single option cannot narrow the list, so it is not offered (e.g. Type inside a subcategory).
   const groups = facets.map(f => ({ f, opts: facetOptions(list, filters, facets, f) })).filter(g => g.opts.length > 1);
 
-  const sync = (nextSort: string, next: FilterState) => {
-    const q = writeFilters(new URLSearchParams(location.search), next, facets);
-    if (nextSort === 'default') q.delete('sort'); else q.set('sort', nextSort);
-    history.replaceState(null, '', location.pathname + (q.size ? '?' + q : ''));
+  /* The list always updates at once. For a typed price the address bar follows 250 ms after the last keystroke (it is
+     not rewritten on every key; browsers limit how often a page may do that); other changes update it immediately. */
+  const urlTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(urlTimer.current), []);
+  const sync = (nextSort: string, next: FilterState, typing = false) => {
+    clearTimeout(urlTimer.current);
+    const write = () => {
+      const q = writeFilters(new URLSearchParams(location.search), next, facets);
+      if (nextSort === 'default') q.delete('sort'); else q.set('sort', nextSort);
+      history.replaceState(history.state, '', location.pathname + (q.size ? '?' + q : ''));
+    };
+    if (typing) urlTimer.current = setTimeout(write, 250); else write();
   };
   const applySort = (next: string) => {
     setSort(next); sync(next, filters);
     setAnnounce(`Sorted by ${sorts.find(s => s.id === next)!.label.toLowerCase()}.`);
   };
-  const applyFilter = (next: FilterState) => {
-    setFilters(next); sync(sort, next);
+  const applyFilter = (next: FilterState, typing = false) => {
+    setFilters(next); sync(sort, next, typing);
     const n = applyFilters(list, next, facets).length;
     setAnnounce(`${n} ${n === 1 ? 'product' : 'products'} shown.`);
   };
@@ -52,7 +60,7 @@ export default function ShopResults({ productIds, tabs, isNew, base, initialSort
   };
   const setPrice = (key: 'min' | 'max', raw: string) => {
     const n = parseInt(raw, 10);
-    applyFilter({ ...filters, [key]: Number.isFinite(n) && n >= 0 ? n : null });
+    applyFilter({ ...filters, [key]: Number.isFinite(n) && n >= 0 ? n : null }, true);
   };
   const clearAll = () => applyFilter(EMPTY);
 
@@ -90,7 +98,7 @@ export default function ShopResults({ productIds, tabs, isNew, base, initialSort
       )}
       <div id="st-results">
         {!list.length ? <p className="st-status">No products in this category yet.</p>
-          : shown.length ? <ProductGrid list={shown} pathOf={idx.categoryPath} opts={{ level: 2, isNew }} />
+          : shown.length ? <ProductGrid list={shown} pathOf={idx.categoryPath} opts={{ level: 2, isNew }} eagerFirst={4} />
           : <div className="st-status st-no-match"><p>No products match these filters.</p><button type="button" className="button" onClick={clearAll}>Clear filters</button></div>}
       </div>
       <p className="sr-only" role="status" aria-live="polite" id="st-sort-status">{announce}</p>

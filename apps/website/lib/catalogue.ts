@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import { publicSupabase } from './supabase/public';
 import type { Attribute, Catalogue, Category, Collection, MediaImage, NavEntry, Product, ProductColour, SizeChartView } from './types';
 
@@ -35,8 +36,12 @@ function coloursOf(variants: { colour_slug?: string | null; sort_order: number; 
   return [...seen.values()];
 }
 
-/* One request's worth of catalogue reads; React cache() dedupes the calls from the layout and the page. */
-export const getCatalogue = cache(async (): Promise<Catalogue> => {
+/* One request's worth of catalogue reads; React cache() dedupes the calls from the layout and the page.
+   Performance (2026-10-01): the result is also kept in Next's data cache for 30 s (tag 'catalogue'), so pages rendered
+   per request (/shop, /collections/…) do not each repeat the ~11 Supabase reads. It is the public catalogue only (active
+   products, the same for every visitor); carts, accounts and checkout prices are never cached. A failed read throws and
+   is not cached. */
+const loadCatalogue = async (): Promise<Catalogue> => {
   const sb = publicSupabase();
   const [cats, prods, cols] = await Promise.all([
     sb.from('categories').select('id, label, parent_id, sort_order').order('sort_order'),
@@ -99,7 +104,8 @@ export const getCatalogue = cache(async (): Promise<Catalogue> => {
   if (!products.length) throw new Error('Catalogue unavailable: Supabase returned no active products.');
   /* Prices are prototype INR estimates; tax inclusion is unconfirmed (null keeps the existing "unconfirmed" wording). */
   return { meta: { currency: 'INR', priceIncludesTax: null, images: { placeholder: PLACEHOLDER } }, categories, collections, navigation, products, attributes: attr.attributes };
-});
+};
+export const getCatalogue = cache(unstable_cache(loadCatalogue, ['catalogue-v1'], { revalidate: 30, tags: ['catalogue'] }));
 
 /* Display prices set under Pricing: the sale price while a sale runs (client change request; the base price becomes the
    "was" price), else the compare-at price as the "was" price. Optional: before those migrations the columns do not exist,
@@ -191,7 +197,19 @@ async function readAttributes(sb: ReturnType<typeof publicSupabase>): Promise<{ 
   return { attributes, byProduct };
 }
 
-/* Only the fields the storefront renders are sent to the browser. */
+/* Only the fields the storefront renders are sent to the browser. Performance (2026-10-01): this copy is part of every
+   page's HTML (the root layout gives it to StoreProvider), so the text and pictures that only server-rendered pages show
+   are left out: descriptions, features, material / care / origin, size charts, SEO text and the extra gallery photos.
+   Client code (cart, wishlist, search, filters, sorting, the header menus, the buy form) reads only ids, names, SKU,
+   slug, categories, prices, sizes and colours, attributes, rating and the primary image. Server pages use the full
+   catalogue (getCatalogue). */
 export function toClientCatalogue(c: Catalogue): Catalogue {
-  return c;
+  return {
+    ...c,
+    collections: c.collections.map(({ seoTitle: _t, seoDescription: _d, ...col }) => col),
+    products: c.products.map(p => ({
+      ...p, description: '', features: [], styledWith: [], catalogueRef: null, material: null, care: null, origin: null,
+      seo: { title: null, description: null }, sizeChart: null, media: { ...p.media, gallery: [] },
+    })),
+  };
 }

@@ -60,14 +60,14 @@ export const getBrandCopy = cache(async () => {
   }
 });
 
-/* Client change request: how often a cart with items re-syncs (Settings → Checkout → "Cart refresh interval"; the client
-   asked for 30 minutes). Read with the page, so guests make no extra request. On any error: 30 minutes. */
+/* Client change request: how often a cart with items re-syncs (Settings → Checkout → "Cart refresh interval"; 60 minutes
+   unless set; 2026-10-01). Read with the page, so guests make no extra request. On any error: the default. */
 export const getCartRefreshMinutes = cache(async (): Promise<number> => {
   try {
     const { cartRefreshMinutes } = await import('@kitsyuu/core');
     const { db } = await import('./server');
     return await cartRefreshMinutes(db());
   } catch {
-    return 30;
+    return 60;   // = CART_REFRESH_DEFAULT_MINUTES (packages/core/src/cart.ts)
   }
 });

@@ -24,8 +24,9 @@ export function Price({ value, was }: { value: number; was?: number | null }) {
   return <p className="st-price">{formatMoney(value)}{was ? <s className="st-was" aria-label={`was ${formatMoney(was)}`}>{formatMoney(was)}</s> : null}</p>;
 }
 
-export type CardOpts = { level?: 2 | 3; isNew?: boolean; index?: number };
-export function ProductCard({ p, categoryPath, level = 3, isNew = false, index = 0 }: { p: Product; categoryPath: string } & CardOpts) {
+/** eager: the card is in the first screen of a listing (its photo is fetched at once; 'high' for the very first, usually the LCP). */
+export type CardOpts = { level?: 2 | 3; isNew?: boolean; index?: number; eager?: boolean | 'high' };
+export function ProductCard({ p, categoryPath, level = 3, isNew = false, index = 0, eager = false }: { p: Product; categoryPath: string } & CardOpts) {
   const img = imageOf(p);
   const H = `h${level}` as 'h2' | 'h3';
   return (
@@ -34,7 +35,8 @@ export function ProductCard({ p, categoryPath, level = 3, isNew = false, index =
         <div className={`st-card-media${img.held ? ' is-held' : ''}`}>
           {isNew && <span className="st-tag st-tag-new">New</span>}
           {index > 0 && <span className="st-index" aria-hidden="true">{pad(index)}</span>}
-          {img.held ? <ComingSoon p={p} /> : <img src={img.src} alt="" width={img.width} height={img.height} loading="lazy" decoding="async" />}
+          {img.held ? <ComingSoon p={p} /> : <img src={img.src} alt="" width={img.width} height={img.height} loading={eager ? 'eager' : 'lazy'} decoding="async"
+            {...(eager === 'high' ? { fetchPriority: 'high' as const } : {})} />}
         </div>
         <div className="st-card-body">
           <H className="st-card-name"><Link href={url.product(p)}>{p.name}</Link></H>
@@ -48,10 +50,13 @@ export function ProductCard({ p, categoryPath, level = 3, isNew = false, index =
 }
 
 /** reveal: each card fades in as it scrolls into view (store homepage; see components/Choreo.tsx). */
-export function ProductGrid({ list, pathOf, opts, reveal = false }: { list: Product[]; pathOf: (p: Product) => string; opts?: CardOpts | ((p: Product, i: number) => CardOpts); reveal?: boolean }) {
+/* eagerFirst (performance, 2026-10-01): on a listing page the first cards are on the first screen, so their photos are not
+   lazy (the first is usually the largest paint). Grids further down a page leave it out. */
+export function ProductGrid({ list, pathOf, opts, reveal = false, eagerFirst = 0 }: { list: Product[]; pathOf: (p: Product) => string; opts?: CardOpts | ((p: Product, i: number) => CardOpts); reveal?: boolean; eagerFirst?: number }) {
   return (
     <ul className="st-grid" data-reveal-children={reveal || undefined}>
-      {list.map((p, i) => <ProductCard key={p.id} p={p} categoryPath={pathOf(p)} {...(typeof opts === 'function' ? opts(p, i) : opts)} />)}
+      {list.map((p, i) => <ProductCard key={p.id} p={p} categoryPath={pathOf(p)} {...(typeof opts === 'function' ? opts(p, i) : opts)}
+        {...(i < eagerFirst ? { eager: i === 0 ? 'high' as const : true } : {})} />)}
     </ul>
   );
 }
@@ -60,7 +65,7 @@ export function Crumbs({ list }: { list: { label: string; href?: string }[] }) {
   return (
     <nav className="st-crumbs" aria-label="Breadcrumb">
       <ol>
-        {list.map((c, i) => <li key={i}>{i === list.length - 1 || !c.href ? <span aria-current="page">{c.label}</span> : c.href === '/' ? <a href="/">{c.label}</a> : <Link href={c.href}>{c.label}</Link>}</li>)}
+        {list.map((c, i) => <li key={i}>{i === list.length - 1 || !c.href ? <span aria-current="page">{c.label}</span> : <Link href={c.href}>{c.label}</Link>}</li>)}
       </ol>
     </nav>
   );

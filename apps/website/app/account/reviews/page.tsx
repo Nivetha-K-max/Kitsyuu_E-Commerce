@@ -29,8 +29,8 @@ export default async function AccountReviews() {
       <section className="st-account-section" aria-labelledby="rv-done">
         <h2 id="rv-done">Your reviews</h2>
         {reviews.length ? <ul className="st-review-mine" data-my-reviews>{reviews.map(r => (
-          <li key={r.id} data-status={r.status}><span><b>{r.product_name}</b> · {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}{r.title ? ` · ${r.title}` : ''}</span>
-            <small>{STATUS[r.status] ?? r.status}</small></li>
+          <li key={r.id} data-status={r.status}><span><b>{r.product_name}</b>{r.variant_label ? ` (${r.variant_label})` : ''} · {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}{r.title ? ` · ${r.title}` : ''}</span>
+            <small>{STATUS[r.status] ?? r.status}{r.moderation_note ? ` · ${r.moderation_note}` : ''}</small></li>
         ))}</ul> : <p className="st-note">You have not written any reviews yet.</p>}
       </section>
     </>

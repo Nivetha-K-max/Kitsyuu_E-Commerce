@@ -613,8 +613,11 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
     --v:min(clamp(0, calc((var(--t, 0) - var(--i)) * 3 + 1), 1), clamp(0, calc((var(--i) - var(--t, 0)) * 3 + 1), 1))}
   .ch-on .ch-na-item.is-current{pointer-events:auto}
   .ch-on .ch-na-card{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:clamp(28px,4vw,80px);height:100%;align-items:end}
-  .ch-on .ch-na-media{order:2;aspect-ratio:auto;height:100%;clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0);will-change:clip-path}
-  .ch-on .ch-na-media img{max-width:58%;max-height:84%;transform:translateY(calc((1 - var(--r)) * 12% - var(--e) * 8%)) scale(calc(1.06 - var(--r) * .06 - var(--e) * .03));transition:none;will-change:transform}
+  .ch-on .ch-na-media{order:2;aspect-ratio:auto;height:100%;clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0)}
+  .ch-on .ch-na-media img{max-width:58%;max-height:84%;transform:translateY(calc((1 - var(--r)) * 12% - var(--e) * 8%)) scale(calc(1.06 - var(--r) * .06 - var(--e) * .03));transition:none}
+  /* Performance: only the picture on screen and the one wiping in next get their own compositor layer (not every picture). */
+  .ch-on .ch-na-item:is(.is-current,.is-current+li) .ch-na-media{will-change:clip-path}
+  .ch-on .ch-na-item:is(.is-current,.is-current+li) .ch-na-media img{will-change:transform}
   .ch-on .ch-na-info{order:1;padding:0 0 8px;opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 22px))}
   .ch-on .ch-na-info .ch-count{font-size:12px;margin-bottom:22px}
   .ch-on .ch-na-info .ch-count b{font:600 clamp(56px,6vw,96px)/.9 var(--display);letter-spacing:0;display:block;margin-bottom:6px}
@@ -663,8 +666,10 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
   .ch-on .ch-cat-item.is-current{pointer-events:auto}
   .ch-on .ch-cat-text{align-self:end;padding-bottom:8px;opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 28px))}
   .ch-on .ch-cat-visual{aspect-ratio:auto;height:100%}
-  .ch-on .ch-cat-photo{clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0);will-change:clip-path}
-  .ch-on .ch-cat-photo img{transform:scale(calc(1.14 - var(--r) * .12 - var(--e) * .02)) translateY(calc((1 - var(--r)) * 5% - var(--e) * 4%));transition:none;will-change:transform}
+  .ch-on .ch-cat-photo{clip-path:inset(calc((1 - var(--r)) * 100%) 0 0 0)}
+  .ch-on .ch-cat-photo img{transform:scale(calc(1.14 - var(--r) * .12 - var(--e) * .02)) translateY(calc((1 - var(--r)) * 5% - var(--e) * 4%));transition:none}
+  .ch-on .ch-cat-item:is(.is-current,.is-current+li) .ch-cat-photo{will-change:clip-path}
+  .ch-on .ch-cat-item:is(.is-current,.is-current+li) .ch-cat-photo img{will-change:transform}
   .ch-on .ch-cat-piece{opacity:var(--v);transform:translateY(calc((1 - var(--v)) * 36%))}
   .ch-on .ch-cats .ch-progress{display:block}
 }
@@ -761,3 +766,6 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-theme-toggle{display:inline-grid;place-items:center;width:44px;height:44px;padding:0;background:none;border:0;color:inherit;cursor:pointer}
 .st-theme-toggle svg{width:19px;height:19px}
 .st-theme-toggle:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+
+/* Performance (2026-10-01): cart / wishlist before this browser's list is read: space kept for the content (no layout jump). */
+.st-loading-area{min-height:60svh}

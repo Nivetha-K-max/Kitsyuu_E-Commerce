@@ -15,7 +15,7 @@ export default function WishlistView() {
     if (list.length < prev.current && !document.activeElement?.closest('.st-card')) document.getElementById('st-page-title')?.focus();
     prev.current = list.length;
   }, [list.length]);
-  if (!ready) return <div className="st-wrap"><p className="st-status">Loading…</p></div>;
+  if (!ready) return <div className="st-wrap"><PageHead label="Wishlist" title="Wishlist" /><div className="st-loading-area"><p className="st-status">Loading your wishlist…</p></div></div>;
   return (
     <div className="st-wrap">
       <PageHead label="Wishlist" title="Wishlist" aside={<><p className="st-result-count">{plural(list.length, 'product')}</p><p>{mode === 'customer' ? 'Saved to your account.' : 'Saved in this browser. Log in to keep it on every device.'} Choose a size on the product page to add a piece to your cart.</p></>} />

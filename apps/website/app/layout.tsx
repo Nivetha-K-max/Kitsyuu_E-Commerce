@@ -28,6 +28,12 @@ export const revalidate = 60;
 
 /* The KITSYUU stylesheets are served as-is from public/ in the same order as the static store:
    fonts.css → styles.css (shared tokens) → store.css (st- classes). */
+/* Performance (2026-10-01): the stylesheets carry the build's version, so browsers and the CDN keep them for a year
+   (next.config.ts) and a new deployment's pages always ask for its own CSS. The two typefaces the first screen needs
+   (DM Sans 400 for text, 700 for the KITSYUU wordmark) are preloaded; the product photos' host is connected to early. */
+const V = process.env.NEXT_PUBLIC_ASSET_VERSION ?? 'dev';
+const IMAGE_ORIGIN = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin; } catch { return null; } })();
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [catalogue, announcement, policy, copy, refreshMinutes] = await Promise.all([getCatalogue().then(toClientCatalogue), getAnnouncement(), getReturnsPolicy(), getBrandCopy(), getCartRefreshMinutes()]);
   return (
@@ -35,10 +41,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className="st" data-theme={DEFAULT_THEME} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
-        <link rel="stylesheet" href="/fonts.css" />
-        <link rel="stylesheet" href="/styles.css" />
-        <link rel="stylesheet" href="/store.css" />
-        <link rel="stylesheet" href="/account.css" />
+        {IMAGE_ORIGIN && <link rel="preconnect" href={IMAGE_ORIGIN} />}
+        <link rel="preload" href="/assets/fonts/font-3.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/assets/fonts/font-6.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="stylesheet" href={`/fonts.css?v=${V}`} />
+        <link rel="stylesheet" href={`/styles.css?v=${V}`} />
+        <link rel="stylesheet" href={`/store.css?v=${V}`} />
+        <link rel="stylesheet" href={`/account.css?v=${V}`} />
       </head>
       <body className="store">
         <AuthProvider>

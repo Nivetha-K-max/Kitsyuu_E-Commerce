@@ -31,8 +31,11 @@
 .st-account-nav a{display:block;padding:12px 0;color:var(--muted);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;text-decoration:none}
 .st-account-nav a:hover,.st-account-nav a[aria-current=page]{color:var(--paper)}
 .st-account-nav a[aria-current=page]{box-shadow:inset 2px 0 0 var(--red);padding-left:12px}
-.st-account-logout{background:none;border:0;padding:0;color:var(--muted);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-.st-account-logout:hover{color:var(--red)}
+/* Log out: a clear outlined button (it was faint underlined grey text, hard to find in the light theme). */
+.st-account-logout{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 16px;background:none;border:1px solid var(--paper);color:var(--paper);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
+.st-account-logout:before{content:"\2192";color:var(--red)}
+.st-account-logout:hover{border-color:var(--red);background:var(--red);color:#fff}
+.st-account-logout:hover:before{color:#fff}
 .st-account-main{min-width:0}
 .st-account-main .st-plp-head{padding-top:0}
 .st-account-more{margin:18px 0 0}
@@ -161,3 +164,39 @@
 .st-size-chart th,.st-size-chart td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
 .st-size-chart td+td,.st-size-chart th+th{text-align:right}
 .st-size-chart .st-note{margin:10px 0 0}
+
+/* Delivery steps on the order page (2026-10-01): Processing → Packed → Shipped → Delivered. */
+.st-track-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 20px;padding:0;list-style:none;counter-reset:step}
+.st-track-steps li{position:relative;padding:12px 0 0;border-top:3px solid var(--st-line-4);color:var(--muted);font:11px/1.4 var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-track-steps li[data-done]{border-top-color:var(--red);color:var(--paper)}
+.st-track-steps li[aria-current=step]{font-weight:700}
+@media (max-width:480px){.st-track-steps{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:14px}}
+
+/* Printable invoice in the account (2026-10-01). */
+.st-invoice{max-width:900px}
+.st-invoice table{width:100%;border-collapse:collapse;font-size:14px}
+.st-invoice th,.st-invoice td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.st-invoice .num{text-align:right;white-space:nowrap}
+.st-invoice-parties{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:20px 0}
+.st-invoice-parties h2{margin:0 0 6px;font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.st-invoice-totals{margin:16px 0 0 auto;max-width:360px}
+.st-invoice-totals div{display:flex;justify-content:space-between;gap:20px;padding:5px 0}
+.st-invoice-totals .grand{border-top:1px solid var(--paper);margin-top:6px;padding-top:10px;font-weight:700}
+@media print{
+  .st-header,.st-footer,.st-announce,.st-crumbs,.st-no-print,.skip{display:none!important}
+  html,body{background:#fff!important;color:#000!important}
+  .st-invoice,.st-invoice *{color:#000!important;border-color:#bbb!important}
+  main{padding:0!important}
+}
+/* 2026-10-01: points totals */
+.st-points-totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin:0 0 20px}
+.st-points-totals div{border:1px solid var(--line);padding:12px}
+.st-points-totals dt{font-size:12px;opacity:.7}
+.st-points-totals dd{margin:4px 0 0;font-size:20px;font-weight:600}
+
+/* Checkout: billing with one saved address (a statement, not a disabled checkbox) and a visible way to add another. */
+.st-billing-same{display:flex;align-items:center;gap:10px;margin:4px 0 14px;font-size:15px;color:var(--paper)}
+.st-billing-tick{display:inline-grid;place-items:center;width:20px;height:20px;background:var(--red);color:#fff;font-size:12px;line-height:1}
+.st-billing-add{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border:1px solid var(--paper);color:var(--paper);font:12px var(--mono);letter-spacing:1px;text-transform:uppercase;text-decoration:none;transition:background .2s,border-color .2s,color .2s}
+.st-billing-add:hover{background:var(--red);border-color:var(--red);color:#fff}
+.st-billing-add:focus-visible{outline:2px solid var(--red);outline-offset:4px}

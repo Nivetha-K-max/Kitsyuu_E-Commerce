@@ -26,7 +26,7 @@ KITSYUU is an **e-commerce store and an ERP / business-management back office** 
 
 ## Status
 
-The platform is built in milestones. Each is reviewed before it moves on. **Production (`main`) runs every milestone below, ERP modules 1–8, the client change requests (passes 1–3) and the 2026-10-01 store audit** (themes, SEO, collection pages). The table records how each milestone was built.
+The platform is built in milestones. Each is reviewed before it moves on. **Production (`main`) runs every milestone below, ERP modules 1–8, the client change requests (passes 1–3), the 2026-10-01 store audit** (themes, SEO, collection pages), **the commerce workflows** (draft and offline orders, branches, staff discounts), **the purchasing and product workflows** (product approval, bulk-edit drafts, purchase orders for finished products with goods receipts) **and the storefront performance pass** (2026-10-01). The table records how each milestone was built.
 
 | Milestone | Scope | State |
 |---|---|---|
@@ -50,7 +50,8 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 ## Features
 
 ### Customer website (`apps/website`)
-- **One homepage**: the scroll-driven landing film (241 WebP frames), then the store at `#store`. The Store link jumps straight to it.
+- **One homepage**: the scroll-driven brand film, then the store. The film uses web-sized frames (1600×900; a portrait crop on phones) loaded coarse-to-fine after the first screen, the finest only once the visitor scrolls it, decoded off the main thread a few at a time; the poster is a responsive AVIF/WebP.
+- **Performance** (2026-10-01, measured locally on Slow 4G with a 4× slower CPU): homepage LCP 8.6 s → 1.5 s, interaction delay ~1.5 s → ~24 ms, 10 MB → 1.2 MB in the first seconds. Below-the-fold pictures are lazy, menu photos load when the menu is used, the browser copy of the catalogue leaves out server-only text, the catalogue is cached for 30 s across requests, stylesheets are versioned and cached for a year. `apps/website/tests/run-perf.mjs` repeats the measurement.
 - **Catalogue**: 22 products in three categories and seven subcategories, New Arrivals, Featured, sorting, search, and a product page with sizes, quantity and wishlist. Catalogue pages are statically generated.
 - **Customer accounts** (M6):
   - Signup with email verification, login, logout and "sign out everywhere".
@@ -77,6 +78,8 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 ### Admin/ERP (`apps/admin`)
 - Staff accounts with invitations, roles, fine-grained permissions (no privilege escalation) and an append-only audit log.
 - Dashboard, products (create, edit, status, price), categories, sizes, images, New Arrivals, stock adjustments with reasons, and orders (list, filters, detail, status changes along the workflow).
+- **Commerce workflows** (2026-10-01): draft orders for a customer (online) or a walk-in (offline at a branch, paid in cash, card or UPI), staff discounts with a maximum and minimum prices, cart revalidation, abandoned-cart reminders, order emails (placed, packed, payment request) sent once and logged, invoices for every channel, customer tracking.
+- **Purchasing and products** (2026-10-01): vendors supply finished products (chosen several at once); purchase orders draft → approved → sent → partly received → received → closed, received in parts with numbered goods receipts (GRN) and printable PO/GRN; products draft → awaiting approval → published (only approvers publish); bulk edits saved as a reviewed draft change set before they apply; production planned in batches and linked to purchase orders; new products created with their sizes and opening stock; order edits before shipping (add a product, delivery option, contact, staff discount) and locked after; COD % discount from a minimum order; loyalty totals and reversal on refunds; customer filters; one verified review per product; delivery options with descriptions and store pickup.
 - **Locations, transfers and channels** (third pass): stock per location (the online location is the store's stock), stock counts and history per location, transfers (draft → sent → received, or cancelled with the stock returned), retail sales recorded at their branch, and a report by location with online and retail kept apart.
 - **M8 operations (local only, not deployed):**
   - **Customers**: list with search and filters, order counts, lifetime value and last order; detail with contact, addresses, orders, safe session and login activity, and audit. Disable (ends every session at once) and enable, and contact corrections, all audited with a reason. No secret is ever shown: the admin database role cannot read password or token hashes.
@@ -202,6 +205,7 @@ Every suite runs against a **throwaway local database**, never against Supabase.
 | `npm run test:admin` | Core integration tests (catalogue, staff, customers, commerce, M4 catalogue, M8 operations, orders) and the admin browser tests (including `tests/m8.mjs`) | 7 core suites and the browser checks, with database safety checks before and after each file |
 | `npm run test:account -w @kitsyuu/website` | Customer accounts (M6) and commerce (M7), desktop and mobile, including a local fake Razorpay | 90 + 108 checks |
 | `npm run test:website` | Storefront: catalogue, product pages, cart, wishlist, search, sorting, guest checkout (needs `node server.cjs` on :3000 and the website on :3001) | 133 checks |
+| `node apps/website/tests/run-perf.mjs <label>` | Storefront performance: FCP, LCP, CLS, TBT, interaction latency, bytes and requests by type, scroll smoothness and a long session, desktop and throttled mobile | writes `tests/.output/perf-<label>.json` |
 
 The browser tests drive headless Chrome over the DevTools Protocol, with no test dependencies. They run one at a time because they share a Chrome profile.
 
@@ -245,6 +249,7 @@ KITSYUU-Website2/
 - **Don't invent business rules.** Leaving shipping, tax, discounts and hold times unset kept the platform honest; each is a clearly listed decision, not a hidden guess.
 - **Rehearse database changes.** Read-only preflights, dry runs that roll back, and row fingerprints before and after made live migrations uneventful.
 - **Flaky tests are real bugs.** Several "random" failures were test helpers reading a page too early; fixing the helpers, not rerunning, made the suites trustworthy.
+- **Measure before optimising.** The storefront felt slow "because of the animations", but the measurements showed the cost was the hero film's 100 MB of full-size frames, menu photos downloading on every page and a lazy-loaded first row of products; the animations themselves were cheap once their layers were scoped.
 - **Wait for a condition, never for a time.** Replacing fixed sleeps with waits on what the next check reads (a badge count, the URL, a rendered result) made the store suite five times faster and stopped its flakes. Images in a hidden menu are never downloaded, so tests only check the images a visitor can see.
 
 ## Credits

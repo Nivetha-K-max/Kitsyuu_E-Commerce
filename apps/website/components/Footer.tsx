@@ -16,9 +16,9 @@ export default function Footer({ catalogue, policy = RETURNS_POLICY, tagline = '
       <div className="st-wrap">
         <div className="st-footer-top">
           <div className="st-footer-brand">
-            <a className="st-brand" href={url.home} aria-label="KITSYUU home">
+            <Link className="st-brand" href={url.home} aria-label="KITSYUU home">
               <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} loading="lazy" /></span>
-            </a>
+            </Link>
             <p data-brand-tagline>{tagline.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}</p>
           </div>
           <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>

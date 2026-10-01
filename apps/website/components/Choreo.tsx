@@ -12,11 +12,12 @@
    With reduced motion (system setting or the store's own switch) nothing moves: <html> gets .ch-static and the
    sections show their still layout. Before this runs (no JavaScript) the still layout is shown too. */
 import { useEffect } from 'react';
+import { reducedMotion } from '@/lib/motion';
 
 export default function Choreo() {
   useEffect(() => {
     const html = document.documentElement;
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches || html.classList.contains('st-reduce')) {
+    if (reducedMotion()) {
       html.classList.add('ch-static');
       return;
     }

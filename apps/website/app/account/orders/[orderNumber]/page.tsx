@@ -12,6 +12,10 @@ import { formatDate, formatDateTime, NEXT_STEP, ORDER_STATUS_LABEL, PAYMENT_STAT
 import { RETURN_STATUS_LABEL } from '@/lib/erp-format';
 
 export const metadata: Metadata = { title: 'Order' };
+const IN_STORE: Record<string, string> = { cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
+/* Delivery steps the customer follows (packing is part of processing; it shows once staff mark the parcel packed). */
+const STEPS = [['processing', 'Processing'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered']] as const;
+const SHIPMENT_LABEL: Record<string, string> = { shipped: 'Shipped', in_transit: 'On the way', delivered: 'Delivered', failed_delivery: 'Delivery attempt failed', cancelled: 'Cancelled', packed: 'Packed', processing: 'Processing', pending: 'Pending' };
 type Params = Promise<{ orderNumber: string }>;
 
 export default async function OrderPage({ params }: { params: Params }) {
@@ -26,6 +30,8 @@ export default async function OrderPage({ params }: { params: Params }) {
   const canPay = o.canPay && !!paymentProvider();
   // ERP module 3: a return can be requested only while the business has returns switched on (off by default).
   const returns = await customerReturnOptions(db(), me, o.orderNumber).catch(() => null);
+  const sh = o.shipment;
+  const reached = o.status === 'delivered' ? 3 : o.status === 'shipped' ? 2 : sh?.packingState === 'packed' ? 1 : o.status === 'processing' || o.status === 'paid' ? 0 : -1;
   return (
     <>
       <Crumbs list={[{ label: 'Orders', href: '/account/orders' }, { label: o.orderNumber }]} />
@@ -52,19 +58,38 @@ export default async function OrderPage({ params }: { params: Params }) {
           <h2 id="st-ord-pay">Payment</h2>
           <dl className="st-account-dl">
             <dt>Status</dt><dd data-payment-status={o.paymentStatus ?? 'none'}>{o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : 'Not started'}</dd>
+            {IN_STORE[o.paymentMethod] && <><dt>Method</dt><dd data-payment-method={o.paymentMethod}>{IN_STORE[o.paymentMethod]}{o.branch ? ` · ${o.branch}` : ''}</dd></>}
             {o.paymentMethod === 'cod' && <><dt>Method</dt><dd data-payment-method="cod">Cash on delivery{o.codStatus === 'to_collect' && o.status !== 'cancelled' ? ` · pay ${rupees(o.totalPaise)} when it arrives` : o.codStatus === 'collected' ? ' · paid' : ''}</dd></>}
             {o.pointsUsed > 0 && <><dt>Points used</dt><dd>{o.pointsUsed} ({rupees(o.pointsDiscountPaise)} off)</dd></>}
             <dt>Paid on</dt><dd>{formatDate(o.paidAt)}</dd>
           </dl>
+          {o.staffDiscount && <p className="st-note" data-order-staff-discount>Includes a discount of {rupees(o.staffDiscount.amountPaise)} from our team{o.staffDiscount.reason ? `: ${o.staffDiscount.reason}` : ''}.</p>}
+          {o.invoice && <p><Link className="text-link" href={`/account/orders/${encodeURIComponent(o.orderNumber)}/invoice`} data-order-invoice>View / print invoice {o.invoice.number}</Link></p>}
         </section>
         <section className="st-form-group" aria-labelledby="st-ord-ship">
-          <h2 id="st-ord-ship">Delivery</h2>
-          {s.line1 ? <address className="st-address-text">{s.name}<br />{s.line1}{s.line2 && <><br />{s.line2}</>}<br />{[s.city, s.state, s.pin].filter(Boolean).join(', ')}{s.country && <><br />{s.country}</>}{s.phone && <><br />{s.phone}</>}</address>
+          <h2 id="st-ord-ship">{o.channel === 'retail' ? 'Bought in store' : 'Delivery'}</h2>
+          {o.channel === 'retail' ? <p data-order-branch>Collected at {o.branch ?? 'our store'}.</p> : s.line1 ? <address className="st-address-text">{s.name}<br />{s.line1}{s.line2 && <><br />{s.line2}</>}<br />{[s.city, s.state, s.pin].filter(Boolean).join(', ')}{s.country && <><br />{s.country}</>}{s.phone && <><br />{s.phone}</>}</address>
             : <p>Delivery details will appear here.</p>}
           {o.billing && <p className="st-note" data-order-billing>Billing address: {[o.billing.name, o.billing.line1, o.billing.line2, o.billing.city, o.billing.state, o.billing.pin].filter(Boolean).join(', ')}</p>}
         </section>
       </div>
 
+      {o.channel === 'online' && reached >= 0 && o.status !== 'cancelled' && (
+        <section className="st-form-group" aria-labelledby="st-ord-track" data-order-tracking>
+          <h2 id="st-ord-track">Tracking</h2>
+          <ol className="st-track-steps">{STEPS.map(([k, label], n) => <li key={k} data-step={k} data-done={n <= reached || undefined} aria-current={n === reached ? 'step' : undefined}>{label}</li>)}</ol>
+          {sh && (sh.trackingNumber || sh.carrier) ? (
+            <dl className="st-account-dl">
+              {sh.carrier && <><dt>Courier</dt><dd data-tracking-carrier>{sh.carrier}</dd></>}
+              {sh.trackingNumber && <><dt>Tracking number</dt><dd data-tracking-number>{sh.trackingNumber}</dd></>}
+              {sh.shippedAt && <><dt>Shipped</dt><dd>{formatDateTime(sh.shippedAt)}</dd></>}
+              <dt>Status</dt><dd data-tracking-status={sh.status}>{SHIPMENT_LABEL[sh.status] ?? sh.status}</dd>
+            </dl>
+          ) : <p className="st-note">{o.status === 'shipped' ? 'Your parcel is on its way; the courier details will appear here.' : 'Tracking details appear here once your order ships.'}</p>}
+          {sh?.trackingUrl && <p><a className="button button-outline" href={sh.trackingUrl} target="_blank" rel="noopener noreferrer" data-tracking-link>Track with the courier <span aria-hidden="true">↗</span></a></p>}
+          {sh && sh.events.length > 0 && <ol className="st-order-timeline" data-tracking-events>{sh.events.map((e, n) => <li key={n}><span>{SHIPMENT_LABEL[e.status] ?? e.status}{e.note ? ` · ${e.note}` : ''}</span><time dateTime={new Date(e.at).toISOString()}>{formatDateTime(e.at)}</time></li>)}</ol>}
+        </section>
+      )}
       {o.history.length > 0 && (
         <section className="st-form-group" aria-labelledby="st-ord-history">
           <h2 id="st-ord-history">Progress</h2>

@@ -83,17 +83,24 @@ export default function CheckoutForm({ addresses, idempotencyKey, expectedTotalP
         </div>
       )}
       <div className="st-form-group" data-billing>
-        <label className="st-check">
-          <input type="checkbox" name="billingSame" value="on" checked={billingSame} onChange={e => setBillingSame(e.currentTarget.checked)} disabled={!others.length} />
-          <span>Billing address is the same as the delivery address</span>
-        </label>
+        {/* With only one saved address there is nothing to choose: a clear statement and an obvious way to add another,
+            instead of a greyed-out (disabled) checkbox that looked broken. */}
+        {others.length > 0 ? (
+          <label className="st-check">
+            <input type="checkbox" name="billingSame" value="on" checked={billingSame} onChange={e => setBillingSame(e.currentTarget.checked)} />
+            <span>Billing address is the same as the delivery address</span>
+          </label>
+        ) : (
+          <p className="st-billing-same" data-billing-same><span className="st-billing-tick" aria-hidden="true">✓</span>Billing address: the same as the delivery address</p>
+        )}
         {!billingSame && others.length > 0 && (
           <>
             <Hidden name="billingSame" value="false" />
             <RadioGroup name="billingAddressId" legend="Bill to" defaultValue={others[0].id} options={others.map(a => ({ value: a.id, label: a.label }))} />
+            <p className="st-note">Another billing address? <Link className="text-link" href="/account/addresses/new?next=/checkout" data-add-billing>Add it to your addresses</Link>; your cart is kept.</p>
           </>
         )}
-        {!others.length && <p className="st-note">To bill a different address, <Link className="text-link" href="/account/addresses/new?next=/checkout">add it to your addresses</Link> first.</p>}
+        {!others.length && <Link className="st-billing-add" href="/account/addresses/new?next=/checkout" data-add-billing>+ Add a different billing address</Link>}
       </div>
     </ActionForm>
   );

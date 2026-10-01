@@ -20,6 +20,9 @@ function stopLanding(root: Element) {
     if (document.contains(root) || window.__kitsyuuLandingStopped) return;
     window.__kitsyuuLandingStopped = true;
     window.addEventListener('scroll', stop, { capture: true, passive: true });
+    // Performance (2026-10-01): a late player appears within moments of leaving (once its JSON files arrive), so the
+    // safety net is removed after 15 s instead of dispatching `pagehide` on every scroll for the rest of the visit.
+    setTimeout(() => window.removeEventListener('scroll', stop, { capture: true }), 15000);
   }, 0);
 }
 

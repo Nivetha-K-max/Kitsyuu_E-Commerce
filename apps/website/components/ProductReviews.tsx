@@ -32,7 +32,7 @@ export default async function ProductReviews({ productId }: { productId: string 
             // eslint-disable-next-line @next/next/no-img-element
             <img key={ph.id} src={`/api/reviews/photo/${ph.id}`} alt={`Photo from ${r.displayName}`} width={ph.width} height={ph.height} loading="lazy" />
           ))}</div>}
-          <p className="st-review-meta">{r.displayName} · Verified purchase · {date.format(r.createdAt)}</p>
+          <p className="st-review-meta">{r.displayName} · Verified purchase{r.variant ? ` (${r.variant})` : ''} · {date.format(r.createdAt)}</p>
         </li>
       ))}</ul>
     </section>

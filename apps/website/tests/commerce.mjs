@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import {createHmac} from 'node:crypto';
 import pg from 'pg';
 import {launch} from './cdp.mjs';
+import {createDb} from '@kitsyuu/db';
+import {createInvoiceForOrder} from '@kitsyuu/core';
 
 const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG} = process.env;
 const RETURNS_POLICY = 'All sales are final. We do not accept returns or offer refunds.';
@@ -425,6 +427,75 @@ try {
     await q(`delete from settings where key in ('payments.cod_enabled', 'loyalty.enabled', 'loyalty.point_value_paise')`);
     if (prevMethod === undefined) await q(`delete from settings where key = 'shipping.method'`); else await setKey('shipping.method', prevMethod);
     await q(`update shipping_zones set is_active = false where id = $1`, [z.id]);
+    check();
+  }
+
+  // ---------- 2026-10-01: a guest cart checked against changing stock ----------
+  await b.viewport(1440, 900); await b.send('Network.clearBrowserCookies'); await go('/'); await ev('localStorage.clear(), true');
+  const keep3 = await stock(P3.vid);
+  await setStock(P3.vid, 5);
+  await addToCart(BASE, P3, 3);
+  await setStock(P3.vid, 1);                                   // someone else bought most of them
+  await go('/cart', '!!document.querySelector(".st-summary")');
+  ok('[guest] the cart is checked against the stock now: "Only 1 left", checkout closed',
+    await until(`/Only 1 left/.test(document.querySelector('[data-line-problem]')?.innerText || '')`) && await exists('[data-cart-blocked]') && !(await exists('.st-summary a.st-checkout')), await text('.st-cart'));
+  await click('[data-cart-fix]');
+  ok('[guest] "Update my cart" lowers the line to what is left and opens checkout again',
+    await until(`!document.querySelector('[data-line-problem]') && document.querySelector('[data-line-qty]')?.value === '1' && !!document.querySelector('.st-summary a.st-checkout')`));
+  await setStock(P3.vid, 0);
+  await go('/cart', '!!document.querySelector(".st-summary")');
+  ok('[guest] a size that sold out stays in the cart, marked sold out (not silently dropped)', await until(`/sold out/.test(document.querySelector('[data-line-problem]')?.innerText || '')`));
+  await click('[data-cart-fix]');
+  ok('[guest] "Update my cart" removes the sold-out size', await until(`!document.querySelector('.st-line')`));
+  await setStock(P3.vid, keep3);
+
+  // ---------- 2026-10-01: tracking and invoice for the customer ----------
+  // Fixture for the staff side (tested through the real services in packages/core/test/commerce-workflows.test.mjs): a paid
+  // order of a test buyer is processed, packed and shipped with a courier that has a tracking page, and its invoice issued.
+  const [paidOrder] = await q(`select o.id, o.order_number, o.total_paise, c.email from orders o join customers c on c.id = o.customer_id
+    where c.email like 'buyer.%@test.local' and o.status = 'paid' order by o.created_at limit 1`);
+  ok('a paid order exists for the tracking / invoice checks', !!paidOrder);
+  if (paidOrder) {
+    const [finance] = await q(`insert into staff_users (email, status, full_name) values ('cm.finance@test.local', 'invited', 'Finance') returning id`);
+    await q(`insert into couriers (code, name, mode, tracking_url_template, is_active) values ('testship', 'Test Courier', 'manual', 'https://track.example/{tracking}', true) on conflict do nothing`);
+    await q(`update orders set status = 'processing' where id = $1`, [paidOrder.id]);
+    await q(`insert into order_status_history (order_id, from_status, to_status, note) values ($1, 'paid', 'processing', 'browser test')`, [paidOrder.id]);
+    const [sh] = await q(`insert into shipments (order_id, carrier_code, tracking_number, tracking_url, status, packing_state, shipped_at, created_by)
+      values ($1, 'testship', 'TS777', 'https://track.example/TS777', 'shipped', 'packed', now(), $2) returning id`, [paidOrder.id, finance.id]);
+    await q(`insert into shipment_events (shipment_id, status, note, source) values ($1, 'shipped', 'Tracking TS777', 'staff')`, [sh.id]);
+    await q(`update orders set status = 'shipped' where id = $1`, [paidOrder.id]);
+    await q(`insert into order_status_history (order_id, from_status, to_status, note) values ($1, 'processing', 'shipped', 'browser test')`, [paidOrder.id]);
+    const owner = createDb({connectionString: KITSYUU_DB_URL, max: 1});
+    try {
+      await createInvoiceForOrder(owner, {staffId: finance.id, email: 'cm.finance@test.local', fullName: 'Finance', sessionId: '00000000-0000-4000-8000-000000000000',
+        permissions: new Set(['finance.manage', 'finance.read'])}, {orderId: paidOrder.id}, {ip: '127.0.0.1', userAgent: 'commerce.mjs', requestId: 'test'});
+    } finally { await owner.destroy(); }
+    await b.send('Network.clearBrowserCookies');
+    await go('/login', '!!document.querySelector("main [name=email]")');
+    await fill('main [name=email]', paidOrder.email); await fill('main [name=password]', PW); await submit();
+    await until(`location.pathname === '/account'`);
+    for (const [W, H, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true, 'mobile']]) {
+      await b.viewport(W, H, mob);
+      await go(`/account/orders/${encodeURIComponent(paidOrder.order_number)}`, '!!document.querySelector("main h1")');
+      ok(`[${tag}] order page: tracking steps, courier, tracking number and the courier's link`, await exists('[data-order-tracking]')
+        && (await ev(`document.querySelectorAll('[data-order-tracking] li[data-done]').length`)) === 3
+        && (await text('[data-tracking-carrier]')) === 'Test Courier' && (await text('[data-tracking-number]')) === 'TS777'
+        && (await ev(`document.querySelector('[data-tracking-link]')?.href`)) === 'https://track.example/TS777', await text('[data-order-tracking]'));
+      ok(`[${tag}] order page: link to the invoice`, await exists('[data-order-invoice]'));
+      await click('[data-order-invoice]');
+      await until(`location.pathname.endsWith('/invoice') && !!document.querySelector('[data-invoice]')`);
+      ok(`[${tag}] invoice: number, items, total = the order total, a print button, fits the screen`, /\//.test(await text('[data-invoice-number]'))
+        && (await ev(`document.querySelectorAll('[data-invoice-items] tbody tr').length`)) > 0
+        && Math.round(Number((await text('[data-invoice-total]')).replace(/[^0-9.]/g, '')) * 100) === paidOrder.total_paise && await exists('[data-print]') && (await overflow()) <= 0,
+        `${await text('[data-invoice-total]')} vs ${paidOrder.total_paise}`);
+    }
+    await b.viewport(1440, 900);
+    const other = await fetch(`${BASE}/account/orders/KTS-000000-XXXXXX/invoice`, {headers: {cookie: `__Host-kitsyuu_customer=${(await cookieOf()).value}`}});
+    // Account pages stream (app/account/loading.tsx), so a missing order is the not-found page with status 200 or 404;
+    // what matters is that no invoice is shown.
+    const otherHtml = await other.text();
+    ok('an invoice of an order that is not yours (or does not exist) shows Page not found, never an invoice',
+      (other.status === 404 || other.status === 200) && /Page not found/.test(otherHtml) && !/data-invoice-number/.test(otherHtml), String(other.status));
     check();
   }
 

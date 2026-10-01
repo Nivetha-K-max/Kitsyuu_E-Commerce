@@ -23,7 +23,7 @@ export default function Gallery({ p, images: all, caption }: { p: Product; image
       </figure>
       {images.length > 1 && (
         <ul className="st-thumbs" aria-label="Choose an image">
-          {images.map((m, n) => <li key={m.src}><button type="button" data-image={n} aria-pressed={img === m} aria-label={`Show image ${n + 1} of ${images.length}`} onClick={() => setI(n)}><img src={m.src} alt="" loading="lazy" /></button></li>)}
+          {images.map((m, n) => <li key={m.src}><button type="button" data-image={n} aria-pressed={img === m} aria-label={`Show image ${n + 1} of ${images.length}`} onClick={() => setI(n)}><img src={m.src} alt="" width={m.width} height={m.height} loading="lazy" decoding="async" /></button></li>)}
         </ul>
       )}
     </section>

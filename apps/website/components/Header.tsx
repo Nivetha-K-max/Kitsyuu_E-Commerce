@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { asset, formatMoney, imageOf, url, type Index } from '@/lib/catalogue-utils';
 import type { Product } from '@/lib/types';
 import { useHydrated, useStore } from './StoreProvider';
@@ -19,8 +19,17 @@ export function navItems(idx: Index) {
   return [home, ...items.filter(i => i.key === 'all'), ...items.filter(i => i.key !== 'all')];
 }
 
-function useActive(idx: Index): Active {
-  const path = usePathname(), q = useSearchParams();
+/* Performance (2026-10-01): the query string is read by this small child under its own Suspense boundary. Reading it in
+   the header itself made the whole header client-only on every prerendered page (no logo, menu or cart link in the
+   HTML until the JavaScript ran). Only the /shop highlight needs it. */
+function QueryWatcher({ onQuery }: { onQuery: (q: string) => void }) {
+  const q = useSearchParams().toString();
+  useEffect(() => onQuery(q), [q, onQuery]);
+  return null;
+}
+
+function useActive(idx: Index, query: string): Active {
+  const path = usePathname(), q = useMemo(() => new URLSearchParams(query), [query]);
   if (path === '/') return { key: 'home', exact: true };
   if (path.startsWith('/collections/')) return { key: 'col:' + decodeURIComponent(path.split('/')[2] || ''), exact: true };
   if (path === '/shop') {
@@ -77,14 +86,25 @@ function megaFor(idx: Index, key: string): { cols: MegaCol[]; tiles: MegaTile[] 
   return null;
 }
 
-function MegaMenu({ label, data, onPick }: { label: string; data: { cols: MegaCol[]; tiles: MegaTile[] }; onPick: () => void }) {
+/* Mega-menu links are mounted (hidden) on every page; prefetching them all whenever a page loads would fetch every
+   category and product page in the menus. They are prefetched when pointed at or focused instead. */
+function MenuLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
+  const router = useRouter();
+  const warm = () => router.prefetch(href);
+  return <Link href={href} className={className} prefetch={false} onMouseEnter={warm} onFocus={warm}>{children}</Link>;
+}
+
+/* The menus are mounted (hidden) on every page, and a hidden picture near the top of the page still downloads even when
+   lazy. So the tile photos are only rendered once the visitor first points at or focuses the menu bar (performance,
+   2026-10-01): before that each tile keeps its box, without the picture. */
+function MegaMenu({ label, data, onPick, warm }: { label: string; data: { cols: MegaCol[]; tiles: MegaTile[] }; onPick: () => void; warm: boolean }) {
   return (
     <div className="st-mega" aria-label={`${label} menu`} onClick={e => { if ((e.target as HTMLElement).closest('a')) onPick(); }}>
       <div className="st-mega-cols">
         {data.cols.map(c => (
           <div className="st-mega-col" key={c.heading}>
             <p className="st-mega-h">{c.heading}</p>
-            <ul>{c.links.map(l => <li key={l.href + l.label}><Link href={l.href}>{l.label}</Link></li>)}</ul>
+            <ul>{c.links.map(l => <li key={l.href + l.label}><MenuLink href={l.href}>{l.label}</MenuLink></li>)}</ul>
           </div>
         ))}
       </div>
@@ -92,11 +112,11 @@ function MegaMenu({ label, data, onPick }: { label: string; data: { cols: MegaCo
         <ul className="st-mega-tiles">
           {data.tiles.map(t => (
             <li key={t.key}>
-              <Link className="st-mega-tile" href={t.href}>
+              <MenuLink className="st-mega-tile" href={t.href}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <span className="st-mega-img"><img src={t.img.src} alt="" width={t.img.width} height={t.img.height} loading="lazy" decoding="async" /></span>
+                <span className="st-mega-img">{warm && <img src={t.img.src} alt="" width={t.img.width} height={t.img.height} loading="lazy" decoding="async" />}</span>
                 <b>{t.label}</b>{t.note && <small>{t.note}</small>}
-              </Link>
+              </MenuLink>
             </li>
           ))}
         </ul>
@@ -112,8 +132,12 @@ export default function Header() {
   /* Auth state is a UI hint only (the server decides access). Until it is known, the link says "Account". */
   const auth = useAuth(), signedIn = hydrated && auth.status === 'user';
   const accountHref = hydrated && auth.status === 'guest' ? '/login' : '/account', accountLabel = hydrated && auth.status === 'guest' ? 'Log in' : 'Account';
-  const active = useActive(idx), path = usePathname();
+  const [query, setQuery] = useState('');
+  const active = useActive(idx, query), path = usePathname();
+  // The menus depend only on the catalogue: worked out once, not on every render (e.g. each cart change).
+  const menus = useMemo(() => navItems(idx).map(i => ({ ...i, mega: megaFor(idx, i.key) })), [idx]);
   const [open, setOpen] = useState(false);
+  const [warm, setWarm] = useState(false);   // the menu bar has been pointed at / focused: menu photos may load
   const [megaOff, setMegaOff] = useState<string | null>(null);   // after a pick, that panel stays shut until the pointer leaves its item
   const header = useRef<HTMLElement>(null), nav = useRef<HTMLElement>(null), toggle = useRef<HTMLButtonElement>(null);
   const cur = (tool: string) => active.tool === tool ? { 'aria-current': 'page' as const } : {};
@@ -138,19 +162,22 @@ export default function Header() {
 
   return (
     <header className="st-header" ref={header}>
-      {/* A full page load (<a>), so leaving /our-story always unloads the landing's own script. */}
-      <a className="st-brand" href={url.home} aria-label="KITSYUU home">
+      <Suspense fallback={null}><QueryWatcher onQuery={setQuery} /></Suspense>
+      {/* Performance (2026-10-01): an in-app link (no full reload of the store). On /our-story every link is still a full
+          page load (components/LandingScript.tsx catches the click first), so leaving it still unloads the landing script. */}
+      <Link className="st-brand" href={url.home} aria-label="KITSYUU home">
         <span className="logo-crop"><img src={asset('assets/kitsyuu-icon.svg')} alt="" width={1024} height={1024} /></span>
-      </a>
-      <nav className={`st-nav${open ? ' is-open' : ''}`} id="st-nav" aria-label="Store" ref={nav} onClick={e => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}>
+      </Link>
+      <nav className={`st-nav${open ? ' is-open' : ''}`} id="st-nav" aria-label="Store" ref={nav} onClick={e => { if ((e.target as HTMLElement).closest('a')) setOpen(false); }}
+        onPointerEnter={() => setWarm(true)} onFocus={() => setWarm(true)}>
         <ul className="st-nav-main">
-          {navItems(idx).map(i => {
-            const on = active.key === i.key, mega = megaFor(idx, i.key);
+          {menus.map(i => {
+            const on = active.key === i.key, mega = i.mega;
             return (
               <li key={i.key} className={mega ? `has-mega${megaOff === i.key ? ' is-off' : ''}` : undefined}
                 onMouseLeave={mega ? () => setMegaOff(null) : undefined}>
                 <Link href={i.href} {...(on ? (active.exact ? { 'aria-current': 'page' as const } : { className: 'is-active' }) : {})}>{i.label}</Link>
-                {mega && <MegaMenu label={i.label} data={mega} onPick={() => setMegaOff(i.key)} />}
+                {mega && <MegaMenu label={i.label} data={mega} onPick={() => setMegaOff(i.key)} warm={warm} />}
                 {i.children.length > 0 && (
                   <ul className="st-nav-sub">
                     {i.children.map(c => <li key={c.id}><Link href={url.shop({ category: c.id })} {...(active.sub === c.id ? { 'aria-current': 'page' as const } : {})}>{c.label}</Link></li>)}

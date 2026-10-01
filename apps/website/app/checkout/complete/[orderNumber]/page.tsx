@@ -42,6 +42,7 @@ export default async function CompletePage({ params }: { params: Promise<{ order
           <section className="st-form-group"><h2>Contact</h2><p>{c.name}{c.email && <><br />{c.email}</>}{c.phone && <><br />{c.phone}</>}</p></section>
           <section className="st-form-group"><h2>Deliver to</h2>
             <address className="st-address-text">{s.name}<br />{s.line1}{s.line2 && <><br />{s.line2}</>}<br />{[s.city, s.state, s.pin].filter(Boolean).join(', ')}{s.country && <><br />{s.country}</>}</address>
+            {o.billing && <p className="st-note" data-complete-billing>Billing address: {[o.billing.name, o.billing.line1, o.billing.line2, o.billing.city, o.billing.state, o.billing.pin].filter(Boolean).join(', ')}</p>}
           </section>
           <p><Link className="button" href={link}>View order</Link> <Link className="button button-outline" href="/shop">Continue shopping</Link></p>
         </div>

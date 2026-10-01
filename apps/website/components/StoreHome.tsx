@@ -21,10 +21,12 @@ const CATEGORY_PHOTO: Record<string, { src: string; w: number; h: number }> = {
   outerwear: { src: '/assets/hero.webp', w: 1024, h: 1024 },
 };
 
-function Cutout({ p, className = '', eager = false }: { p: Product; className?: string; eager?: boolean }) {
+/* Performance (2026-10-01): everything on this page is below the brand hero (a full screen), so every picture is lazy;
+   the browser fetches each one as it nears the viewport instead of competing with the hero poster (the LCP image). */
+function Cutout({ p, className = '' }: { p: Product; className?: string }) {
   const img = imageOf(p);
   return img.held ? <ComingSoon p={p} />
-    : <img className={className} src={img.src} alt="" width={img.width} height={img.height} loading={eager ? 'eager' : 'lazy'} decoding="async" />;
+    : <img className={className} src={img.src} alt="" width={img.width} height={img.height} loading="lazy" decoding="async" />;
 }
 
 export default async function StoreHome() {
@@ -57,7 +59,7 @@ export default async function StoreHome() {
                     <article className="st-card ch-na-card" data-sku={p.sku}>
                       <div className={`st-card-media ch-na-media${imageOf(p).held ? ' is-held' : ''}`}>
                         <span className="st-tag st-tag-new">New</span>
-                        <Cutout p={p} eager />
+                        <Cutout p={p} />
                         {/* The picture opens the product too (the name link below is the one keyboard users reach). */}
                         <Link className="st-media-link" href={url.product(p)} tabIndex={-1} aria-hidden="true" />
                       </div>
@@ -81,12 +83,12 @@ export default async function StoreHome() {
       {/* Shop the rotation: the copy holds still; the photograph and two framed pieces drift at different speeds. */}
       {/* Turntable integration point: set data-turntable to the KTS-OUT-001 sequence manifest (see lib/turntable.ts). Empty = hero.webp only. */}
       <section className="st-hero ch-rot" aria-labelledby="st-hero-title" data-turntable="" data-turntable-product="ky-proto-015" data-scroll="pass">
-        <img className="st-hero-img" src="/assets/hero.webp" alt="" width={1024} height={1024} fetchPriority="high" />
+        <img className="st-hero-img" src="/assets/hero.webp" alt="" width={1024} height={1024} loading="lazy" decoding="async" />
         <canvas className="st-hero-sequence" aria-hidden="true" hidden></canvas>
         <div className="st-hero-shade"></div>
         <div className="ch-rot-frames" aria-hidden="true">
           {rotation.map((p, i) => (
-            <Link key={p.id} href={url.product(p)} tabIndex={-1} className={`ch-frame ch-rot-frame ch-rot-frame-${i + 1}`} data-reveal><Cutout p={p} eager /></Link>
+            <Link key={p.id} href={url.product(p)} tabIndex={-1} className={`ch-frame ch-rot-frame ch-rot-frame-${i + 1}`} data-reveal><Cutout p={p} /></Link>
           ))}
         </div>
         <div className="st-hero-copy st-wrap">
@@ -125,9 +127,9 @@ export default async function StoreHome() {
                     </div>
                     <Link className="ch-cat-visual" href={url.shop({ category: c.id })} tabIndex={-1} aria-hidden="true">
                       <span className="ch-frame ch-cat-photo">
-                        {photo ? <img src={photo.src} alt="" width={photo.w} height={photo.h} decoding="async" /> : lead && <Cutout p={lead} eager />}
+                        {photo ? <img src={photo.src} alt="" width={photo.w} height={photo.h} loading="lazy" decoding="async" /> : lead && <Cutout p={lead} />}
                       </span>
-                      {lead && <span className="ch-frame ch-cat-piece">{photo ? <Cutout p={lead} eager /> : second && <Cutout p={second} eager />}</span>}
+                      {lead && <span className="ch-frame ch-cat-piece">{photo ? <Cutout p={lead} /> : second && <Cutout p={second} />}</span>}
                     </Link>
                   </li>
                 );
@@ -141,7 +143,7 @@ export default async function StoreHome() {
       {/* 03 — After hours: a campaign spread; the photographs move at different speeds, the copy stays put. */}
       <section className="st-editorial ch-ed" aria-labelledby="st-ed-title" data-scroll="pass">
         <div className="st-editorial-img">
-          <img className="ch-ed-main" src="/assets/editorial.webp" alt="Oversized washed streetwear layers photographed in a narrow Japanese alley" width={1024} height={1024} loading="lazy" />
+          <img className="ch-ed-main" src="/assets/editorial.webp" alt="Oversized washed streetwear layers photographed in a narrow Japanese alley" width={1024} height={1024} loading="lazy" decoding="async" />
         </div>
         <div className="st-editorial-copy">
           <span className="ch-frame ch-ed-inset" aria-hidden="true" data-reveal><img src="/assets/volume.webp" alt="" width={1672} height={941} loading="lazy" decoding="async" /></span>

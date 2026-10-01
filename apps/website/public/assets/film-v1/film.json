@@ -1,0 +1,18 @@
+{
+  "count": 241,
+  "padding": 4,
+  "fps": 24,
+  "desktop": {
+    "width": 1600,
+    "height": 900,
+    "pattern": "assets/film-v1/d/frame-{index}.webp",
+    "totalBytes": 10820006
+  },
+  "portrait": {
+    "width": 720,
+    "height": 960,
+    "pattern": "assets/film-v1/m/frame-{index}.webp",
+    "totalBytes": 7149272,
+    "maxAspect": 0.75
+  }
+}
