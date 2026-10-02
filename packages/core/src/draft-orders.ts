@@ -33,7 +33,7 @@ export type DraftPayment = 'online' | 'cod' | 'cash' | 'card' | 'upi';
 export const IN_STORE_PAYMENTS = ['cash', 'card', 'upi'] as const;
 
 /** Offline orders are handed over in the store: nothing is delivered, so nothing is charged for delivery. */
-const inStore: ShippingProvider = { code: 'in_store', quote: async () => ({ amountPaise: 0, method: 'in_store', label: 'Collected in store', configured: true }) };
+export const inStore: ShippingProvider = { code: 'in_store', quote: async () => ({ amountPaise: 0, method: 'in_store', label: 'Collected in store', configured: true }) };
 
 // ---------------------------------------------------------------- staff discount limits
 /** The largest staff discount (basis points), or null: no maximum set, so staff cannot give discounts. */
@@ -59,7 +59,7 @@ export async function checkStaffDiscount(q: Queryable, lines: Pick<PricedLine, '
 }
 
 /** The staff discount as a pricing rule, so totals, tax and invoices treat it like any other discount. */
-const staffRule = (bp: number, reason: string): DiscountRule => ({
+export const staffRule = (bp: number, reason: string): DiscountRule => ({
   code: 'STAFF', label: `Staff discount ${pct(bp)}: ${reason}`,
   evaluate: async ({ subtotalPaise }) => Math.round(subtotalPaise * bp / 10_000),
 });
@@ -360,7 +360,7 @@ export async function orderOrigin(db: Db, actor: StaffPrincipal, orderId: string
   return db.selectFrom('orders as o').leftJoin('locations as l', 'l.id', 'o.location_id').leftJoin('staff_users as c', 'c.id', 'o.created_by')
     .leftJoin('staff_users as g', 'g.id', 'o.staff_discount_by').leftJoin('draft_orders as d', 'd.id', 'o.draft_order_id')
     .select(['o.channel', 'o.payment_method', 'l.name as branch', 'c.email as created_by', 'o.staff_discount_paise', 'o.staff_discount_bp', 'o.staff_discount_reason',
-      'g.email as discount_by', 'd.id as draft_id', 'd.number as draft_number', 'o.subtotal_paise', 'o.total_paise', 'o.pricing'])
+      'g.email as discount_by', 'd.id as draft_id', 'd.number as draft_number', 'o.subtotal_paise', 'o.total_paise', 'o.pricing', 'o.pos_number'])
     .where('o.id', '=', orderId).executeTakeFirst();
 }
 

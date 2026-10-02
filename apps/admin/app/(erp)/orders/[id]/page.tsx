@@ -79,7 +79,7 @@ export default async function OrderPage({ params }: { params: Params }) {
       </PageHead>
       {/* 2026-10-01: online or offline (branch), created by staff from a draft, staff discount with its reason. */}
       {origin && <p className="msg" data-order-origin={origin.channel}>
-        <b>{origin.channel === 'retail' ? `Offline · ${origin.branch}` : 'Online'}</b>{' · Payment: '}{({ online: 'online', cod: 'cash on delivery', cash: 'cash in store', card: 'card in store', upi: 'UPI in store' } as Record<string, string>)[origin.payment_method] ?? origin.payment_method}
+        <b>{origin.channel === 'retail' ? `${origin.pos_number ? 'POS · ' : ''}Offline · ${origin.branch}` : 'Online'}</b>{origin.pos_number && <> · Bill <Link href={`/pos/sale/${id}`} data-order-pos>{origin.pos_number}</Link></>}{' · Payment: '}{({ online: 'online', cod: 'cash on delivery', cash: 'cash in store', card: 'card in store', upi: 'UPI in store' } as Record<string, string>)[origin.payment_method] ?? origin.payment_method}
         {origin.created_by ? <> · Created by {origin.created_by}{origin.draft_id ? <> from draft <Link href={`/drafts/${origin.draft_id}`}>{origin.draft_number}</Link></> : null}</> : ' · Placed by the customer'}
         {(() => { const pv = pricingView(origin.pricing); return <>{pv.delivery && <span data-order-delivery> · {pv.delivery.pickup ? 'Store pickup' : 'Delivery'}: {pv.delivery.label}{pv.delivery.estimate ? ` (${pv.delivery.estimate})` : ''}</span>}
           {pv.discounts.length > 0 && <span data-order-discounts> · Discounts: {pv.discounts.map(d => `${d.label} −${formatPaise(d.amountPaise)}`).join('; ')}</span>}</>; })()}

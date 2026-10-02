@@ -13,6 +13,7 @@ import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
 import { adjustStockAction, setProductAttributesAction, setProductStatusAction, updatePriceAction, updateProductAction, setMinPriceAction } from '../actions';
 import { addColourVariantAction, setImageColourAction, setVariantColourAction } from '../colour-actions';
+import { setBarcodeAction } from '../../pos/actions';
 import { addRelatedAction, addVariantAction, moveImageAction, moveRelatedAction, removeRelatedAction, moveNewArrivalAction, moveVariantAction, newArrivalAction, removeImageAction, setPrimaryImageAction, updateImageAction, updateVariantAction, uploadImageAction } from '../manage-actions';
 
 /** The initial-stock rows written by the catalogue seed carry an internal note; the reason ("Initial stock") says it all. */
@@ -54,7 +55,8 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   ]);
   const looks = await listRelated(db(), actor, id);
   // Third pass: colours (values of the Colour attribute) and each size's stock per location.
-  const [colours, byLocation] = await Promise.all([listColours(db()), variants ? stockByLocation(db(), variants.map(v => v.variant_id)) : Promise.resolve([])]);
+  const [colours, byLocation, barcodes] = await Promise.all([listColours(db()), variants ? stockByLocation(db(), variants.map(v => v.variant_id)) : Promise.resolve([]),
+    db().selectFrom('product_variants').select(['id', 'barcode']).where('product_id', '=', id).execute()]);
   const colourName = (slug: string | null) => (slug ? colours.find(c => c.slug === slug)?.label ?? slug : null);
   const colourOptions = [{ value: '', label: 'No colour' }, ...colours.filter(c => c.is_active).map(c => ({ value: c.slug, label: c.label }))];
   const coloured = !!variants?.some(v => v.colour_slug);
@@ -340,6 +342,21 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
               </>
             )}
           </section>
+
+          {write && variants && variants.length > 0 && (
+            <section className="card" aria-labelledby="barcodes-h" data-section="barcodes">
+              <SectionTitle id="barcodes-h">Barcodes (POS)</SectionTitle>
+              <p className="note">Optional. Scanning a size's barcode at the POS counter adds it to the bill. Leave empty to clear.</p>
+              <div className="stock-forms">
+                {variants.map(v => (
+                  <ActionForm key={v.variant_id} action={setBarcodeAction} submitLabel="Save" variant="ghost" className="inline-form" id={`barcode-${v.variant_id}`} label={`Barcode of ${v.variant_sku}`}>
+                    <Hidden name="variantId" value={v.variant_id} /><Hidden name="productId" value={p.id} />
+                    <Field name="barcode" label={`${sizeName(v)} · ${v.variant_sku}`} defaultValue={barcodes.find(b => b.id === v.variant_id)?.barcode ?? ''} />
+                  </ActionForm>
+                ))}
+              </div>
+            </section>
+          )}
 
           {write && variants && (
             <section className="card" aria-labelledby="sizes-h" data-section="sizes">

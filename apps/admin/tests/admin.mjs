@@ -102,7 +102,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|Orders|Draft orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Draft orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');

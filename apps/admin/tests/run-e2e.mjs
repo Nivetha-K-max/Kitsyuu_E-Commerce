@@ -94,6 +94,8 @@ try {
       // Third pass: 1 customer, 1 order in colours (bought, then edited to another colour); 1 colour size added; stock moved between
       // locations and back through the ledger (online stock and every location's stock must equal their ledger rows).
       : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false}
+      // pos.test.mjs (2026-10-02): 11 POS sales at two branches (one voided), 1 customer; the online stock is never touched.
+      : f === 'pos.test.mjs' ? {customers: 1, orders: 11, units: 1100}
       // Commerce workflows: 4 customers; 3 orders (the one that won the last unit, a staff-created online order, an offline
       // branch order); online stock moved by sales, corrections and restocks, all through the ledger (branch stock too).
       : f === 'commerce-workflows.test.mjs' ? {customers: 4, orders: 3, units: 1087, everySizeTen: false}
@@ -173,6 +175,12 @@ try {
     const wfFiles = Object.fromEntries(Object.entries(wfAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const wf = node(['apps/admin/tests/workflows.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(wfFiles)});
     if (!step('commerce workflow browser tests', wf)) failed = true;
+
+    // ---------- POS billing (2026-10-02): sessions, counter sales at two branches, discount, void, bill, report ----------
+    const posAccounts = {root: ['pos.root@test.local', 'super_admin'], manager: ['pos.manager@test.local', 'manager'], sales: ['pos.sales@test.local', 'sales'], support: ['pos.support@test.local', 'support']};
+    const posFiles = Object.fromEntries(Object.entries(posAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const pos = node(['apps/admin/tests/pos.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(posFiles)});
+    if (!step('POS billing browser tests', pos)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
@@ -180,7 +188,8 @@ try {
   // ERP browser tests (client second pass) add 1 customer to give loyalty points to.
   // Commerce workflow browser tests: 2 orders (online from a draft: 3 units held from the online stock; offline at a branch:
   // 2 units from the branch's own stock, which is not part of the online total); purchasing: 4 pieces received on a PO (+4).
-  if (!(await dbCheck('after all browser tests', env, {orders: 10, customers: 3, units: 1100 - 11 + 3 + 6 - 3 + 4, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
+  // POS browser tests: 3 counter sales at two branches (one voided) and 1 customer; branch stock only, never the online stock.
+  if (!(await dbCheck('after all browser tests', env, {orders: 13, customers: 4, units: 1100 - 11 + 3 + 6 - 3 + 4, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;
 } finally {

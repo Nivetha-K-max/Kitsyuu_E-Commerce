@@ -117,7 +117,7 @@ export {
 // ---------- ERP module 3: returns and refunds ----------
 export {
   returnSettings, customerReturnOptions, requestReturn, listCustomerReturns, getCustomerReturn, cancelReturnByCustomer, listReturns, getReturn, returnAction,
-  updateReturnItem, refundReturn, notifyReturn, returnsReport, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
+  updateReturnItem, refundReturn, notifyReturn, returnsReport, createStaffReturn, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
 } from './returns.ts';
 // ---------- ERP module 4: marketing ----------
 export {
@@ -175,3 +175,7 @@ export { notifyOrderPacked, notifyPaymentRequest, sendAbandonedCartReminders, ab
 export { setProductMinPrice } from './products.ts';
 export { syncShipmentTracking, type TrackingSyncRun } from './fulfilment/tracking-sync.ts';
 export { adjustPointsForRefunds, loyaltyTotals } from './loyalty.ts';
+
+// POS billing at a branch (2026-10-02): counter sales on the existing order / stock / payment / returns engine.
+export { posContext, openPosSession, closePosSession, posSessionSummary, listPosSessions, searchPosProducts, quotePosSale, completePosSale, getPosSale, listPosSales,
+  voidPosSale, posReport, findPosCustomers, setVariantBarcode, POS_PAYMENT_METHODS, type PosPaymentMethod, type PosSaleInput, type PosLineInput, type PosProduct, type PosVariant } from './pos.ts';

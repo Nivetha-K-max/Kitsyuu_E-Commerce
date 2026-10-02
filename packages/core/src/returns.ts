@@ -197,6 +197,50 @@ export async function getReturn(db: Db, actor: StaffPrincipal, returnId: string)
   return { ret: r, items, events: events.map(e => ({ ...e, id: String(e.id) })), refunds, payments, sizes, itemsValuePaise, actions: actionsFor(r.status) };
 }
 
+/** Stock for a returned / exchanged item: an offline order's own branch (POS / branch sale), else the online stock. */
+async function orderStockMove(tx: Tx, orderId: string, variantId: string, delta: number, reason: 'return' | 'exchange', staffId: string, note: string) {
+  const o = await tx.selectFrom('orders').select(['channel', 'location_id']).where('id', '=', orderId).executeTakeFirstOrThrow();
+  if (o.channel === 'retail' && o.location_id) await sql`select public.order_stock_at_location(${orderId}::uuid, ${variantId}::uuid, ${delta}::int, ${reason}::text, ${staffId}::uuid, ${note}::text)`.execute(tx);
+  else await sql`select public.adjust_stock(${variantId}::uuid, ${delta}::int, ${reason}::text, ${staffId}::uuid, ${note}::text, ${orderId}::uuid)`.execute(tx);
+}
+
+/** Staff open a return for an order on the customer's behalf (2026-10-02: a customer back at the counter with a POS or
+    branch purchase, including walk-in customers without an account). Same business rules as a customer's request: only
+    when returns are switched on with a window, for a delivered order inside the window, never more units than were bought
+    and not already in another return. It then follows the normal workflow (approve → receive → inspect → refund /
+    exchange); a counter return can be marked received at once. */
+export async function createStaffReturn(db: Db, actor: StaffPrincipal, input: { orderId: string; reasonCode: string; description: string | null; items: { orderItemId: string; qty: number }[] }, ctx: MutationContext) {
+  requirePermission(actor, 'returns.manage');
+  const s = await returnSettings(db);
+  if (!s.enabled || !s.windowDays) throw new ForbiddenError('Returns are not offered (Settings → Returns): all sales are final.');
+  if (!input.items.length || input.items.some(i => !Number.isInteger(i.qty) || i.qty < 1)) throw new DomainError('invalid', 'Choose the items and quantities being returned.');
+  const reason = await db.selectFrom('return_reasons').select('code').where('code', '=', input.reasonCode).where('is_active', '=', true).executeTakeFirst();
+  if (!reason) throw new DomainError('invalid', 'Choose a reason.');
+  const created = await db.transaction().execute(async tx => {
+    const o = await tx.selectFrom('orders').select(['id', 'order_number', 'status', 'customer_id', 'pos_number']).where('id', '=', input.orderId).forUpdate().executeTakeFirst();
+    if (!o) throw new NotFoundError('Order not found.');
+    if (o.status !== 'delivered') throw new ConflictError('A return can be opened once the order has been delivered / handed over.');
+    const d = await tx.selectFrom('order_status_history').select(sql<Date>`max(created_at)`.as('at')).where('order_id', '=', o.id).where('to_status', '=', 'delivered').executeTakeFirst();
+    const until = d?.at ? new Date(new Date(d.at).getTime() + s.windowDays! * 86_400_000) : null;
+    if (!until || until < new Date()) throw new ConflictError(`The ${s.windowDays}-day return window for this order has ended.`);
+    const taken = await alreadyReturned(tx, o.id);
+    const lines = await tx.selectFrom('order_items').select(['id', 'qty']).where('order_id', '=', o.id).execute();
+    for (const it of input.items) {
+      const l = lines.find(x => x.id === it.orderItemId);
+      if (!l) throw new NotFoundError('One of the items is not part of this order.');
+      if (it.qty > l.qty - (taken.get(l.id) ?? 0)) throw new ConflictError('More units were chosen than can still be returned for one of the items.');
+    }
+    const r = await tx.insertInto('return_requests').values({ order_id: o.id, customer_id: o.customer_id, reason_code: input.reasonCode, description: input.description?.trim().slice(0, 2000) || null })
+      .returning(['id', 'number']).executeTakeFirstOrThrow();
+    await tx.insertInto('return_items').values(input.items.map(i => ({ return_id: r.id, order_item_id: i.orderItemId, qty: i.qty }))).execute();
+    await event(tx, r.id, null, 'requested', o.pos_number ? `Opened at the counter for POS sale ${o.pos_number}` : 'Opened by staff', { type: 'staff', staffId: actor.staffId });
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'return.staff_create', entityType: 'return_requests', entityId: r.id,
+      after: { order_number: o.order_number, pos_number: o.pos_number, reason: input.reasonCode, items: input.items } });
+    return { id: r.id, number: r.number };
+  });
+  return created;
+}
+
 /** A staff step in the workflow. Each step checks the current status; the event and audit are written with it. */
 export async function returnAction(db: Db, actor: StaffPrincipal,
   input: { returnId: string; action: Action | 'restock'; note: string | null; resolution?: 'refund' | 'exchange'; pickupAt: Date | null; pickupRef: string | null;
@@ -242,7 +286,7 @@ export async function returnAction(db: Db, actor: StaffPrincipal,
         const o = await tx.selectFrom('orders').select('order_number').where('id', '=', r.order_id).executeTakeFirstOrThrow();
         for (const i of items) {
           try {
-            await sql`select public.adjust_stock(${i.exchange_variant_id}::uuid, ${-i.qty}::int, 'exchange', ${actor.staffId}::uuid, ${`Exchange ${r.number} (order ${o.order_number})`}::text, ${r.order_id}::uuid)`.execute(tx);
+            await orderStockMove(tx, r.order_id, i.exchange_variant_id!, -i.qty, 'exchange', actor.staffId, `Exchange ${r.number} (order ${o.order_number})`);
           } catch (e) {
             if ((e as { code?: string }).code === '23514') throw new ConflictError('A replacement size is out of stock.');
             throw e;
@@ -280,7 +324,7 @@ export async function updateReturnItem(db: Db, actor: StaffPrincipal, input: { r
         throw new ConflictError('Items can be put back into stock once they have been received.');
       if (!i.variant_id) throw new ConflictError('This size no longer exists, so it cannot be restocked.');
       if (i.restocked_qty + input.restockQty > i.qty) throw new ConflictError(`Only ${i.qty - i.restocked_qty} more can be restocked for this item.`);
-      await sql`select public.adjust_stock(${i.variant_id}::uuid, ${input.restockQty}::int, 'return', ${actor.staffId}::uuid, ${`Return ${r.number}`}::text, ${r.order_id}::uuid)`.execute(tx);
+      await orderStockMove(tx, r.order_id, i.variant_id, input.restockQty, 'return', actor.staffId, `Return ${r.number}`);
       await tx.updateTable('return_items').set({ restocked_qty: i.restocked_qty + input.restockQty, restock: true }).where('id', '=', i.id).execute();
       changes.restocked = input.restockQty;
     }

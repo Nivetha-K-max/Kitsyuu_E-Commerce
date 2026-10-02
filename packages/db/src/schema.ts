@@ -652,3 +652,15 @@ export interface ProductionOrdersTable { batch_ref: string | null }
 export interface ShippingRatesTable { is_pickup: Generated<boolean>; pickup_location_id: string | null; description: string | null }
 export interface ReviewsTable { variant_label: string | null }
 export interface Database { vendor_products: VendorProductsTable; bulk_edit_drafts: BulkEditDraftsTable }
+
+// ============================== POS billing (migration 20261007004300) ==============================
+export interface ProductVariantsTable { barcode: string | null }
+export interface PosSessionsTable {
+  id: Generated<string>; number: string; location_id: string; staff_id: string; status: Generated<'open' | 'closed'>;
+  opening_cash_paise: Generated<number>; opened_at: Generated<Timestamp>; closed_at: Timestamp | null; closed_by: string | null;
+  expected_cash_paise: number | null; counted_cash_paise: number | null; variance_paise: number | null; close_note: string | null;
+}
+export interface OrdersTable {
+  pos_session_id: ColumnType<string | null, string | null | undefined, never>; pos_number: ColumnType<string | null, string | null | undefined, never>;
+}
+export interface Database { pos_sessions: PosSessionsTable }

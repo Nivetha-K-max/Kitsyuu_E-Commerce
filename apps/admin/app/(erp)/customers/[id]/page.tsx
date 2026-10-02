@@ -109,7 +109,7 @@ export default async function CustomerPage({ params }: { params: Params }) {
               <thead><tr><th>Order</th><th>Placed</th><th className="num">Total</th><th>Payment</th><th>Status</th></tr></thead>
               <tbody>{d.orders.map(o => (
                 <tr key={o.id} data-order-row={o.order_number}>
-                  <td className="mono">{can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${o.id}`}>{o.order_number}</Link> : o.order_number}</td>
+                  <td className="mono">{can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${o.id}`}>{o.order_number}</Link> : o.order_number}<div className="note" data-order-channel={o.channel}>{o.channel === 'retail' ? (o.pos_number ? `POS ${o.pos_number}` : 'Offline') : 'Online'}</div></td>
                   <td className="nowrap">{formatDateTime(o.created_at)}</td>
                   <td className="num money">{formatPaise(o.total_paise)}</td>
                   <td>{o.payment_status ? <StatusBadge status={o.payment_status} /> : '—'}</td>

@@ -77,7 +77,7 @@ export async function getCustomer(db: Db, actor: StaffPrincipal, customerId: str
     .where('customer_id', '=', c.id).executeTakeFirstOrThrow();
   const legacy = c.legacy_auth_user_id;
   const [orders, addresses, sessions, attempts] = await Promise.all([
-    db.selectFrom('orders').select(['id', 'order_number', 'status', 'payment_status', 'total_paise', 'currency', 'created_at'])
+    db.selectFrom('orders').select(['id', 'order_number', 'status', 'payment_status', 'total_paise', 'currency', 'created_at', 'channel', 'pos_number'])
       .where(ownedBy(c.id, legacy)).orderBy('created_at', 'desc').limit(50).execute(),
     db.selectFrom('addresses').select(['id', 'full_name', 'phone', 'line1', 'line2', 'city', 'state', 'pin', 'country', 'is_default', 'created_at'])
       .where(ownedBy(c.id, legacy)).orderBy('is_default', 'desc').orderBy('created_at').execute(),

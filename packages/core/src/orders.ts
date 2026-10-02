@@ -55,7 +55,7 @@ export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderList
   requirePermission(actor, 'orders.read');
   const hours = await abandonedCheckoutHours(db);
   const q = filterOrders(db.selectFrom('orders as o')
-    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at', 'o.updated_at', 'o.payment_method', 'o.channel',
+    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at', 'o.updated_at', 'o.payment_method', 'o.channel', 'o.pos_number',
       sql<string | null>`(select l.name from public.locations l where l.id = o.location_id)`.as('branch'),
       sql<string | null>`(select r.status from public.checkout_reminders r where r.order_id = o.id)`.as('reminder'),
       sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
