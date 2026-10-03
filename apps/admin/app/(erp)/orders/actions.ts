@@ -12,7 +12,7 @@ export async function updateOrderStatusAction(_: ActionState, form: FormData): P
   const r = await handle(updateOrderStatusInput, form, async input => {
     const res = await updateOrderStatus(db(), actor, input, await requestContext());
     const stock = res.released.length ? ` Returned ${res.released.reduce((n, x) => n + x.qty, 0)} unit(s) to stock.` : '';
-    // M17: the customer email (when switched on in Settings) goes out after the change is committed; a failure is logged, never undone.
+    // M17: the customer email (when switched on in Configuration) goes out after the change is committed; a failure is logged, never undone.
     const event = res.to === 'shipped' ? 'order.shipped' : res.to === 'cancelled' ? 'order.cancelled' : null;
     const mail = event ? await notifyOrderStatus(db(), mailer(), input.orderId, event, { storeUrl: process.env.STORE_URL || null })
       : res.to === 'delivered' ? await notifyOrderDelivered(db(), mailer(), input.orderId, { storeUrl: process.env.STORE_URL || null }) : null;   // ERP module 8
@@ -28,7 +28,7 @@ export async function setPackingStateAction(_: ActionState, form: FormData): Pro
   const actor = await requireActor();
   const r = await handle(packingStateInput, form, async input => {
     const res = await setPackingState(db(), actor, input, await requestContext());
-    // 2026-10-01: the "order packed" email (Settings → Customer emails; off by default). Never blocks the change.
+    // 2026-10-01: the "order packed" email (Configuration → Customer emails; off by default). Never blocks the change.
     if (res.packingState === 'packed') await notifyOrderPacked(db(), mailer(), input.orderId, process.env.STORE_URL || null);
     return { ok: true, message: `${res.orderNumber}: packing is ${STATUS_LABEL[res.packingState].toLowerCase()}.` };
   });
@@ -90,7 +90,7 @@ export async function codCancelAction(_: ActionState, form: FormData): Promise<A
   const actor = await requireActor();
   const r = await handle(codCancelInput, form, async input => {
     const res = await cancelCodOrder(db(), actor, input, await requestContext());
-    // The same "shop cancelled your order" email as other cancellations (only when switched on in Settings).
+    // The same "shop cancelled your order" email as other cancellations (only when switched on in Configuration).
     const mail = input.kind === 'cancel' ? await notifyOrderStatus(db(), mailer(), input.orderId, 'order.cancelled', { storeUrl: process.env.STORE_URL || null }) : null;
     const note = mail?.sent ? ' The customer was emailed.' : '';
     return { ok: true, message: `${res.orderNumber} cancelled.${res.unitsReturned ? ` Returned ${res.unitsReturned} unit(s) to stock.` : ''}${note}` };

@@ -168,9 +168,9 @@ export async function mergeGuestCart(db: Db, p: CustomerPrincipal, raw: unknown[
 }
 
 /** Client change request: how often the store re-syncs a cart that has items with the server (current prices, sale prices,
-    stock), from Settings → Checkout → "Cart refresh interval". The client asked for 30 minutes. A refresh never removes or
+    stock), from Configuration → Checkout → "Cart refresh interval". The client asked for 30 minutes. A refresh never removes or
     reserves anything. */
-export const CART_REFRESH_DEFAULT_MINUTES = 60;   // 2026-10-01: every 60 minutes (was 30); Settings → Checkout can change it
+export const CART_REFRESH_DEFAULT_MINUTES = 60;   // 2026-10-01: every 60 minutes (was 30); Configuration → Checkout can change it
 export async function cartRefreshMinutes(q: Queryable): Promise<number> {
   const r = await q.selectFrom('settings').select('value').where('key', '=', 'checkout.cart_refresh_minutes').executeTakeFirst();
   const n = Number(r?.value);

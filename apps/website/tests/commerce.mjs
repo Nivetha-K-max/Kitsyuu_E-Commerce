@@ -8,7 +8,7 @@ import {createHmac} from 'node:crypto';
 import pg from 'pg';
 import {launch} from './cdp.mjs';
 import {createDb} from '@kitsyuu/db';
-import {createInvoiceForOrder} from '@kitsyuu/core';
+import {cancelCodOrder, cancelOrderByCustomer, createInvoiceForOrder} from '@kitsyuu/core';
 
 const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG} = process.env;
 const RETURNS_POLICY = 'All sales are final. We do not accept returns or offer refunds.';
@@ -394,6 +394,37 @@ try {
     ok('[cod] one confirmation email, saying to pay in cash on delivery', mailsAbout(SERVER_LOG, codNumber) === 1 && /in cash when it is delivered/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
     await go(`/account/orders/${encodeURIComponent(codNumber)}`, '!!document.querySelector("main h1")');
     ok('[cod] the order page says what to pay on delivery', /Cash on delivery · pay ₹/.test(await text('[data-payment-method=cod]')));
+    // Client report (2026-10-03): "a cancelled COD order still shows as placed / active and may still show Cancel order".
+    // The real flow: the customer cannot cancel a COD order themselves; staff cancel it (the same function the admin uses);
+    // then the customer's list, order page and confirmation page are read again.
+    ok('[cod] before cancelling: shown as being packed, and the customer has no Cancel button (only staff cancel COD orders)',
+      (await ev(`document.querySelector('[data-order-status]').dataset.orderStatus`)) === 'processing' && !(await exists('#st-cancel-order')));
+    const [codRow] = await q(`select id from orders where order_number = $1`, [codNumber]);
+    const [codStaff] = await q(`insert into staff_users (email, status, full_name) values ('cm.cod@test.local', 'invited', 'COD') returning id`);
+    const codActor = {staffId: codStaff.id, email: 'cm.cod@test.local', fullName: 'COD', sessionId: '00000000-0000-4000-8000-000000000000', permissions: new Set(['orders.cod'])};
+    const codCtx = {ip: '127.0.0.1', userAgent: 'commerce.mjs', requestId: 'test'};
+    const codDb = createDb({connectionString: KITSYUU_DB_URL, max: 1});
+    let again = '', byCustomer = '';
+    try {
+      await cancelCodOrder(codDb, codActor, {orderId: codRow.id, kind: 'cancel', note: 'Customer asked to cancel', restock: false}, codCtx);
+      again = await cancelCodOrder(codDb, codActor, {orderId: codRow.id, kind: 'cancel', note: 'Again', restock: false}, codCtx).then(() => 'accepted', e => e.message);
+      byCustomer = await cancelOrderByCustomer(codDb, {customerId: cid, email: 'buyer.mobile@test.local', fullName: null, emailVerified: true, sessionId: '00000000-0000-4000-8000-000000000000'}, codNumber, codCtx).then(() => 'accepted', e => e.message);
+    } finally { await codDb.destroy(); }
+    const [cc] = await q(`select status, payment_status, cod_status from orders where id = $1`, [codRow.id]);
+    ok('[cod] staff cancel: stored as cancelled; a second cancel (by staff or by the customer) is refused', cc.status === 'cancelled' && /not been dispatched|already/i.test(again) && /already cancelled/i.test(byCustomer), JSON.stringify({cc, again, byCustomer}));
+    await ev('location.reload()'); await w(300);
+    await until(`document.querySelector('[data-order-status]')?.dataset.orderStatus === 'cancelled'`);
+    ok('[cod] cancelled: the open order page, refreshed, says Cancelled, with no Cancel button, no tracking and nothing to pay',
+      /^cancelled$/i.test(await text('[data-order-status]')) && !(await exists('#st-cancel-order')) && !(await exists('[data-pay-order]')) && !(await exists('[data-order-tracking]'))
+      && /This order was cancelled/.test(await text('main')) && !/pay ₹/.test(await text('[data-payment-method=cod]')), (await text('main')).slice(0, 200));
+    await go('/account/orders', '!!document.querySelector("[data-orders-table]")');
+    ok('[cod] cancelled: the order list says Cancelled for it', /Cancelled/.test(await text(`[data-order="${codNumber}"]`)) && !/Being packed|Confirmed/.test(await text(`[data-order="${codNumber}"]`)), await text(`[data-order="${codNumber}"]`));
+    // Reached by links inside the store (the client-side router), not only by a full page load.
+    await ev(`(document.querySelector('[data-order="${codNumber}"] a').click(), true)`);
+    await until(`location.pathname.startsWith('/account/orders/') && !!document.querySelector('[data-order-status]')`);
+    ok('[cod] cancelled: opened from the list (in-app navigation) it still says Cancelled, no Cancel button', /^cancelled$/i.test(await text('[data-order-status]')) && !(await exists('#st-cancel-order')), JSON.stringify({at: await loc(), status: await text('[data-order-status]'), cancel: await exists('#st-cancel-order')}));
+    await go(`/checkout/complete/${encodeURIComponent(codNumber)}`, '!!document.querySelector("main h1")');
+    ok('[cod] cancelled: the confirmation page no longer says the order is placed', /Cancelled/i.test(await text('main h1')) && !/order is placed|ORDER CONFIRMED/i.test(await text('main')), await text('main h1'));
     await setKey('payments.cod_enabled', 'off');
 
     // Loyalty points: the customer has 200 points (a staff adjustment); ₹1 per point (test values).

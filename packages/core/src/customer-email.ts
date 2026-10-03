@@ -1,5 +1,5 @@
 /* ERP module 8: customer emails for the new workflows (delivery, returns, refunds, support replies, abandoned carts).
-   Same rules as the M17 order emails (engagement.ts): each email has its own switch in Settings → Customer emails and is
+   Same rules as the M17 order emails (engagement.ts): each email has its own switch in Configuration → Customer emails and is
    OFF until the business turns it on; every attempt is written to notification_log (sent / failed); a failed email is
    logged and never undoes or blocks the change that caused it. Messages state facts only (no promised dates or amounts
    beyond what was recorded). The mailer is whatever the deployment configured (MAILER): with no real provider set up,

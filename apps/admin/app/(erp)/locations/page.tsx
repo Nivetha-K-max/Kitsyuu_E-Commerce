@@ -18,6 +18,7 @@ export default async function LocationsPage() {
   const actor = await requireActor();
   if (!can(actor, 'inventory.read')) return <><PageHead section="Catalogue" title="Locations" /><Forbidden permission="inventory.read" /></>;
   const locations = await listLocations(db(), actor);
+  const manage = can(actor, 'locations.manage');
   return (
     <>
       <PageHead section="Catalogue" title="Locations" eyebrow="Where stock is kept. The online location's stock is what the store sells.">
@@ -26,7 +27,7 @@ export default async function LocationsPage() {
       </PageHead>
       {locations.length === 0 ? <Empty title="No locations yet" kind="locations">Add the first location below.</Empty> : (
         <div className="table-wrap"><table data-locations-table>
-          <thead><tr><th>Location</th><th>Kind</th><th className="num">Units</th><th className="num">Sizes in stock</th><th>Status</th></tr></thead>
+          <thead><tr><th>Location</th><th>Kind</th><th className="num">Units</th><th className="num">Sizes in stock</th><th>Status</th>{manage && <th><span className="sr-only">Edit</span></th>}</tr></thead>
           <tbody>{locations.map(l => (
             <tr key={l.id} data-location={l.code}>
               <td><Link href={`/locations/${l.id}`} className="row-link mono-strong">{l.name}</Link>
@@ -35,11 +36,12 @@ export default async function LocationsPage() {
               <td className="num">{formatNumber(l.units)}</td>
               <td className="num">{formatNumber(l.sizes)}</td>
               <td><StatusBadge status={l.is_active ? 'active' : 'inactive'} /></td>
+              {manage && <td className="num"><Link className="btn ghost sm" href={`/locations/${l.id}#edit-location`} aria-label={`Edit ${l.name}`} data-edit-location>Edit</Link></td>}
             </tr>
           ))}</tbody>
         </table></div>
       )}
-      {can(actor, 'locations.manage') && (
+      {manage && (
         <section className="card form-panel" aria-labelledby="nl-h" data-section="new-location">
           <h2 id="nl-h">Add a location</h2>
           <ActionForm action={saveLocationAction} submitLabel="Add location" id="new-location-form" label="Add a location">

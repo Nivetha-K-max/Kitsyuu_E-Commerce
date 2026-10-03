@@ -4,7 +4,7 @@ import { sendAbandonedCartReminders } from '@kitsyuu/core';
 import { db, mailer } from '@/lib/server';
 
 /* 2026-10-01, scheduled job: sends the due "your cart is waiting" emails (one per cart; only with the switch
-   Settings → Customer emails → "Automatic your-cart-is-waiting email" on and a real email provider configured). The delay is
+   Configuration → Customer emails → "Automatic your-cart-is-waiting email" on and a real email provider configured). The delay is
    ABANDONED_CART_DELAY_MINUTES (45 unless set). Run it every 15 minutes or so from a scheduler, with
    "Authorization: Bearer <CRON_SECRET or JOBS_SECRET>" (GET or POST). Answers 404 unless a 32+ character secret matches. */
 export const dynamic = 'force-dynamic';

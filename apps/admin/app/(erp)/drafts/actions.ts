@@ -7,7 +7,7 @@ import { handle } from '@/lib/actions';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
 
 const refresh = (id?: string) => { revalidatePath('/drafts'); if (id) revalidatePath(`/drafts/${id}`); revalidatePath('/customers', 'layout'); };
-/** Delivery charges come from Settings → Shipping, exactly as at checkout. */
+/** Delivery charges come from Configuration → Shipping, exactly as at checkout. */
 const config = () => ({ shipping: settingsShipping(() => db()), discounts: [] });
 
 export async function createDraftAction(_: ActionState, form: FormData): Promise<ActionState> {

@@ -1,6 +1,6 @@
 /* ERP module 8: staff notifications (the notification centre).
    A notification is visible to every staff member who holds its permission, with a read state per person. Each kind can
-   be switched off in Settings (alerts.<kind> = 'off'); a kind with no setting is on (internal alerts, not a customer rule).
+   be switched off in Configuration (alerts.<kind> = 'off'); a kind with no setting is on (internal alerts, not a customer rule).
    Alerts are raised AFTER the business change has committed (raiseAlertSafely): a failed alert is logged and never undoes
    or blocks an order, payment, return or ticket. dedupe_key stops the same event being raised twice. */
 import { sql, type Db, type Queryable } from '@kitsyuu/db';

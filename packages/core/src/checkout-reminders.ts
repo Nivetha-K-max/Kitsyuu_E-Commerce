@@ -1,11 +1,11 @@
 /* Client change request: abandoned checkout. An order placed but not paid (awaiting payment, or the payment failed) counts
-   as an abandoned checkout once it is older than Settings → Checkout → "Abandoned checkout after" (the client asked for
+   as an abandoned checkout once it is older than Configuration → Checkout → "Abandoned checkout after" (the client asked for
    24 hours; that is the value used until the setting is changed).
    Reminder emails:
    - at most ONE per order: a checkout_reminders row is claimed before sending, so two runs can never both send;
    - only while the order is still unpaid (checked again at send time) and has a contact email;
    - never to an address that unsubscribed from the newsletter;
-   - only when Settings → Customer emails → "Abandoned checkout reminder" is on AND a real email provider is configured
+   - only when Configuration → Customer emails → "Abandoned checkout reminder" is on AND a real email provider is configured
      (with the console mailer used in local development nothing is sent or claimed, so it is sent later once email works).
    Run by the admin job /api/jobs/abandoned-checkouts (secret) or by staff from Carts → Abandoned checkouts. */
 import { sql, type Db, type Queryable } from '@kitsyuu/db';

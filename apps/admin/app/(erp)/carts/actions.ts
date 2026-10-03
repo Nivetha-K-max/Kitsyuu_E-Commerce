@@ -18,7 +18,7 @@ export async function sendReminderAction(_: ActionState, form: FormData): Promis
   return done(await handle(sendCartRecoveryInput, form, async input => {
     const r = await sendCartReminder(db(), actor, mailer(), input, await requestContext(), { storeUrl: process.env.STORE_URL || null });
     if (r.sent) return { ok: true, message: 'Reminder email sent.' };
-    return { ok: false, message: r.reason === 'off' ? 'Reminder emails are switched off (Settings → Customer emails).' : r.reason === 'no_recipient' ? 'Nothing to send (no email address or no products still on sale).' : 'The email could not be sent (see Notifications → email outbox).' };
+    return { ok: false, message: r.reason === 'off' ? 'Reminder emails are switched off (Configuration → Customer emails).' : r.reason === 'no_recipient' ? 'Nothing to send (no email address or no products still on sale).' : 'The email could not be sent (see Notifications → email outbox).' };
   }));
 }
 
@@ -28,7 +28,7 @@ export async function sendCheckoutRemindersAction(_: ActionState): Promise<Actio
   if (!can(actor, 'carts.manage')) return { ok: false, message: 'You do not have permission to do that.' };
   const r = await sendAbandonedCheckoutReminders(db(), mailer(), { storeUrl: process.env.STORE_URL || null });
   revalidatePath('/carts', 'layout');
-  if (r.skipped === 'off') return { ok: false, message: 'Reminder emails are switched off in Settings.' };
+  if (r.skipped === 'off') return { ok: false, message: 'Reminder emails are switched off in Configuration.' };
   if (r.skipped === 'no_provider') return { ok: false, message: 'No email provider is configured, so nothing was sent.' };
   return { ok: r.failed === 0, message: `${r.sent} reminder(s) sent${r.failed ? `, ${r.failed} failed (see Notifications → email outbox)` : ''}.` };
 }

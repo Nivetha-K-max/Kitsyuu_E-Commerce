@@ -72,7 +72,7 @@ export default async function SystemPage() {
           {emails.length ? <ul className="plain" data-email-log>{emails.map(e => (
             <li key={e.id} data-status={e.status}><b>{e.status === 'sent' ? 'Sent' : 'Failed'}</b> · {e.event}{e.order_number ? ` · ${e.order_number}` : ''} · {formatDateTime(e.created_at as Date)}
               {e.error && <div className="note">{e.error}</div>}</li>
-          ))}</ul> : <p className="note">No customer emails sent yet. Order emails are switched on under Settings → Customer emails.</p>}
+          ))}</ul> : <p className="note">No customer emails sent yet. Order emails are switched on under Configuration → Customer emails.</p>}
         </section>
         <section className="card" aria-labelledby="sys-mon" data-section="monitoring">
           <SectionTitle id="sys-mon">Monitoring</SectionTitle>

@@ -38,6 +38,6 @@ export const NAV: NavItem[] = [
   { href: '/staff', label: 'Staff', permission: 'staff.read', group: 'System' },
   { href: '/roles', label: 'Roles', permission: 'roles.read', group: 'System' },
   { href: '/audit', label: 'Audit', permission: 'audit.read', group: 'System' },
-  { href: '/settings', label: 'Settings', permission: 'settings.read', group: 'System' },
+  { href: '/settings', label: 'Configuration', permission: 'settings.read', group: 'System' },
   { href: '/system', label: 'System', permission: 'system.read', group: 'System' },
 ];

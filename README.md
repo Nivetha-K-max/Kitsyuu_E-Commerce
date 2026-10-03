@@ -51,6 +51,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 
 ### Customer website (`apps/website`)
 - **One homepage**: the scroll-driven brand film, then the store. The film uses web-sized frames (1600×900; a portrait crop on phones) loaded coarse-to-fine after the first screen, the finest only once the visitor scrolls it, decoded off the main thread a few at a time; the poster is a responsive AVIF/WebP.
+- **Scroll animations play through** (2026-10-03): the brand film, the New arrivals and Categories reels and the Outerwear card each finish before the page moves on. A fast wheel, trackpad flick, swipe or key press stops at the pinned section until its animation has played (and reverses on the way up); nothing is held for longer than the animation takes, and reduced motion skips it all (`lib/scroll-gate.ts`).
 - **Performance** (2026-10-01, measured locally on Slow 4G with a 4× slower CPU): homepage LCP 8.6 s → 1.5 s, interaction delay ~1.5 s → ~24 ms, 10 MB → 1.2 MB in the first seconds. Below-the-fold pictures are lazy, menu photos load when the menu is used, the browser copy of the catalogue leaves out server-only text, the catalogue is cached for 30 s across requests, stylesheets are versioned and cached for a year. `apps/website/tests/run-perf.mjs` repeats the measurement.
 - **Catalogue**: 22 products in three categories and seven subcategories, New Arrivals, Featured, sorting, search, and a product page with sizes, quantity and wishlist. Catalogue pages are statically generated.
 - **Customer accounts** (M6):
@@ -85,7 +86,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
   - **Customers**: list with search and filters, order counts, lifetime value and last order; detail with contact, addresses, orders, safe session and login activity, and audit. Disable (ends every session at once) and enable, and contact corrections, all audited with a reason. No secret is ever shown: the admin database role cannot read password or token hashes.
   - **Payments**: payment attempts with filters, provider notifications (webhooks, without their content), and an exceptions queue (paid after cancel, amount mismatch, duplicate payment, paid without a payment record). The only action is recording that money received for a cancelled order was refunded by hand; nothing is sent to a provider.
   - **Fulfilment** inside the order page: packing progress while processing, the courier (manual for now) and an optional tracking number when shipping, shipped and delivered times. The order status stays the one status.
-  - **Settings**: a typed registry. Business rules (10-day hold, pricing, tax, account security) are shown locked with the reason; only the low-stock level can be changed, and every change is audited.
+  - **Configuration** (the settings page; called Settings before 2026-10-03): an index of areas (Company, Locations, Billing, Tax, POS, Orders) over a typed registry. Business rules (10-day hold, pricing, tax, account security) are shown locked with the reason; only the low-stock level can be changed, and every change is audited.
   - **Order export** (CSV of the filtered list, capped, audited) and **dashboard** figures for awaiting fulfilment, shipped, delivered, pending payments, payment exceptions and disabled customers.
 
 ### Platform

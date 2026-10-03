@@ -4,7 +4,7 @@ if (typeof window !== 'undefined') throw new Error('@kitsyuu/core is server-only
 
 export { listStaff, getStaff, inviteStaff, resendInvite, updateStaff, setStaffRoles, setStaffStatus, revokeStaffSessions, type StaffRow, type MutationContext } from './staff.ts';
 export { listRoles, getRole, listPermissions, createRole, updateRole, deleteRole, type RoleRow } from './roles.ts';
-export { listAudit, recentAudit, auditCount, AUDIT_PAGE_SIZE } from './audit.ts';
+export { listAudit, auditCount, AUDIT_PAGE_SIZE } from './audit.ts';
 export { getDashboard, dashboardTrends, TREND_DAYS, type TrendPoint, type PeriodTotals } from './dashboard.ts';
 export { listCategories, listProducts, getProduct, updateProduct, setProductStatus, updateProductPrice, type ProductListRow } from './products.ts';
 export { listStock, listAdjustmentReasons, adjustStock } from './inventory.ts';

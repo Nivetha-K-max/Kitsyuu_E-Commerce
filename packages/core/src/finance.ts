@@ -69,7 +69,7 @@ export async function setProductTax(db: Db, actor: StaffPrincipal, input: { prod
 }
 
 // ---------------------------------------------------------------- invoices
-/** The registered state (Settings → Company → Registered state), or null when not set. */
+/** The registered state (Configuration → Company → Registered state), or null when not set. */
 export async function companyState(q: Queryable) {
   const r = await q.selectFrom('settings').select('value').where('key', '=', 'company.state').executeTakeFirst();
   return typeof r?.value === 'string' && r.value ? r.value : null;

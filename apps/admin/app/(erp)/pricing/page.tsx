@@ -35,7 +35,7 @@ export default async function PricingPage({ searchParams }: { searchParams: SP }
       <dl className="report-kpis" data-pricing-kpis>
         <div><dt>Products on sale</dt><dd>{formatNumber(overview.onSale)}</dd></div>
         <div><dt>Scheduled changes</dt><dd>{formatNumber(overview.scheduled)}</dd></div>
-        <div><dt>Active discounts</dt><dd>{formatNumber(overview.activeDiscounts)}<small>{ds.enabled ? 'Discounts are switched on' : 'Switched off in Settings → Discounts'}</small></dd></div>
+        <div><dt>Active discounts</dt><dd>{formatNumber(overview.activeDiscounts)}<small>{ds.enabled ? 'Discounts are switched on' : 'Switched off in Configuration → Discounts'}</small></dd></div>
         <div><dt>Discount given (30 days)</dt><dd>{formatPaise(overview.discount30dPaise)}<small>{formatNumber(overview.redemptions30d)} orders</small></dd></div>
       </dl>
       <FilterForm className="actions" role="search" aria-label="Filter products" data-pricing-filters>

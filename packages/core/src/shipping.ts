@@ -1,4 +1,4 @@
-/* M10: delivery charge chosen by the business in admin Settings (shipping.method / shipping.flat_rate_paise /
+/* M10: delivery charge chosen by the business in admin Configuration (shipping.method / shipping.flat_rate_paise /
    shipping.free_from_paise). It plugs into the existing ShippingProvider adapter (pricing.ts, M7); checkout and pricing
    are unchanged. Until a method is chosen, or when the flat rate is missing, it behaves exactly like the unconfigured
    provider: nothing is charged and the quote says "Not set up yet". Carrier rate tables can replace it later. */

@@ -158,10 +158,13 @@ export default async function StoreHome() {
         <div className="ch-ft"><ProductGrid list={featured} pathOf={idx.categoryPath} opts={(_, i) => ({ index: i + 1 })} reveal /></div>
       </div></section>
 
-      {/* 05 — Outerwear: jacket 01, then jacket 02, as the section passes. */}
-      <section className="st-section" aria-labelledby="st-ow-title"><div className="st-wrap st-feature">
+      {/* 05 — Outerwear: jacket 01, then jacket 02. With two jackets (desktop) the card stays pinned while the second one
+          wipes in, and the page moves on only when the change is complete (Choreo + lib/scroll-gate.ts). */}
+      <section className="st-section" aria-labelledby="st-ow-title"><div className={`st-wrap st-feature${outer.length === 2 ? ' ch-ow-wrap' : ''}`}>
         <div className="st-feature-copy"><p className="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br /><em>closures.</em></h2><p>Cropped and stand-collar jackets from the catalogue.</p><Link className="button button-outline" href={url.shop({ category: 'outerwear' })}>Shop outerwear</Link></div>
-        <ul className="st-feature-items ch-ow" data-scroll="pass" data-steps={outer.length || undefined}>{outer.map(p => <ProductCard key={p.id} p={p} categoryPath={idx.categoryPath(p)} />)}</ul>
+        <div className="ch-ow-reel" data-scroll="pin" data-steps={outer.length || undefined}>
+          <ul className="st-feature-items ch-ow" data-steps={outer.length || undefined}>{outer.map(p => <ProductCard key={p.id} p={p} categoryPath={idx.categoryPath(p)} />)}</ul>
+        </div>
       </div></section>
 
       <section className="st-news" aria-labelledby="st-news-title"><div className="st-wrap st-news-inner">

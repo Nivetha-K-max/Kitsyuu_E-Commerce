@@ -13,11 +13,19 @@
      fine frames only once the visitor starts scrolling the film. Downloads pause while the tab is hidden.
    - frames are kept compressed; only the frames around the current position are decoded (off the main thread) and kept
      as bitmaps, so memory stays small however long the visit.
-   - the canvas is drawn only while the hero is on screen (no work while reading further down the page). */
+   - the canvas is drawn only while the hero is on screen (no work while reading further down the page).
+
+   The film plays through (client change request, 2026-10-03): the picture follows a playhead that moves toward the
+   scroll position at a limited speed, so a fast scroll plays the frames in between instead of jumping over them, and the
+   page does not move on to the next section (or back above the hero) until the playhead has reached that end of the
+   film (lib/scroll-gate.ts: a wheel or trackpad gesture stops at the hero's edge; touch, keyboard and scrollbar scrolling
+   that overshoots is brought back to it). The wait is at most FILM_SECONDS, then scrolling is normal again: nothing here
+   can hold the page for longer. With reduced motion none of this runs. */
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { url } from '@/lib/catalogue-utils';
 import { reducedMotion } from '@/lib/motion';
+import { gateScroll, pinnedRange } from '@/lib/scroll-gate';
 
 type FrameSet = { width: number; height: number; pattern: string; maxAspect?: number };
 interface Film { count: number; padding: number; desktop: FrameSet; portrait: FrameSet }
@@ -35,6 +43,7 @@ const arrow = (t: string) => t.split('→').map((part, i) => <span key={i}>{i > 
 
 const P = '/assets/film-v1/';
 const KEEP = 18;                       // decoded frames kept around the current one
+const FILM_SECONDS = 2.4;              // the fastest the playhead crosses the whole pinned scroll (either direction)
 
 export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroLead: 'Japanese streetwear. Unconventional shapes. Made personal.' } }: { copy?: HeroCopy }) {
   const section = useRef<HTMLElement>(null), canvas = useRef<HTMLCanvasElement>(null), word = useRef<HTMLHeadingElement>(null);
@@ -50,10 +59,13 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
     const wake = () => { const w = [...waiters]; waiters.clear(); w.forEach(f => f()); };
     root.classList.add('is-scrub');
 
-    const progress = () => {
-      const r = root.getBoundingClientRect(), stage = root.firstElementChild!.getBoundingClientRect().height;
-      return Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - stage)));
-    };
+    /** The scroll positions between which the stage is pinned: the film runs from the first to the second. */
+    const stageEl = root.querySelector<HTMLElement>('.st-brand-stage')!;   // not firstElementChild: the preload links come first
+    const pinned = (): [number, number] => pinnedRange(root, stageEl) ?? [0, 1];
+    const progress = () => { const [a, b] = pinned(); return Math.min(1, Math.max(0, (scrollY - a) / (b - a))); };
+    // The playhead (0 → 1) is what is shown. It follows the scroll position, never faster than FILM_SECONDS for the whole film.
+    let shown = -1, last = 0;
+    const atEnd = () => shown < 0 || shown >= 0.998, atStart = () => shown < 0 || shown <= 0.002;
     const size = () => {
       const dpr = Math.min(devicePixelRatio || 1, 1.5), w = cv.clientWidth, h = cv.clientHeight;
       if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); drawn = -1; }
@@ -81,7 +93,16 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
     let target = 0;
     const draw = () => {
       raf = 0;
-      const p = progress();
+      const real = progress(), now = performance.now(), dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      if (shown < 0) shown = real;
+      else {
+        const gap = Math.abs(real - shown), step = Math.min(dt / FILM_SECONDS, Math.max(0.0005, gap * (1 - Math.exp(-dt * 14))));
+        shown = gap <= step ? real : shown + Math.sign(real - shown) * step;
+      }
+      if (shown !== real) request(); else gate.release();
+      const p = shown;
+      root.dataset.film = p.toFixed(3);
       if (p > 0 && !scrolled) { scrolled = true; wake(); }   // the visitor is scrubbing: fetch the fine frames too
       if (word.current) {
         const fade = Math.min(1, p / 0.3);
@@ -108,8 +129,12 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
     };
     const request = () => { if (!raf && onScreen) raf = requestAnimationFrame(draw); };
     const resize = () => { drawn = -1; request(); };
-    const seen = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; request(); });
+    // Off screen the playhead is dropped, so coming back (or a restored scroll position) shows the right frame at once.
+    const seen = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; if (!onScreen) { shown = -1; gate.release(); } request(); });
     seen.observe(root);
+
+    // The page does not leave the pinned hero before the playhead has reached that end of the film.
+    const gate = gateScroll({ range: () => pinnedRange(root, stageEl), atEnd, atStart, wake: request, seconds: FILM_SECONDS });
 
     const allowed = (fine: boolean) => !document.hidden && (!fine || scrolled);
     const waitUntil = async (ok: () => boolean) => { while (!ok() && !stopped) await new Promise<void>(r => waiters.add(r)); };
@@ -150,7 +175,6 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
     const later = () => { idle = window.setTimeout(() => { if (!stopped) void start(); }, 250); };
     if (document.readyState === 'complete') later(); else addEventListener('load', later, { once: true });
 
-    addEventListener('scroll', request, { passive: true });
     addEventListener('resize', resize, { passive: true });
     request();
     return () => {
@@ -160,7 +184,8 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
       if (raf) cancelAnimationFrame(raf);
       seen.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
-      removeEventListener('scroll', request);
+      gate.stop();
+      delete root.dataset.film;
       removeEventListener('resize', resize);
       bitmaps.forEach(b => b.close()); bitmaps.clear();
       root.classList.remove('is-scrub', 'has-film');

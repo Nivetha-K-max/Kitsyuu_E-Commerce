@@ -3,7 +3,7 @@
    Built on the existing commerce engine, not beside it:
    - a POS sale is an order in `orders` with channel 'retail' (offline) at the cashier session's branch, priced by the same
      priceOrder() (tax from Finance → Tax as at checkout; nothing is delivered so no delivery charge), with the same staff
-     discount rules as draft orders (a % never above Settings → Discounts "Maximum staff discount", never below a product's
+     discount rules as draft orders (a % never above Configuration → Discounts "Maximum staff discount", never below a product's
      minimum price, a reason, permission orders.discount), the same stock ledger (sell_order_at_location: the branch's own
      stock, reason retail_sale, never below zero) and the same audit log;
    - the order carries its POS bill number (pos_number) and cashier session (pos_session_id);

@@ -1,6 +1,6 @@
 /* Client change request, second pass: loyalty points.
 
-   The rules are the business's, and none is invented here. Every value is a setting (Settings → Loyalty) and nothing
+   The rules are the business's, and none is invented here. Every value is a setting (Configuration → Loyalty) and nothing
    happens until it is set:
    - loyalty.enabled                on/off (off: nobody earns or redeems; balances and staff adjustments still work)
    - loyalty.earn_points_per_100    points earned per ₹100 of goods paid for (after discounts; not delivery or fees)

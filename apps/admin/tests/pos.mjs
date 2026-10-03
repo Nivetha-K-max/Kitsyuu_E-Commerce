@@ -157,6 +157,14 @@ try {
   await fill('#pos-open-form select[name=locationId]', s2); await fill('#pos-open-form input[name=openingCash]', '0');
   await submit('#pos-open-form');
   ok('manager session at Store 2', await until('!!document.querySelector("[data-pos]")', 15000) && /POS Store 2/.test(await text('.page-head')));
+  // Client change request (2026-10-03): the only discount UI is the staff discount, and only when it can be used.
+  ok('manager: staff discount row shown (a maximum is set); no coupon or promotion field', await exists('[data-pos-discount]')
+    && !(await ev(`[...document.querySelectorAll('[data-pos] input, [data-pos] label')].some(el => /coupon|promo/i.test((el.name || '') + (el.placeholder || '') + el.textContent))`)));
+  await q(`delete from settings where key = 'discounts.staff_max_percent'`);
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
+  ok('manager: no discount row while no staff-discount maximum is set', !(await exists('[data-pos-discount]')));
+  await q(`insert into settings (key, value) values ('discounts.staff_max_percent', '10') on conflict (key) do update set value = excluded.value`);
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
   await addBySearch('KTS-TOP-003', 'KTS-TOP-003-M');
   ok('Store 2 stock shown (3)', /3 in stock/.test(await text('[data-pos-line="KTS-TOP-003-M"]')));
   await fill('[data-pos-discount-pct]', '15');

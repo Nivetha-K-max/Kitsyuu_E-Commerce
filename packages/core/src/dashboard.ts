@@ -1,7 +1,6 @@
 /* Dashboard figures. Every number is computed from live rows or the M2 reporting views at request time. */
 import { sql, type Db } from '@kitsyuu/db';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
-import { recentAudit } from './audit.ts';
 import { listPaymentExceptions } from './payments-admin.ts';
 
 const n = sql<number>`count(*)::int`;
@@ -47,7 +46,6 @@ export async function getDashboard(db: Db, actor: StaffPrincipal) {
     products, variants, orders, customers, staff, fulfilment, payments,
     revenue: { totalPaise: Number(sales.revenue), todayPaise: Number(today.revenue), paidOrders: sales.paid_orders },
     lowStock: { count: lowStockCount, rows: lowStock },
-    recentAudit: can(actor, 'audit.read') ? await recentAudit(db, actor) : null,
     generatedAt: new Date(),
   };
 }

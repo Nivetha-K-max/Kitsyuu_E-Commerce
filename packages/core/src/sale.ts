@@ -3,7 +3,7 @@
    price) and optionally on a size that has its own price, with optional start and end dates on the product.
    The price a customer pays is worked out here, on the server, the same way for the cart, checkout and the order:
      effective = the sale price while the sale is running and it is below the base price; otherwise the base price.
-   Staff may not set a sale deeper than Settings → Pricing → "Maximum sale discount" (when a value is set) unless they hold
+   Staff may not set a sale deeper than Configuration → Pricing → "Maximum sale discount" (when a value is set) unless they hold
    pricing.sale_override. No limit is set until the business chooses one. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';

@@ -26,7 +26,7 @@ export default async function CartsPage({ searchParams }: { searchParams: SP }) 
   const qs = (v: string, p = 1) => `/carts?view=${v}${query.q ? `&q=${encodeURIComponent(query.q)}` : ''}&page=${p}`;
   return (
     <>
-      <PageHead title="Carts & wishlists" eyebrow={list.hours ? `A cart counts as abandoned after ${list.hours} hours without changes.` : 'No abandoned-cart threshold is set (Settings → Carts), so no cart is counted as abandoned.'} />
+      <PageHead title="Carts & wishlists" eyebrow={list.hours ? `A cart counts as abandoned after ${list.hours} hours without changes.` : 'No abandoned-cart threshold is set (Configuration → Carts), so no cart is counted as abandoned.'} />
       <SubNav label="Carts" current="/carts" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       <dl className="report-kpis" data-cart-kpis>
         <div><dt>Active carts</dt><dd>{formatNumber(s.active)}</dd></div>

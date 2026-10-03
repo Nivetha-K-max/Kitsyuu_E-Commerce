@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Fragment } from 'react';
 import { can } from '@kitsyuu/auth';
 import { listSettings, type SettingRow } from '@kitsyuu/core';
@@ -8,7 +9,29 @@ import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { updateSettingAction } from './actions';
 
-export const metadata: Metadata = { title: 'Settings' };
+export const metadata: Metadata = { title: 'Configuration' };
+
+const anchor = (group: string) => `g-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+/* Configuration areas (client change request, 2026-10-03): one index of where each kind of business configuration lives.
+   It adds no data and no second settings system. An area points at groups of the settings registry on this page (by
+   group name, shown only when that group exists) and at the existing module that already owns the rest (shown only to
+   staff who hold that module's permission). A new setting belongs in the registry (core/settings.ts) under one of these
+   groups, and appears here by itself. */
+const AREAS: { name: string; about: string; groups: string[]; links: { href: string; label: string; permission: string }[] }[] = [
+  { name: 'Company', about: 'Legal name, address, GSTIN and contact details printed on bills, invoices and packing slips.', groups: ['Company', 'Store'], links: [] },
+  { name: 'Locations', about: 'Warehouse and retail branches, and the stock each one holds.', groups: ['Inventory'],
+    links: [{ href: '/locations', label: 'Locations', permission: 'inventory.read' }, { href: '/transfers', label: 'Transfers', permission: 'inventory.read' }] },
+  { name: 'Billing', about: 'Invoice numbering and how customers may pay.', groups: ['Billing', 'Payments'],
+    links: [{ href: '/finance/invoices', label: 'Invoices', permission: 'finance.read' }] },
+  { name: 'Tax', about: 'Default tax rate, tax-inclusive prices and the registered state used to split GST.', groups: ['Billing', 'Company'],
+    links: [{ href: '/finance/tax', label: 'Tax report', permission: 'finance.read' }] },
+  { name: 'POS', about: 'Branches that bill, who may bill, and the staff discount limit.', groups: ['Discounts'],
+    links: [{ href: '/locations', label: 'Branches', permission: 'inventory.read' }, { href: '/roles', label: 'Roles & permissions', permission: 'roles.read' },
+      { href: '/pos/sessions', label: 'Cashier sessions', permission: 'pos.access' }] },
+  { name: 'Orders', about: 'Checkout, cash on delivery, delivery charges, returns and customer emails.', groups: ['Checkout', 'Payments', 'Shipping', 'Returns', 'Customer emails'],
+    links: [{ href: '/shipping', label: 'Shipping', permission: 'shipping.read' }] },
+];
 
 function show(s: SettingRow): string {
   if (s.value === null || s.value === undefined) return 'Not set';
@@ -25,14 +48,27 @@ function show(s: SettingRow): string {
    audited); everything else is shown with the reason it is locked. There is no free-form editor and no way to add keys. */
 export default async function SettingsPage() {
   const actor = await requireActor();
-  if (!can(actor, 'settings.read')) return <><PageHead section="System" title="Settings" /><Forbidden permission="settings.read" /></>;
+  if (!can(actor, 'settings.read')) return <><PageHead section="System" title="Configuration" /><Forbidden permission="settings.read" /></>;
   const { groups, unregistered, policies } = await listSettings(db(), actor);
+  const has = new Set(groups.map(g => g.group));
   return (
     <>
-      <PageHead section="System" title="Settings" eyebrow="Business rules are locked here; only safe operational settings can be changed, and every change is audited." />
+      <PageHead section="System" title="Configuration" eyebrow="Business rules are locked here; only safe operational settings can be changed, and every change is audited." />
+      <section className="card" aria-labelledby="areas-h" data-section="config-areas">
+        <h2 id="areas-h">Configuration areas</h2>
+        <dl className="facts" data-config-areas>{AREAS.map(a => {
+          const links = [...a.groups.filter(g => has.has(g)).map(g => ({ href: `#${anchor(g)}`, label: `${g} settings` })),
+            ...a.links.filter(l => can(actor, l.permission))];
+          return (
+            <Fragment key={a.name}><dt>{a.name}</dt>
+              <dd data-config-area={a.name}>{a.about}
+                {links.length > 0 && <div className="note">{links.map((l, i) => <Fragment key={l.href}>{i > 0 && ' · '}<Link href={l.href}>{l.label}</Link></Fragment>)}</div>}</dd>
+            </Fragment>);
+        })}</dl>
+      </section>
       {groups.map(g => (
-        <section className="card" key={g.group} aria-labelledby={`g-${g.group}`} data-settings-group={g.group}>
-          <h2 id={`g-${g.group}`}>{g.group}</h2>
+        <section className="card" key={g.group} aria-labelledby={anchor(g.group)} data-settings-group={g.group}>
+          <h2 id={anchor(g.group)}>{g.group}</h2>
           <div className="table-wrap"><table data-settings-table>
             <thead><tr><th>Setting</th><th>Value</th><th>Change</th></tr></thead>
             <tbody>{g.items.map(s => (

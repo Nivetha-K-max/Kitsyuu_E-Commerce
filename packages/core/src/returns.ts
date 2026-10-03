@@ -212,7 +212,7 @@ async function orderStockMove(tx: Tx, orderId: string, variantId: string, delta:
 export async function createStaffReturn(db: Db, actor: StaffPrincipal, input: { orderId: string; reasonCode: string; description: string | null; items: { orderItemId: string; qty: number }[] }, ctx: MutationContext) {
   requirePermission(actor, 'returns.manage');
   const s = await returnSettings(db);
-  if (!s.enabled || !s.windowDays) throw new ForbiddenError('Returns are not offered (Settings → Returns): all sales are final.');
+  if (!s.enabled || !s.windowDays) throw new ForbiddenError('Returns are not offered (Configuration → Returns): all sales are final.');
   if (!input.items.length || input.items.some(i => !Number.isInteger(i.qty) || i.qty < 1)) throw new DomainError('invalid', 'Choose the items and quantities being returned.');
   const reason = await db.selectFrom('return_reasons').select('code').where('code', '=', input.reasonCode).where('is_active', '=', true).executeTakeFirst();
   if (!reason) throw new DomainError('invalid', 'Choose a reason.');

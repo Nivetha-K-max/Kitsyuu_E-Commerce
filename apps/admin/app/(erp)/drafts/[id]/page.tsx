@@ -110,7 +110,7 @@ export default async function DraftPage({ params, searchParams }: { params: Para
 
       <section className="card form-panel" aria-labelledby="dd-h" data-section="draft-discount">
         <h2 id="dd-h">Discount</h2>
-        <p className="note" data-discount-limit>{v.maxDiscountBp === null ? 'Staff discounts are not set up (Settings → Discounts → "Maximum staff discount").'
+        <p className="note" data-discount-limit>{v.maxDiscountBp === null ? 'Staff discounts are not set up (Configuration → Discounts → "Maximum staff discount").'
           : `At most ${v.maxDiscountBp / 100}%, and never below a product's minimum price. A reason is required.`}</p>
         {d.discount_bp ? <p data-draft-discount>{d.discount_bp / 100}% · {d.discount_reason}{staff ? ` · ${formatPaise(staff.amountPaise)} off` : ''}</p> : <p className="note">No discount.</p>}
         {discount && v.maxDiscountBp !== null && (

@@ -52,8 +52,8 @@ function DiscountFields({ d, t }: { d?: Discount; t: Targets }) {
   );
 }
 
-/* ERP module 1: discounts and coupon codes. They take effect only while Settings → Discounts → "Discounts and coupons" is
-   on (off at launch). When several apply, Settings → "More than one discount" decides (largest only by default). */
+/* ERP module 1: discounts and coupon codes. They take effect only while Configuration → Discounts → "Discounts and coupons" is
+   on (off at launch). When several apply, Configuration → "More than one discount" decides (largest only by default). */
 export default async function DiscountsPage() {
   const actor = await requireActor();
   if (!can(actor, 'pricing.read')) return <><PageHead title="Discounts & coupons" /><Forbidden permission="pricing.read" /></>;
@@ -61,7 +61,7 @@ export default async function DiscountsPage() {
   const manage = can(actor, 'pricing.manage');
   return (
     <>
-      <PageHead title="Pricing & discounts" eyebrow={settings.enabled ? `Discounts are ON · ${settings.stacking === 'all' ? 'all applicable discounts combine' : 'only the largest discount applies'}` : 'Discounts are OFF (Settings → Discounts): nothing below is applied at checkout.'} />
+      <PageHead title="Pricing & discounts" eyebrow={settings.enabled ? `Discounts are ON · ${settings.stacking === 'all' ? 'all applicable discounts combine' : 'only the largest discount applies'}` : 'Discounts are OFF (Configuration → Discounts): nothing below is applied at checkout.'} />
       <PricingNav current="/pricing/discounts" />
       {rows.length === 0 ? <Empty title="No discounts yet" kind="discounts">Create a coupon code or an automatic discount below.</Empty> : (
         <div className="table-wrap"><table data-discounts-table>

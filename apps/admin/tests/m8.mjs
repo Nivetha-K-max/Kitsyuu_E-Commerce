@@ -68,7 +68,7 @@ try {
   // ================= admin =================
   ok('admin signs in', await signIn('admin', 'Admin M8'));
   const nav = await navText();
-  ok('menu: Customers and Payments under Commerce, Settings under System', /Customers/.test(nav) && /Payments/.test(nav) && /Settings/.test(nav), nav);
+  ok('menu: Customers and Payments under Commerce, Configuration under System', /Customers/.test(nav) && /Payments/.test(nav) && /Configuration/.test(nav), nav);
   await until(`!!document.querySelector('[data-kpi="Awaiting fulfilment"]')`, 20000);   // figures stream in after the page shell
   for (const k of ['Awaiting fulfilment', 'Shipped', 'Delivered', 'Pending payments', 'Payment exceptions'])
     ok(`dashboard shows "${k}"`, await exists(`[data-kpi="${k}"]`));
@@ -191,6 +191,10 @@ try {
 
   // ---------- settings ----------
   await visit('/settings', '!!document.querySelector("[data-settings-table]")');
+  // Client change request (2026-10-03): Settings is the Configuration area, with an index of areas over the same registry.
+  ok('configuration: the page is titled Configuration and lists Company, Locations, Billing, Tax, POS and Orders',
+    /Configuration/.test(await text('h1')) && await ev(`[...document.querySelectorAll('[data-config-area]')].map(d => d.dataset.configArea).join()`) === 'Company,Locations,Billing,Tax,POS,Orders');
+  ok('configuration: every in-page area link points at a settings group on the page', await ev(`(() => { const a = [...document.querySelectorAll('[data-config-areas] a[href^="#"]')]; return a.length > 0 && a.every(x => !!document.getElementById(x.getAttribute('href').slice(1))); })()`));
   ok('settings: unpaid-order hold time locked, 14400 minutes', (await exists('[data-setting="checkout.payment_window_minutes"][data-editable=no] [data-locked]'))
     && /14400 minutes/.test(await text('[data-setting="checkout.payment_window_minutes"] [data-setting-value]')));
   ok('settings: tax and account security locked', (await exists('[data-setting="billing.prices_include_tax"] [data-locked]')) && (await exists('[data-setting="auth.login_max_failures"] [data-locked]')));
@@ -232,7 +236,7 @@ try {
   // ================= support =================
   ok('support signs in', await signIn('support', 'Support M8'));
   const snav = await navText();
-  ok('support menu: Customers yes; Payments and Settings no', /Customers/.test(snav) && !/Payments/.test(snav) && !/Settings/.test(snav), snav);
+  ok('support menu: Customers yes; Payments and Configuration no', /Customers/.test(snav) && !/Payments/.test(snav) && !/Configuration|Settings/.test(snav), snav);
   for (const p of ['/payments', '/settings']) {
     await visit(p);
     ok(`support gets "not permitted" on ${p}`, await exists('[data-gate=forbidden]'));

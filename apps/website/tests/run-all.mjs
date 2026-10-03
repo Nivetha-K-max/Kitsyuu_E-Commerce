@@ -1,10 +1,10 @@
-/* Runs both storefront suites against the Next.js app (npm start → :3001).
+/* Runs the storefront suites against the Next.js app (npm start → :3001).
    The landing-page check uses the untouched static site (node server.cjs → :3000). */
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
 let pass = 0, total = 0;
-for (const f of ['check.mjs', 'phase2.mjs']) {
+for (const f of ['check.mjs', 'phase2.mjs', 'hero.mjs']) {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL(f, import.meta.url))], {encoding: 'utf8', timeout: 900000});
   const lines = (r.stdout || '').split('\n').filter(l => /^(PASS|FAIL)/.test(l));
   lines.filter(l => l.startsWith('FAIL')).forEach(l => console.log(l));

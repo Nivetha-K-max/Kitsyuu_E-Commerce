@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Purchase order' };
 type Params = Promise<{ id: string }>;
 
 /* Client change request: a printable purchase order (A4, the browser's print dialog; no PDF service). Everything comes
-   from the purchase order, the vendor record and Settings → Company; anything not entered there is left out (never
+   from the purchase order, the vendor record and Configuration → Company; anything not entered there is left out (never
    invented). Purchase orders record no tax or discount, so none is shown; prices only for staff with costs.read. */
 export default async function PrintPurchaseOrder({ params }: { params: Params }) {
   const actor = await requireActor();
@@ -29,7 +29,7 @@ export default async function PrintPurchaseOrder({ params }: { params: Params })
         <PageHead section="Supply" title={`Print · ${o.po_number}`} crumbs={[{ href: '/purchase-orders', label: 'Purchase orders' }, { href: `/purchase-orders/${o.id}`, label: o.po_number }]}>
           <PrintButton label="Print PO" />
         </PageHead>
-        {!company.legalName && <p className="msg" data-company-missing>Company details are not entered yet. Add them under <Link href="/settings">Settings → Company</Link> to print them.</p>}
+        {!company.legalName && <p className="msg" data-company-missing>Company details are not entered yet. Add them under <Link href="/settings">Configuration → Company</Link> to print them.</p>}
         {o.status === 'draft' && <p className="msg" role="status">This purchase order is still a draft (not placed with the vendor).</p>}
       </div>
       <article className="slip card" data-po-print>

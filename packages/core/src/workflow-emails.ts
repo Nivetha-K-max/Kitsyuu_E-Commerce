@@ -1,5 +1,5 @@
 /* Commerce workflow emails (2026-10-01), on the existing customer-email system (customer-email.ts: one switch per email in
-   Settings → Customer emails, OFF until the business turns it on; every attempt in notification_log; a failed email never
+   Configuration → Customer emails, OFF until the business turns it on; every attempt in notification_log; a failed email never
    blocks what caused it).
    - order.packed: when staff mark an order packed.
    - order.payment_request: when staff confirm a draft order for online payment (the link to pay it from the account).

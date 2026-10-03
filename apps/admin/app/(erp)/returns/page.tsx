@@ -12,7 +12,7 @@ import ReturnsNav from './ReturnsNav';
 
 export const metadata: Metadata = { title: 'Returns & refunds' };
 
-/* ERP module 3: return requests. Customers can only file them when Settings → Returns is switched on with a window. */
+/* ERP module 3: return requests. Customers can only file them when Configuration → Returns is switched on with a window. */
 export default async function ReturnsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'returns.read')) return <><PageHead title="Returns & refunds" /><Forbidden permission="returns.read" /></>;
@@ -26,7 +26,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: SP }
     <>
       <PageHead title="Returns & refunds" eyebrow={settings.enabled && settings.windowDays
         ? `Customers can request returns within ${settings.windowDays} days of delivery · ${open} open`
-        : `Returns are OFF for customers (Settings → Returns): the store says all sales are final · ${open} open`} />
+        : `Returns are OFF for customers (Configuration → Returns): the store says all sales are final · ${open} open`} />
       <ReturnsNav current="/returns" />
       <FilterForm className="actions" role="search" aria-label="Filter returns" data-return-filters>
         <label className="sr-only" htmlFor="rt-q">Search</label>

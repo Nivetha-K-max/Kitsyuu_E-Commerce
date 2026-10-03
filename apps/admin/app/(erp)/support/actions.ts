@@ -14,7 +14,7 @@ export async function replyTicketAction(_: ActionState, form: FormData): Promise
     const r = await replyToTicket(db(), actor, input, await requestContext());
     const mail = r.emailCustomer ? await notifyTicketReply(db(), mailer(), input.ticketId, { storeUrl: process.env.STORE_URL || null }) : null;
     return { ok: true, message: input.internal ? 'Internal note added (not visible to the customer).'
-      : `Reply added; the customer sees it in their account.${mail?.sent ? ' They were emailed.' : mail?.reason === 'off' ? ' (Reply emails are off in Settings.)' : ''}` };
+      : `Reply added; the customer sees it in their account.${mail?.sent ? ' They were emailed.' : mail?.reason === 'off' ? ' (Reply emails are off in Configuration.)' : ''}` };
   }));
 }
 

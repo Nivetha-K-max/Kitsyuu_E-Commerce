@@ -12,7 +12,7 @@ import { sendCheckoutRemindersAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Abandoned checkouts' };
 
-/* Client change request: orders placed but not paid after the abandoned-checkout time (24 hours unless changed in Settings).
+/* Client change request: orders placed but not paid after the abandoned-checkout time (24 hours unless changed in Configuration).
    One reminder per order at most, only with the reminder switch on and a real email provider configured. */
 export default async function AbandonedCheckoutsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
@@ -20,7 +20,7 @@ export default async function AbandonedCheckoutsPage({ searchParams }: { searchP
   const page = pageOf((await searchParams).page);
   const [list, on] = await Promise.all([listAbandonedCheckouts(db(), actor, { page }), customerEmailEnabled(db(), 'checkout.reminder')]);
   const provider = mailer().kind !== 'console';
-  const state = !on ? 'Reminder emails are OFF (Settings → Customer emails).' : !provider ? 'Reminder emails are on, but no email provider is configured, so nothing is sent.' : 'Reminder emails are on.';
+  const state = !on ? 'Reminder emails are OFF (Configuration → Customer emails).' : !provider ? 'Reminder emails are on, but no email provider is configured, so nothing is sent.' : 'Reminder emails are on.';
   return (
     <>
       <PageHead title="Carts & wishlists" eyebrow={`Orders still unpaid ${list.hours} hours after they were placed · ${list.total} now. ${state}`} />

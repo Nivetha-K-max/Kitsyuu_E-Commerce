@@ -40,7 +40,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
       </nav>
       {query.view !== 'all' && <p className="note" data-order-view-note>{query.view === 'active' ? 'Confirmed orders not yet delivered: paid, being packed or shipped.'
         : query.view === 'draft' ? `Placed but not paid yet, less than ${abandonHours} hours ago. They are not confirmed orders.`
-        : <>Still unpaid {abandonHours} hours after they were placed (the abandoned-checkout time in Settings). Reminder emails are handled under <Link href="/carts/checkouts">Carts → Abandoned checkouts</Link>.</>}</p>}
+        : <>Still unpaid {abandonHours} hours after they were placed (the abandoned-checkout time in Configuration). Reminder emails are handled under <Link href="/carts/checkouts">Carts → Abandoned checkouts</Link>.</>}</p>}
       <FilterForm className="actions" role="search" aria-label="Filter orders" data-order-filters>
         <label className="sr-only" htmlFor="o-q">Search</label>
         <input id="o-q" name="q" className="input" placeholder="Order no., email, name, phone or SKU" defaultValue={query.q ?? ''} />

@@ -200,7 +200,7 @@ export const orderListQuery = z.object({
   to: isoDate.optional().or(z.literal('').transform(() => undefined)),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   /** Client change request: Active (confirmed, not yet delivered), Draft (placed, not paid yet, newer than the abandoned-
-      checkout delay), Abandoned (still unpaid after that delay; 24 h unless set in Settings). All = no view filter. */
+      checkout delay), Abandoned (still unpaid after that delay; 24 h unless set in Configuration). All = no view filter. */
   view: z.enum(['all', 'active', 'draft', 'abandoned']).default('all'),
 });
 export const updateOrderStatusInput = z.object({

@@ -34,7 +34,9 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
   const [key, setKey] = useState(newKey);
   const [paying, startPay] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
-  const discountPercent = canDiscount ? Math.max(0, Number(discount) || 0) : 0;
+  // The staff discount is offered only when it can be used: this cashier may give one and a maximum is set (Configuration → Discounts).
+  const offerDiscount = canDiscount && !!maxDiscountBp;
+  const discountPercent = offerDiscount ? Math.max(0, Number(discount) || 0) : 0;
 
   // ---------- search (debounced); Enter adds an exact barcode / SKU match
   const runSearch = useCallback(async (term: string, addExact: boolean) => {
@@ -206,11 +208,11 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
           )}
         </div>
 
-        {canDiscount && (
+        {offerDiscount && (
           <div className="pos-row pos-discount" data-pos-discount>
             <label>Discount %<input value={discount} onChange={e => setDiscount(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" data-pos-discount-pct /></label>
             <label className="grow">Reason<input value={reason} onChange={e => setReason(e.target.value)} placeholder="Required for a discount" data-pos-discount-reason /></label>
-            <span className="note">{maxDiscountBp ? `Max ${maxDiscountBp / 100}%` : 'Discounts not set up (Settings → Discounts)'}</span>
+            <span className="note">Max {maxDiscountBp / 100}%</span>
           </div>
         )}
 

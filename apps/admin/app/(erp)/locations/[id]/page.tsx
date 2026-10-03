@@ -35,6 +35,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
       <PageHead section="Catalogue" title={l.name} crumbs={crumbs}
         eyebrow={`${l.code} · ${LOCATION_KINDS[l.kind as keyof typeof LOCATION_KINDS] ?? l.kind}${l.is_online ? ' · Online store stock' : ''} · ${formatNumber(units)} unit(s) shown`}>
         <StatusBadge status={l.is_active ? 'active' : 'inactive'} />
+        {can(actor, 'locations.manage') && <a className="btn ghost" href="#edit-location" data-edit-location>Edit location</a>}
       </PageHead>
       {l.is_online && <p className="note">This is the online location: its stock is what the store sells, and orders take stock from here.</p>}
 
@@ -96,7 +97,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
       </section>
 
       {can(actor, 'locations.manage') && (
-        <section className="card form-panel" aria-labelledby="le-h" data-section="edit-location">
+        <section className="card form-panel" id="edit-location" aria-labelledby="le-h" data-section="edit-location">
           <h2 id="le-h">Edit location</h2>
           <ActionForm action={saveLocationAction} submitLabel="Save location" id="edit-location-form" label="Edit location">
             <Hidden name="locationId" value={l.id} />

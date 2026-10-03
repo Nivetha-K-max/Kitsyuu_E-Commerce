@@ -16,7 +16,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 
 /* ERP module 8: the staff notification centre. Each staff member sees only the kinds their permissions cover (the same
    permission as the page the notification links to), with their own read state. Which kinds are raised at all is set in
-   Settings → Staff alerts. The email outbox (customer emails, sent or failed) is shown to staff with system.read. */
+   Configuration → Staff alerts. The email outbox (customer emails, sent or failed) is shown to staff with system.read. */
 export default async function NotificationsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   const sp = await searchParams;
@@ -30,7 +30,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const label = (kind: string) => (ALERT_KINDS as Record<string, { label: string }>)[kind]?.label ?? kind;
   return (
     <>
-      <PageHead section="Overview" title="Notifications" eyebrow="Alerts for the areas you can access. Choose which kinds are raised in Settings → Staff alerts.">
+      <PageHead section="Overview" title="Notifications" eyebrow="Alerts for the areas you can access. Choose which kinds are raised in Configuration → Staff alerts.">
         <ActionForm action={markNotificationsAction} submitLabel="Mark all as read" variant="ghost" className="inline-form" id="mark-all-read" label="Mark all as read">
           <Hidden name="all" value="true" />
         </ActionForm>
@@ -74,7 +74,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       {outbox && (
         <section className="card" aria-labelledby="outbox-h" data-section="email-outbox">
           <h2 id="outbox-h">Customer email outbox</h2>
-          <p className="note">The last 30 customer emails the platform tried to send. Which emails are sent is set in Settings → Customer emails. Without a configured email provider, messages are only written to the server log.</p>
+          <p className="note">The last 30 customer emails the platform tried to send. Which emails are sent is set in Configuration → Customer emails. Without a configured email provider, messages are only written to the server log.</p>
           {outbox.length === 0 ? <Empty compact title="No customer emails yet" /> : (
             <div className="table-wrap"><table data-outbox-table>
               <thead><tr><th>When</th><th>Email</th><th>To</th><th>Order</th><th>Result</th></tr></thead>

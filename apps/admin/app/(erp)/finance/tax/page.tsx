@@ -44,7 +44,7 @@ export default async function TaxPage() {
       <FinanceNav current="/finance/tax" />
       <section className="card" aria-labelledby="co-h"><h2 id="co-h">Registered business</h2>
         <p>{company.legalName ?? <span className="muted">Legal name not entered</span>} · GSTIN {company.gstin ?? <span className="muted">not entered</span>} · State {state ?? <span className="muted">not set</span>}</p>
-        <p className="note">Edit under <Link href="/settings">Settings → Company</Link>. Without the state, invoices do not split GST into CGST/SGST or IGST.</p>
+        <p className="note">Edit under <Link href="/settings">Configuration → Company</Link>. Without the state, invoices do not split GST into CGST/SGST or IGST.</p>
       </section>
       <section className="card" aria-labelledby="tr-h"><h2 id="tr-h">Tax rates</h2>
         <div className="table-wrap"><table data-tax-rates>

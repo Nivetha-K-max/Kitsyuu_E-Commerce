@@ -27,13 +27,6 @@ export async function listAudit(db: Db, actor: StaffPrincipal, query: AuditQuery
   };
 }
 
-export async function recentAudit(db: Db, actor: StaffPrincipal, limit = 8) {
-  requirePermission(actor, 'audit.read');
-  return db.selectFrom('audit_logs as a').leftJoin('staff_users as s', 's.id', 'a.staff_id')
-    .select(['a.id', 'a.occurred_at', 'a.action', 'a.entity_type', 'a.entity_id', 's.email as staff_email', 'a.actor_type'])
-    .orderBy('a.occurred_at', 'desc').orderBy('a.id', 'desc').limit(limit).execute();
-}
-
 export async function auditCount(db: Db): Promise<number> {
   return (await db.selectFrom('audit_logs').select(sql<number>`count(*)::int`.as('n')).executeTakeFirstOrThrow()).n;
 }

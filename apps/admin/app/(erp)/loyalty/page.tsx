@@ -13,7 +13,7 @@ import { importPointsAction } from './actions';
 export const metadata: Metadata = { title: 'Loyalty points' };
 
 /* Client change request, second pass: loyalty points. Balances, the latest point changes, the rules in force (from
-   Settings → Loyalty; nothing is invented) and the import of opening balances. Points of one customer are adjusted on
+   Configuration → Loyalty; nothing is invented) and the import of opening balances. Points of one customer are adjusted on
    the customer's page. */
 export default async function LoyaltyPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
@@ -39,7 +39,7 @@ export default async function LoyaltyPage({ searchParams }: { searchParams: SP }
           <dt>Per order</dt><dd>{s.minRedeem || s.maxRedeem ? [s.minRedeem && `at least ${s.minRedeem}`, s.maxRedeem && `at most ${s.maxRedeem}`].filter(Boolean).join(', ') + ' points' : 'No limit'}</dd>
           <dt>Expiry</dt><dd>{s.expiryMonths ? `${s.expiryMonths} months after they are added` : 'Points do not expire'}</dd>
         </dl>
-        {can(actor, 'settings.read') && <p className="note">Change the rules under <Link href="/settings">Settings → Loyalty</Link>.</p>}
+        {can(actor, 'settings.read') && <p className="note">Change the rules under <Link href="/settings">Configuration → Loyalty</Link>.</p>}
       </section>
 
       <FilterForm className="actions" role="search" aria-label="Find a customer" data-loyalty-filters>

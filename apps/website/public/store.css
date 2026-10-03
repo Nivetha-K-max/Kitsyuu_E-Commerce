@@ -691,13 +691,22 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 
 /* ---------- 05 Outerwear: jacket 01 → jacket 02 ---------- */
 @media(min-width:901px){
-  .ch-on .ch-ow[data-steps="2"]{grid-template-columns:minmax(0,1fr);--s:clamp(0, calc((var(--p, 0) - .36) / .28), 1)}
+  /* Pinned (2026-10-03): the card stays in place for 90% of a screen of scrolling while jacket 02 wipes in (--t from
+     Choreo, 0 → 1), so the change is always seen complete before the section moves on. The card is kept short enough to
+     fit under the header. */
+  .ch-on .ch-ow-reel[data-steps="2"]:after{content:"";display:block;height:90svh}
+  .ch-on .ch-ow[data-steps="2"]{position:sticky;top:calc(var(--st-head) + 24px);grid-template-columns:minmax(0,1fr);--s:clamp(0, var(--t, 0), 1)}
   .ch-on .ch-ow[data-steps="2"]>li{grid-area:1/1}
   .ch-on .ch-ow[data-steps="2"]>li:nth-child(1){opacity:calc(1 - var(--s))}
   .ch-on .ch-ow[data-steps="2"]>li:nth-child(2){clip-path:inset(0 0 0 calc((1 - var(--s)) * 100%));pointer-events:none}
-  .ch-on .ch-ow[data-step="1"]>li:nth-child(2){pointer-events:auto}
-  .ch-on .ch-ow[data-step="1"]>li:nth-child(1){pointer-events:none}
-  .ch-on .ch-ow[data-steps="2"] .st-card-media{aspect-ratio:5/4}
+  .ch-on .ch-ow-reel[data-step="1"] .ch-ow>li:nth-child(2){pointer-events:auto}
+  .ch-on .ch-ow-reel[data-step="1"] .ch-ow>li:nth-child(1){pointer-events:none}
+  .ch-on .ch-ow[data-steps="2"] .st-card-media{aspect-ratio:5/4;max-height:calc(100svh - var(--st-head) - 190px)}
+}
+@media(min-width:1001px){
+  /* Two columns: the heading stays beside the pinned card instead of scrolling away from it. */
+  .ch-on .ch-ow-wrap{align-items:start}
+  .ch-on .ch-ow-wrap .st-feature-copy{position:sticky;top:calc(var(--st-head) + 24px)}
 }
 
 /* ---------- SHOP mega-menu (desktop; components/Header.tsx MegaMenu) — compact: link columns + one row of tiles ---------- */

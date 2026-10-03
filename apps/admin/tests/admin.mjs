@@ -102,7 +102,11 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Draft orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Settings|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Draft orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Configuration|System', nav);
+  // Client change request (2026-10-03): no quick-action buttons and no Recent activity on the dashboard; the audit log itself stays.
+  ok('dashboard: no "New product" / "Open reports" quick actions, no Recent activity', !(await ev('!!document.querySelector(\'.page-head a[href="/products/new"], .page-head a[href="/reports"]\')'))
+    && !/Recent activity/i.test(await text('main')) && !(await ev('!!document.querySelector("#act-h")')));
+  ok('dashboard: Products, Reports and Audit are still in the menu', /\|Products\|/.test(nav) && /\|Reports\|/.test(nav) && /\|Audit\|/.test(nav));
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -186,6 +190,24 @@ try {
   await until(atDetail('locations'), 15000);
   const branchId = (await ev('location.pathname')).split('/').pop();
   ok('third pass: a retail location is added and opens with no stock', /No stock at this location/.test(await text('main')));
+  // Client change request (2026-10-03): an explicit Edit on the list and on the location; editing changes the same row.
+  ok('locations: the location page has an "Edit location" button to its edit form', await ev(`document.querySelector('.page-head [data-edit-location]')?.getAttribute('href') === '#edit-location' && !!document.querySelector('#edit-location #edit-location-form')`));
+  await visit('/locations', '!!document.querySelector("[data-locations-table]")');
+  ok('locations: every row has an Edit link to that location', await ev(`[...document.querySelectorAll('[data-locations-table] tbody tr')].every(tr => tr.querySelector('[data-edit-location]')?.getAttribute('href') === tr.querySelector('a.row-link').getAttribute('href') + '#edit-location')`));
+  const locCount = await ev(`document.querySelectorAll('[data-locations-table] tbody tr').length`);
+  await visit(`/locations/${branchId}`, '!!document.querySelector("#edit-location-form")');
+  await fill('#edit-location-form input[name=name]', 'Retail Branch Edited');
+  await submit('#edit-location-form');
+  await until(`/Location saved/.test(document.querySelector('#edit-location-form')?.textContent || '')`, 15000);
+  await visit('/locations', '!!document.querySelector("[data-locations-table]")');
+  ok('locations: Edit renames the same location (same id, no duplicate row)', await ev(`document.querySelectorAll('[data-locations-table] tbody tr').length`) === locCount
+    && await ev(`document.querySelector('[data-location="RB-T"] a.row-link').getAttribute('href')`) === `/locations/${branchId}`
+    && /Retail Branch Edited/.test(await text('[data-location="RB-T"]')) && (await q(`select count(*)::int n from locations where code = 'RB-T' and name = 'Retail Branch Edited' and id = '${branchId}'`))[0]?.n === 1
+    && (await q(`select count(*)::int n from audit_logs where action = 'location.update' and entity_id = '${branchId}'`))[0]?.n === 1, await text('[data-location="RB-T"]'));
+  await visit(`/locations/${branchId}`, '!!document.querySelector("#edit-location-form")');
+  await fill('#edit-location-form input[name=code]', 'CHN-WH');
+  await submit('#edit-location-form');
+  ok('locations: a code another location already has is refused', await until(`/already has this code or name/.test(document.querySelector('#edit-location-form')?.textContent || '')`, 15000));
   await visit(`/transfers/new?from=${onlineId}&to=${branchId}`, '!!document.querySelector("#new-transfer-form")');
   const sku = await ev(`document.querySelector('[data-transfer-pick] tbody tr').dataset.sku`);
   const online = async () => (await q(`select stock_qty::int n from product_variants where sku = '${sku}'`))[0].n, start = await online();
@@ -201,7 +223,7 @@ try {
     && (await q(`select status from stock_transfers order by created_at desc limit 1`))[0].status === 'cancelled' && (await online()) === start;
   ok('third pass: a transfer is sent (stock leaves), then cancelled (stock goes back)', sent && back);
   await visit('/locations/report', '!!document.querySelector("[data-by-location]")');
-  ok('third pass: the location report shows every location and both channels', /Retail Branch Test/.test(await text('[data-by-location]')) && (await exists('[data-channel="retail"]')));
+  ok('third pass: the location report shows every location and both channels', /Retail Branch Edited/.test(await text('[data-by-location]')) && (await exists('[data-channel="retail"]')));
   // ---------- M16: reports and CSV export ----------
   await visit('/reports', '!!document.querySelector("[data-report-tabs]")');
   ok('M16 reports: sales tab with totals (no orders yet → empty state)', (await exists('[data-report-totals]')) && /No paid orders/.test(await text('main')));
@@ -252,7 +274,7 @@ try {
   }
   await visit('/dashboard', '!!document.querySelector("[data-kpis]")');
   await until('!!document.querySelector("[data-kpis]") && !document.querySelector("[data-loading]")', 15000);   // a slow render must not read as a failure
-  ok('support without audit.read sees no activity feed', /Needs the audit\.read permission/.test(await text('main')));
+  ok('support: the dashboard has no activity feed', !/Recent activity|audit\.read/i.test(await text('main')));
 
   // ---------- sign out / sign in ----------
   await ev(`document.querySelector('[data-user-menu]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse'})),true`);   // account menu

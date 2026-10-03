@@ -45,11 +45,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHead title={`${greeting()}, ${firstName}`} eyebrow={`Here is how KITSYUU is doing · live figures, updated ${formatDateTime(d.generatedAt)}`}>
-        <span className="range-chip"><Icon name="reports" size={14} />Last {t.days} days</span>
-        {can(actor, 'reports.read') && <Link className="btn ghost" href="/reports">Open reports</Link>}
-        {can(actor, 'products.write') && <Link className="btn" href="/products/new"><Icon name="plus" size={15} />New product</Link>}
-      </PageHead>
+      <PageHead title={`${greeting()}, ${firstName}`} eyebrow={`Here is how KITSYUU is doing · live figures, updated ${formatDateTime(d.generatedAt)}`} />
 
       <dl className="kpis hero" data-kpis>
         <div className="kpi" data-kpi="Revenue (paid orders)">
@@ -178,16 +174,6 @@ export default async function DashboardPage() {
             </dl>
           </section>
 
-          <section className="card" aria-labelledby="act-h">
-            <div className="card-head"><h2 id="act-h" className="section-title">Recent activity</h2>
-              {d.recentAudit && d.recentAudit.length > 0 && <Link className="btn quiet sm" href="/audit">All</Link>}</div>
-            {!d.recentAudit ? <p className="note">Needs the audit.read permission.</p>
-              : d.recentAudit.length === 0 ? <Empty title="No activity yet" compact>Admin actions are recorded here as they happen.</Empty>
-              : <ul className="activity">{d.recentAudit.map(a => (
-                  <li key={a.id}><span className="activity-dot" aria-hidden="true" /><span className="mono activity-action">{a.action}</span>
-                    <span className="activity-meta">{a.staff_email ?? a.actor_type} · {formatDateTime(a.occurred_at)}</span></li>))}
-                </ul>}
-          </section>
         </aside>
       </div>
     </>

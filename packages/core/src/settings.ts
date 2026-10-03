@@ -204,7 +204,7 @@ export async function updateSetting(db: Db, actor: StaffPrincipal, input: Settin
 }
 
 export type CompanyDetails = { legalName: string | null; address: string | null; gstin: string | null; supportEmail: string | null; phone: string | null };
-/** Company details entered under Settings → Company (M10). Internal read for documents such as packing slips; the caller
+/** Company details entered under Configuration → Company (M10). Internal read for documents such as packing slips; the caller
     has already checked the permission for the document itself. Missing values are null (never invented). */
 export async function companyDetails(q: Pick<Db, 'selectFrom'>): Promise<CompanyDetails> {
   const rows = await q.selectFrom('settings').select(['key', 'value']).where('key', 'like', 'company.%').execute();

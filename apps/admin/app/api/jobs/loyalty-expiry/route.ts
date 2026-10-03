@@ -4,7 +4,7 @@ import { expireLoyaltyPoints } from '@kitsyuu/core';
 import { db } from '@/lib/server';
 
 /* Client change request (second pass), scheduled job: expires unused loyalty points whose expiry date has passed (only
-   when Settings → Loyalty → "Points expire after" is set; points added without an expiry never expire).
+   when Configuration → Loyalty → "Points expire after" is set; points added without an expiry never expire).
    Called by a scheduler with "Authorization: Bearer <CRON_SECRET or JOBS_SECRET>" (GET or POST). Answers 404 unless a
    secret of 32+ characters is configured and matches. */
 export const dynamic = 'force-dynamic';

@@ -1,4 +1,4 @@
-/* ERP module 2: shipping for staff — delivery zones and rates (used at checkout when Settings → Delivery charge is "By
+/* ERP module 2: shipping for staff — delivery zones and rates (used at checkout when Configuration → Delivery charge is "By
    delivery zone"), couriers, and the delivery status of shipments.
    One status for the order: shipped and delivered still move only through the order workflow (orders.ts), which also
    writes the shipment. What this module adds after dispatch: in transit, failed delivery (with the reason) and a new
@@ -241,7 +241,7 @@ export async function shippingReport(db: Db, actor: StaffPrincipal, range: { fro
 }
 
 
-/** Customer email when an order is delivered (only when Settings → "Email when an order is delivered" is on). */
+/** Customer email when an order is delivered (only when Configuration → "Email when an order is delivered" is on). */
 export async function notifyOrderDelivered(db: Db, mailer: Mailer, orderId: string, opts: { storeUrl?: string | null } = {}) {
   return sendCustomerEmail(db, mailer, 'order.delivered', async () => {
     const o = await db.selectFrom('orders').select(['id', 'order_number', 'status', 'contact']).where('id', '=', orderId).executeTakeFirst();

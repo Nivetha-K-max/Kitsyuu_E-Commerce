@@ -48,7 +48,7 @@ export default async function CartPage({ params }: { params: Promise<{ id: strin
           {abandoned && c.email && (
             <ActionForm action={sendReminderAction} submitLabel="Send reminder email" variant="ghost" id="cart-reminder-form" label="Send reminder" confirmText={`Email ${c.email} a reminder about this cart?`}>
               <Hidden name="cartId" value={c.id} />
-              <p className="note">Lists the items still on sale and links to the cart. Only sent when Settings → Customer emails → “Abandoned-cart reminder emails” is on.</p>
+              <p className="note">Lists the items still on sale and links to the cart. Only sent when Configuration → Customer emails → “Abandoned-cart reminder emails” is on.</p>
             </ActionForm>
           )}
         </div>}

@@ -43,7 +43,7 @@ function RateFields({ zoneId, r, locs }: { zoneId: string; r?: Rate; locs: { id:
         <Field name="maxOrder" label="Only for orders below (₹)" defaultValue={rupeesField(r?.max_order_paise)} />
         <Field name="estMin" label="Delivery days from" defaultValue={r?.est_days_min?.toString() ?? ''} />
         <Field name="estMax" label="Delivery days to" defaultValue={r?.est_days_max?.toString() ?? ''} />
-        <Field name="codFee" label="COD fee (₹)" defaultValue={rupeesField(r?.cod_fee_paise)} hint="Charged when the customer pays cash on delivery (Settings → Payments → Cash on delivery). Leave empty for no fee." />
+        <Field name="codFee" label="COD fee (₹)" defaultValue={rupeesField(r?.cod_fee_paise)} hint="Charged when the customer pays cash on delivery (Configuration → Payments → Cash on delivery). Leave empty for no fee." />
       </div>
       {/* 2026-10-01: store pickup — the customer collects the order from this location (no delivery). */}
       {locs.length > 0 && <Select name="pickupLocationId" label="Store pickup at (optional)" defaultValue={r?.pickup_location_id ?? ''}
@@ -54,7 +54,7 @@ function RateFields({ zoneId, r, locs }: { zoneId: string; r?: Rate; locs: { id:
   );
 }
 
-/* ERP module 2: delivery charges by zone. They are used at checkout only when Settings → Shipping → "Delivery charge" is
+/* ERP module 2: delivery charges by zone. They are used at checkout only when Configuration → Shipping → "Delivery charge" is
    "By delivery zone"; an address in no zone cannot check out (the customer is told). */
 export default async function ZonesPage() {
   const actor = await requireActor();
@@ -62,7 +62,7 @@ export default async function ZonesPage() {
   const { method, zones } = await listShippingZones(db(), actor);
   const locs = await db().selectFrom('locations').select(['id', 'name']).where('is_active', '=', true).orderBy('sort_order').orderBy('name').execute();
   const manage = can(actor, 'shipping.manage');
-  const methodText = method === 'zones' ? 'Checkout uses these zone rates.' : method === 'flat' ? 'Checkout uses the flat rate from Settings; these rates are not used.' : 'Delivery charges are not set up (Settings → Shipping); these rates are not used.';
+  const methodText = method === 'zones' ? 'Checkout uses these zone rates.' : method === 'flat' ? 'Checkout uses the flat rate from Configuration; these rates are not used.' : 'Delivery charges are not set up (Configuration → Shipping); these rates are not used.';
   return (
     <>
       <PageHead title="Shipping" eyebrow={methodText} />

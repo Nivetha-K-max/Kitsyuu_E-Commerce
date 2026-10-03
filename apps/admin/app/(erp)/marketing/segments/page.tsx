@@ -31,7 +31,7 @@ function SegmentFields({ s }: { s?: Segment }) {
         <Field name="lastOrderWithinDays" label="Last order within (days)" defaultValue={n(r?.lastOrderWithinDays)} />
         <Field name="lastOrderOlderThanDays" label="No order for (days)" defaultValue={n(r?.lastOrderOlderThanDays)} />
       </div>
-      <Checkbox name="hasAbandonedCart" label="Has an abandoned cart" defaultChecked={r?.hasAbandonedCart} hint="Uses Settings → Carts → Abandoned cart after." />
+      <Checkbox name="hasAbandonedCart" label="Has an abandoned cart" defaultChecked={r?.hasAbandonedCart} hint="Uses Configuration → Carts → Abandoned cart after." />
     </>
   );
 }

@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Packing slip' };
 type Params = Promise<{ id: string }>;
 
 /* M10: a printable packing slip (orders.read). It goes into the parcel, so it shows no prices. Company details come from
-   Settings → Company; anything not entered there is simply left out (never invented). */
+   Configuration → Company; anything not entered there is simply left out (never invented). */
 export default async function PackingSlip({ params }: { params: Params }) {
   const actor = await requireActor();
   if (!can(actor, 'orders.read')) return <><PageHead section="Commerce" title="Packing slip" /><Forbidden permission="orders.read" /></>;
@@ -32,7 +32,7 @@ export default async function PackingSlip({ params }: { params: Params }) {
         <PageHead section="Commerce" title={`Packing slip · ${o.orderNumber}`} crumbs={[{ href: '/orders', label: 'Orders' }, { href: `/orders/${o.id}`, label: o.orderNumber }]}>
           <PrintButton />
         </PageHead>
-        {!company.legalName && <p className="msg" data-company-missing>Company details are not entered yet. Add them under <Link href="/settings">Settings → Company</Link> to print them on slips.</p>}
+        {!company.legalName && <p className="msg" data-company-missing>Company details are not entered yet. Add them under <Link href="/settings">Configuration → Company</Link> to print them on slips.</p>}
       </div>
       <article className="slip card" data-packing-slip>
         <header className="slip-head">

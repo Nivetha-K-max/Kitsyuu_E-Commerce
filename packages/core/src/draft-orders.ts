@@ -9,7 +9,7 @@
    - online, cash on delivery: only where the store's COD rules allow it (as at checkout); the order goes to fulfilment;
    - offline at a branch (channel retail): paid in the store (cash / card / UPI) and handed over; the stock is taken from
      that branch (sell_order_at_location), not from the online stock.
-   Staff discount: a % of the items, never above the maximum set in Settings → Discounts ("Maximum staff discount"; with no
+   Staff discount: a % of the items, never above the maximum set in Configuration → Discounts ("Maximum staff discount"; with no
    value staff cannot give discounts), and never below a product's minimum price (Products → Minimum price). It is checked
    when it is entered and again when the draft is confirmed, and kept on the order (amount, %, reason, who gave it). */
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
@@ -46,7 +46,7 @@ export async function staffDiscountMaxBp(q: Queryable): Promise<number | null> {
 /** Checks a staff discount of `bp` on these lines; returns its amount or throws the reason it is refused. */
 export async function checkStaffDiscount(q: Queryable, lines: Pick<PricedLine, 'productId' | 'name' | 'size' | 'colourLabel' | 'unitPaise' | 'lineTotalPaise'>[], bp: number) {
   const max = await staffDiscountMaxBp(q);
-  if (max === null) throw new DomainError('invalid', 'Staff discounts are not set up: a maximum staff discount must be set in Settings → Discounts first.');
+  if (max === null) throw new DomainError('invalid', 'Staff discounts are not set up: a maximum staff discount must be set in Configuration → Discounts first.');
   if (!Number.isInteger(bp) || bp < 1) throw new DomainError('invalid', 'Enter a discount above 0%.');
   if (bp > max) throw new DomainError('invalid', `${pct(bp)} is above the maximum staff discount of ${pct(max)}.`);
   const ids = [...new Set(lines.map(l => l.productId))];
