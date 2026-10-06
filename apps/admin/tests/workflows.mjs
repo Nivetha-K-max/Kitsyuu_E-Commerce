@@ -182,7 +182,9 @@ try {
   // ---------- sales staff: draft for a customer (online) ----------
   ok('sales staff sign in', await signIn('sales', 'WF Sales'));
   await visit('/drafts', '!!document.querySelector("#new-draft-form")');
-  ok('Draft orders in the menu for sales staff', /Draft orders/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
+  // 2026-10-06: draft orders are the Draft view of Orders (the old /drafts address redirects there); no separate menu item.
+  ok('draft orders open inside Orders → Draft; no separate menu item', /view=draft/.test(await ev('location.search')) && (await ev('location.pathname')) === '/orders'
+    && (await exists('[data-order-view=draft][aria-current=page]')) && !/Draft orders/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
   await fill('#new-draft-form select[name=channel]', 'online'); await fill('#new-draft-form input[name=customerEmail]', 'asha.fixture@test.local');
   await fill('#new-draft-form textarea[name=note]', 'Customer called: hoodie and jeans');
   await submit('#new-draft-form');

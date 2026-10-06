@@ -5,7 +5,11 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useRef, useTransition, type FormEvent, type FormHTMLAttributes, type ReactNode } from 'react';
 
-export default function FilterForm({ children, ...rest }: { children: ReactNode } & Omit<FormHTMLAttributes<HTMLFormElement>, 'onSubmit' | 'onChange'>) {
+export default function FilterForm({ children, debounce = 350, ...rest }: {
+  children: ReactNode;
+  /** Pause after the last keystroke before a typed search is applied (ms). */
+  debounce?: number;
+} & Omit<FormHTMLAttributes<HTMLFormElement>, 'onSubmit' | 'onChange'>) {
   const router = useRouter();
   const path = usePathname();
   const [pending, start] = useTransition();
@@ -20,7 +24,7 @@ export default function FilterForm({ children, ...rest }: { children: ReactNode 
     const el = e.target as HTMLInputElement;
     if (timer.current) clearTimeout(timer.current);
     const typing = el.tagName === 'INPUT' && /^(text|search|email|tel|)$/.test(el.type);
-    if (typing) timer.current = setTimeout(() => apply(form), 350); else apply(form);
+    if (typing) timer.current = setTimeout(() => apply(form), debounce); else apply(form);
   };
   return (
     <form {...rest} method="get" className={`filter-bar${rest.className ? ` ${rest.className}` : ''}`} data-pending={pending || undefined}

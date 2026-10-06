@@ -6,7 +6,8 @@ import { cancelDraftOrder, confirmDraftOrder, createDraftOrder, notifyPaymentReq
 import { handle } from '@/lib/actions';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
 
-const refresh = (id?: string) => { revalidatePath('/drafts'); if (id) revalidatePath(`/drafts/${id}`); revalidatePath('/customers', 'layout'); };
+// The draft list is the Draft view of the Orders screen.
+const refresh = (id?: string) => { revalidatePath('/orders'); if (id) revalidatePath(`/drafts/${id}`); revalidatePath('/customers', 'layout'); };
 /** Delivery charges come from Configuration → Shipping, exactly as at checkout. */
 const config = () => ({ shipping: settingsShipping(() => db()), discounts: [] });
 

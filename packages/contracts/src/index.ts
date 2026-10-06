@@ -199,9 +199,13 @@ export const orderListQuery = z.object({
   from: isoDate.optional().or(z.literal('').transform(() => undefined)),
   to: isoDate.optional().or(z.literal('').transform(() => undefined)),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
-  /** Client change request: Active (confirmed, not yet delivered), Draft (placed, not paid yet, newer than the abandoned-
-      checkout delay), Abandoned (still unpaid after that delay; 24 h unless set in Configuration). All = no view filter. */
+  /** Client change request: Active (orders in progress: placed and still inside the abandoned-checkout delay, confirmed,
+      being packed or shipped), Abandoned (still unpaid after that delay; 24 h unless set in Configuration). All = no view
+      filter. 'draft' selects placed-but-unpaid orders newer than the delay; the Orders screen shows staff draft orders
+      (draft_orders) under Draft instead, so the screen itself no longer asks for it. */
   view: z.enum(['all', 'active', 'draft', 'abandoned']).default('all'),
+  /** With status 'processing': packing still to finish ('open') or the parcel is packed ('packed'). */
+  packing: z.enum(['open', 'packed']).optional().or(z.literal('').transform(() => undefined)),
 });
 export const updateOrderStatusInput = z.object({
   orderId: uuid,
@@ -501,6 +505,18 @@ export const paymentEventListQuery = z.object({
   outcome: z.string().trim().regex(/^(all|[a-z_]{1,40})$/).default('all'),
   page,
 });
+/** Payments list (2026-10-06): one row per order, how its money stands. `state` is read from the order's payment status
+    and, for cash on delivery, its COD status; nothing new is stored. */
+export const ORDER_PAYMENT_STATES = ['paid', 'pending', 'unpaid', 'failed', 'refunded', 'cod_to_collect', 'cod_collected', 'cod_refused'] as const;
+export const orderPaymentListQuery = z.object({
+  q: searchText,
+  state: z.enum(['all', ...ORDER_PAYMENT_STATES]).default('all'),
+  method: z.enum(['all', 'online', 'cod', 'store']).default('all'),
+  from: isoDate.optional().or(z.literal('').transform(() => undefined)),
+  to: isoDate.optional().or(z.literal('').transform(() => undefined)),
+  page,
+});
+export type OrderPaymentListQuery = z.infer<typeof orderPaymentListQuery>;
 /** Records that money received for an already-cancelled order must be refunded manually (payment exception only). */
 export const recordManualRefundInput = z.object({ paymentId: uuid, note: requiredNote('audit log') });
 

@@ -6,7 +6,7 @@ import { Icon } from './icons';
 import { GO_KEYS, useSidebarCollapsed } from './shortcuts';
 
 export const NAV_ICON: Record<string, string> = {
-  '/dashboard': 'dashboard', '/reports': 'reports', '/products': 'products', '/categories': 'categories', '/collections': 'collections', '/attributes': 'attributes', '/inventory': 'inventory', '/stock-counts': 'counts', '/stock-value': 'value', '/locations': 'locations', '/transfers': 'transfers', '/drafts': 'drafts', '/pos': 'pos',
+  '/dashboard': 'dashboard', '/reports': 'reports', '/products': 'products', '/categories': 'categories', '/collections': 'collections', '/attributes': 'attributes', '/inventory': 'inventory', '/stock-counts': 'counts', '/stock-value': 'value', '/locations': 'locations', '/transfers': 'transfers', '/pos': 'pos',
   '/orders': 'orders', '/customers': 'customers', '/payments': 'payments', '/reviews': 'reviews', '/content': 'content', '/vendors': 'vendors', '/materials': 'materials', '/purchase-orders': 'purchase', '/production': 'production', '/staff': 'staff', '/roles': 'roles', '/audit': 'audit',
   '/settings': 'settings', '/system': 'system',
   '/notifications': 'notifications', '/pricing': 'pricing', '/shipping': 'shipping', '/returns': 'returns', '/carts': 'carts', '/marketing': 'marketing',
@@ -29,7 +29,8 @@ export default function NavLinks({ items }: { items: { href: string; label: stri
         <div className="nav-section" key={g.name}>
           {g.name !== 'Overview' && <div className="nav-group" aria-hidden="true">{g.name}</div>}
           {g.items.map(item => {
-            const current = path === item.href || path.startsWith(item.href + '/');
+            // a single draft order (/drafts/<id>) is part of Orders
+            const current = path === item.href || path.startsWith(item.href + '/') || (item.href === '/orders' && path.startsWith('/drafts/'));
             const key = GO_KEYS[item.href];
             return (
               <Tooltip.Root key={item.href} open={collapsed ? undefined : false}>

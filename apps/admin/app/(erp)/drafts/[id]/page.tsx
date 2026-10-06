@@ -32,7 +32,7 @@ const addressText = (a: Partial<DraftAddress> | null) => a ? [a.name, a.phone, a
 
 export default async function DraftPage({ params, searchParams }: { params: Params; searchParams: SP }) {
   const actor = await requireActor();
-  const crumbs = [{ href: '/drafts', label: 'Draft orders' }];
+  const crumbs = [{ href: '/orders?view=draft', label: '← Back to draft orders' }];
   if (!can(actor, 'orders.read')) return <><PageHead title="Draft order" crumbs={crumbs} /><Forbidden permission="orders.read" /></>;
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!can(actor, 'orders.read')) return new Response('Not permitted.', { status: 403 });
   const sp = new URL(request.url).searchParams;
   const parsed = orderListQuery.safeParse({ q: sp.get('q') ?? undefined, status: sp.get('status') ?? undefined, payment: sp.get('payment') ?? undefined,
-    from: sp.get('from') ?? undefined, to: sp.get('to') ?? undefined });
+    from: sp.get('from') ?? undefined, to: sp.get('to') ?? undefined, packing: sp.get('packing') ?? undefined, view: sp.get('view') ?? undefined });
   if (!parsed.success) return new Response('Invalid filters.', { status: 400 });
   const { page: _page, ...filters } = parsed.data;
   const r = await exportOrders(db(), actor, filters, await requestContext());

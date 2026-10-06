@@ -111,7 +111,7 @@ try {
   ok('transition: success message', (await message()) === 'KTS-TEST-0002: Paid → Processing.', await message());
   ok('transition: saved', (await statusOf('KTS-TEST-0002')) === 'processing');
   ok('transition: page shows the new status and next step', await until(`document.querySelector('[data-order-status]')?.dataset.orderStatus==='processing'`) && await until(`[...document.querySelectorAll('${F} [name=toStatus] option')].map(o=>o.value).includes('shipped')`));
-  ok('history shows who made the change and the note', /Paid → Processing[\s\S]*ord\.sales@test\.local[\s\S]*Packing today/.test(await ev(`document.querySelector('[data-history]').innerText`)));
+  ok('history shows who made the change and the note', /Confirmed → Being packed[\s\S]*ord\.sales@test\.local[\s\S]*Packing today/.test(await ev(`document.querySelector('[data-history]').innerText`)));
   const [au] = await q(`select a.before_data, a.after_data, s.email from audit_logs a join staff_users s on s.id = a.staff_id where a.action = 'order.status_update' and a.entity_id = $1 order by a.id desc limit 1`, [o2]);
   ok('audit record: staff, before and after', au?.email === 'ord.sales@test.local' && au.before_data.status === 'paid' && au.after_data.status === 'processing');
 
@@ -181,7 +181,15 @@ try {
   // ================= accountant: billing yes, status no =================
   ok('accountant signs in', await signIn('accountant', 'Accounts E2E'));
   await visit(`/orders/${o2}`, '!!document.querySelector("[data-section=billing]")');
-  ok('accountant sees the captured payment', /CAPTURED/i.test(await ev(`document.querySelector('[data-payments-table]')?.innerText ?? ''`)));
+  // 2026-10-06: the order page shows a payment summary; the attempts are on the payment's own page, which links back.
+  ok('accountant sees the payment summary (paid) with a link to the payment', /PAID/i.test(await ev(`document.querySelector('[data-payment-summary]')?.innerText ?? ''`)) && await exists(`[data-payment-summary] a[data-link=view-payment][href="/payments/${o2}"]`));
+  await visit(`/payments/${o2}`, '!!document.querySelector("[data-payment-screen]")');
+  ok('payment page: the captured attempt, and a link back to the order', /CAPTURED/i.test(await ev(`document.querySelector('[data-attempts-table]')?.innerText ?? ''`)) && await exists(`[data-section=order] a[href="/orders/${o2}"]`));
+  await visit('/payments', '!!document.querySelector("[data-order-payments]")');
+  ok('payments list: one line per order, filter by status', (await ev(`document.querySelectorAll('[data-payment-of]').length`)) === 8);
+  await visit('/payments?state=failed', '!!document.querySelector("[data-payments-tabs]")');
+  ok('payments list: failed only', (await ev(`[...document.querySelectorAll('[data-payment-of]')].map(r=>r.dataset.paymentOf).join()`)) === 'KTS-TEST-0007');
+  await visit(`/orders/${o2}`, '!!document.querySelector("[data-section=billing]")');
   ok('accountant sees the issued invoice number', /KTS\/26-27\/\d{5}/.test(await ev(`document.querySelector('[data-invoices]')?.innerText ?? ''`)));
   ok('accountant cannot change status (no form, read-only note)', !(await exists(F)) && (await exists('[data-readonly=status]')));
 

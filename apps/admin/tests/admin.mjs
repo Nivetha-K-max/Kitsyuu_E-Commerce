@@ -102,7 +102,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Draft orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Configuration|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Configuration|System', nav);
   // Client change request (2026-10-03): no quick-action buttons and no Recent activity on the dashboard; the audit log itself stays.
   ok('dashboard: no "New product" / "Open reports" quick actions, no Recent activity', !(await ev('!!document.querySelector(\'.page-head a[href="/products/new"], .page-head a[href="/reports"]\')'))
     && !/Recent activity/i.test(await text('main')) && !(await ev('!!document.querySelector("#act-h")')));
@@ -267,7 +267,7 @@ try {
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit;
   // ERP modules add read access to shipping, returns, carts and support (and the notification centre everyone has).
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Locations|Transfers|Orders|Draft orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Locations|Transfers|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

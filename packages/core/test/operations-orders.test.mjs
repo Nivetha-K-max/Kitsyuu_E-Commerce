@@ -143,7 +143,8 @@ test('orders: Active / Draft / Abandoned views (delay from Settings); invoice fr
   const view = async v => (await listOrders(admin, root, orderListQuery.parse({view: v}))).rows.map(r => r.order_number);
   assert.deepEqual(await view('draft'), [draft.order_number], 'placed, unpaid, newer than 24 h');
   assert.deepEqual(await view('abandoned'), [old.order_number], 'unpaid after the 24 h default');
-  assert.ok((await view('active')).includes(paid.order_number) && !(await view('active')).includes(draft.order_number));
+  // 2026-10-06: Active = orders in progress: paid ones and those placed and still inside the delay; never the abandoned ones.
+  assert.deepEqual((await view('active')).sort(), [paid.order_number, draft.order_number].sort());
   assert.equal((await view('all')).length, 3);
   await set(root, 'checkout.abandoned_after_hours', '48');
   assert.deepEqual((await view('draft')).sort(), [draft.order_number, old.order_number].sort(), 'the delay is the Settings value');

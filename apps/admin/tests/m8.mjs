@@ -164,7 +164,7 @@ try {
   const o6 = await id('KTS-TEST-0006');
   await q(`insert into payments (order_id, provider, provider_payment_id, amount_paise, status, captured_at) values ($1, 'razorpay', 'pay_E2ELATE', 49900, 'captured', now())`, [o6]);
   await q(`insert into payment_events (id, provider, type, payload, order_id, outcome, processed_at) values ('razorpay:evt_e2e', 'razorpay', 'payment.captured', '{"secret":"hidden-e2e"}', $1, 'applied', now())`, [o6]);
-  await visit('/payments', '!!document.querySelector("[data-payments-tabs]")');
+  await visit('/payments?view=exceptions', '!!document.querySelector("[data-payments-tabs]")');
   ok('payments: exceptions queue lists the payment received after cancellation', await exists('[data-exception="captured_after_cancel"][data-exception-order="KTS-TEST-0006"]'));
   const R = '[data-exception-order="KTS-TEST-0006"] form';
   await autoConfirm();

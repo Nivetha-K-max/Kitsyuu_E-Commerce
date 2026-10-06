@@ -24,7 +24,10 @@ function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query
   let r = q as SelectQueryBuilder<any, any, any>;
   // Views (client change request). Draft / Abandoned split the unpaid orders by the abandoned-checkout delay (Settings).
   const view = query.view ?? 'all';
-  if (view === 'active') r = r.where('o.status', 'in', ['paid', 'processing', 'shipped']);
+  // Active = every order in progress: confirmed, being packed or shipped, and orders placed but not paid yet that are
+  // still inside the abandoned-checkout delay (older unpaid ones are the Abandoned view).
+  if (view === 'active') r = r.where(eb => eb.or([eb('o.status', 'in', ['paid', 'processing', 'shipped']),
+    eb.and([eb('o.status', 'in', ['pending_payment', 'payment_failed']), eb('o.created_at', '>', sql<Date>`now() - make_interval(hours => ${abandonHours})`)])]));
   if (view === 'draft' || view === 'abandoned') {
     r = r.where('o.status', 'in', ['pending_payment', 'payment_failed'])
       .where('o.created_at', view === 'draft' ? '>' : '<=', sql<Date>`now() - make_interval(hours => ${abandonHours})`);
@@ -43,7 +46,14 @@ function filterOrders<QB extends SelectQueryBuilder<any, any, any>>(q: QB, query
   }
   if (query.status === 'open') r = r.where('o.status', 'in', OPEN_STATUSES);
   else if (query.status !== 'all') r = r.where('o.status', '=', query.status);
+  // Packing progress of an order being processed (the shipment's packing state, as the list shows it).
+  if (query.packing) {
+    const packed = sql<boolean>`coalesce((select sh.packing_state from public.shipments sh where sh.order_id = o.id order by sh.created_at desc limit 1), 'not_started') = 'packed'`;
+    r = r.where('o.status', '=', 'processing').where(query.packing === 'packed' ? packed : sql<boolean>`not (${packed})`);
+  }
   if (query.payment === 'none') r = r.where('o.payment_status', 'is', null);
+  // "Refunded" lists every order with money refunded, in full or in part (a part refund has its own exact filter too).
+  else if (query.payment === 'refunded') r = r.where('o.payment_status', 'in', ['refunded', 'partially_refunded']);
   else if (query.payment !== 'all') r = r.where('o.payment_status', '=', query.payment);
   // Dates are business days in India (Asia/Kolkata).
   if (query.from) r = r.where('o.created_at', '>=', sql<Date>`(${query.from}::date)::timestamp at time zone 'Asia/Kolkata'`);
@@ -55,15 +65,23 @@ export async function listOrders(db: Db, actor: StaffPrincipal, query: OrderList
   requirePermission(actor, 'orders.read');
   const hours = await abandonedCheckoutHours(db);
   const q = filterOrders(db.selectFrom('orders as o')
-    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at', 'o.updated_at', 'o.payment_method', 'o.channel', 'o.pos_number',
+    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.paid_at', 'o.updated_at', 'o.payment_method', 'o.channel', 'o.pos_number', 'o.cod_status',
       sql<string | null>`(select l.name from public.locations l where l.id = o.location_id)`.as('branch'),
+      // Orders list (2026-10-05), read only: what is in the order and how far packing has got, so the list can show
+      // the fulfilment stage and the next step without opening each order.
+      sql<string | null>`(select sh.packing_state from public.shipments sh where sh.order_id = o.id order by sh.created_at desc limit 1)`.as('packing_state'),
+      sql<string | null>`(select string_agg(x.label, ', ') from (select i.name || case when i.qty > 1 then ' ×' || i.qty else '' end as label from public.order_items i where i.order_id = o.id order by i.sku limit 3) x)`.as('item_names'),
       sql<string | null>`(select r.status from public.checkout_reminders r where r.order_id = o.id)`.as('reminder'),
       sql<string | null>`o.contact->>'name'`.as('contact_name'), sql<string | null>`o.contact->>'email'`.as('contact_email'),
       sql<number>`(select coalesce(sum(i.qty), 0)::int from public.order_items i where i.order_id = o.id)`.as('units'),
       sql<number>`(select count(*)::int from public.order_items i where i.order_id = o.id)`.as('lines')]), query, hours);
-  const rows = await q.orderBy('o.created_at', 'desc').orderBy('o.id', 'desc')
-    .limit(ORDER_PAGE_SIZE + 1).offset((query.page - 1) * ORDER_PAGE_SIZE).execute();
-  return { rows: rows.slice(0, ORDER_PAGE_SIZE), hasNext: rows.length > ORDER_PAGE_SIZE, abandonHours: hours };
+  const count = (qb: SelectQueryBuilder<any, any, any>) => qb.select(sql<number>`count(*)::int`.as('n')).executeTakeFirst().then(r => Number((r as { n?: number } | undefined)?.n ?? 0));
+  const [rows, matching, total] = await Promise.all([
+    q.orderBy('o.created_at', 'desc').orderBy('o.id', 'desc').limit(ORDER_PAGE_SIZE + 1).offset((query.page - 1) * ORDER_PAGE_SIZE).execute(),
+    count(filterOrders(db.selectFrom('orders as o'), query, hours)),     // orders matching the filters (all pages)
+    count(db.selectFrom('orders as o')),                                 // every order
+  ]);
+  return { rows: rows.slice(0, ORDER_PAGE_SIZE), hasNext: rows.length > ORDER_PAGE_SIZE, abandonHours: hours, matching, total };
 }
 
 export const ORDER_EXPORT_MAX_ROWS = 5000;
@@ -117,27 +135,30 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
     linesMatchSubtotal: lineSum === o.subtotal_paise,
     totalCoversSubtotal: o.total_paise >= 0 && o.subtotal_paise >= 0,
   };
-  const customer = can(actor, 'customers.read')
-    ? await db.selectFrom('customers').select(['id', 'email', 'status', 'created_at'])
-        .where('id', '=', o.customer_id ?? o.user_id).executeTakeFirst() ?? null
-    : undefined;                                                   // undefined = not permitted; null = no account row
-  const billing = can(actor, 'billing.read') ? {
-    payments: await db.selectFrom('payments').select(['id', 'provider', 'provider_payment_id', 'amount_paise', 'currency', 'status', 'method', 'failure_reason', 'captured_at', 'created_at'])
-      .where('order_id', '=', orderId).orderBy('created_at').execute(),
-    refunds: await db.selectFrom('refunds').select(['id', 'amount_paise', 'reason', 'status', 'processed_at', 'created_at']).where('order_id', '=', orderId).orderBy('created_at').execute(),
-    invoices: await db.selectFrom('invoices').select(['id', 'invoice_number', 'status', 'financial_year', 'issued_at', 'total_paise', 'tax_paise', 'prices_include_tax'])
-      .where('order_id', '=', orderId).orderBy('issued_at').execute(),
-  } : undefined;
-  const stock = can(actor, 'inventory.read')
-    ? await db.selectFrom('inventory_movements as m').innerJoin('product_variants as v', 'v.id', 'm.variant_id').leftJoin('staff_users as s', 's.id', 'm.staff_id')
-        .select(['m.created_at', 'v.sku', 'm.delta', 'm.reason', 'm.balance_after', 'm.note', 's.email as staff_email'])
-        .where('m.order_id', '=', orderId).orderBy('m.created_at').execute()
-    : undefined;
-  const shipment = await getShipment(db, o.id);
-  const payment = can(actor, 'billing.read') ? {
-    cancelled: await cancelledOrderPaymentState(db, o.id, o.status),
-    exceptions: await listPaymentExceptions(db, { orderId: o.id }),
-  } : undefined;
+  // The reads below do not depend on each other: they run together (2026-10-06; one wait instead of nine in a row).
+  const canBilling = can(actor, 'billing.read');
+  const [customer, payments, refunds, invoices, stock, shipment, cancelled, exceptions, carriers] = await Promise.all([
+    can(actor, 'customers.read')
+      ? db.selectFrom('customers').select(['id', 'email', 'status', 'created_at'])
+          .where('id', '=', o.customer_id ?? o.user_id).executeTakeFirst().then(c => c ?? null)
+      : undefined,                                                 // undefined = not permitted; null = no account row
+    canBilling ? db.selectFrom('payments').select(['id', 'provider', 'provider_payment_id', 'amount_paise', 'currency', 'status', 'method', 'failure_reason', 'captured_at', 'created_at'])
+      .where('order_id', '=', orderId).orderBy('created_at').execute() : undefined,
+    canBilling ? db.selectFrom('refunds').select(['id', 'amount_paise', 'reason', 'status', 'processed_at', 'created_at']).where('order_id', '=', orderId).orderBy('created_at').execute() : undefined,
+    canBilling ? db.selectFrom('invoices').select(['id', 'invoice_number', 'status', 'financial_year', 'issued_at', 'total_paise', 'tax_paise', 'prices_include_tax'])
+      .where('order_id', '=', orderId).orderBy('issued_at').execute() : undefined,
+    can(actor, 'inventory.read')
+      ? db.selectFrom('inventory_movements as m').innerJoin('product_variants as v', 'v.id', 'm.variant_id').leftJoin('staff_users as s', 's.id', 'm.staff_id')
+          .select(['m.created_at', 'v.sku', 'm.delta', 'm.reason', 'm.balance_after', 'm.note', 's.email as staff_email'])
+          .where('m.order_id', '=', orderId).orderBy('m.created_at').execute()
+      : undefined,
+    getShipment(db, o.id),
+    canBilling ? cancelledOrderPaymentState(db, o.id, o.status) : undefined,
+    canBilling ? listPaymentExceptions(db, { orderId: o.id }) : undefined,
+    listActiveCarriers(db),
+  ]);
+  const billing = canBilling ? { payments: payments!, refunds: refunds!, invoices: invoices! } : undefined;
+  const payment = canBilling ? { cancelled: cancelled!, exceptions: exceptions! } : undefined;
   return {
     order: {
       id: o.id, orderNumber: o.order_number, status: o.status, paymentStatus: o.payment_status, currency: o.currency,
@@ -153,7 +174,7 @@ export async function getOrder(db: Db, actor: StaffPrincipal, orderId: string) {
     billingAddress: o.billing_address ? (b => ({ name: text(b.name), line1: text(b.line1), line2: text(b.line2), city: text(b.city), state: text(b.state), pin: text(b.pin), country: text(b.country) }))(o.billing_address as Record<string, unknown>) : null,
     items, history, integrity, customer, billing, stock, shipment, payment,
     allowedTransitions: can(actor, 'orders.update_status') ? [...ORDER_TRANSITIONS[o.status]] : [],
-    carriers: (await listActiveCarriers(db)).map(c => ({ code: c.code, label: c.label })),
+    carriers: carriers.map(c => ({ code: c.code, label: c.label })),
   };
 }
 

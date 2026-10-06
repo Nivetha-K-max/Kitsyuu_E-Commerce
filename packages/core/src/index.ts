@@ -47,6 +47,7 @@ export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';
 export { listCustomers, getCustomer, setCustomerStatus, updateCustomerContact, CUSTOMER_PAGE_SIZE } from './customers.ts';
 export {
   listPayments, listPaymentEvents, listPaymentExceptions, getPaymentExceptions, recordManualRefund, cancelledOrderPaymentState, reconcileOrderPayments,
+  listOrderPayments, getOrderPayment,
   PAYMENT_PAGE_SIZE, type PaymentException, type ReconciliationRow,
 } from './payments-admin.ts';
 export { listSettings, updateSetting, companyDetails, SETTINGS_REGISTRY, POLICY_NOTES, type SettingDef, type SettingRow, type SettingType, type CompanyDetails } from './settings.ts';
