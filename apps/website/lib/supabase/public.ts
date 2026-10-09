@@ -1,5 +1,7 @@
 import 'server-only';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { catalogueSource } from '../catalogue-source';
+import { localCatalogueClient } from './local-source';
 
 /* Public (anon / publishable key) Supabase client for catalogue reads on the server.
    Row Level Security limits it to active catalogue data. The service-role key is never used here.
@@ -23,6 +25,9 @@ async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Pro
 let client: SupabaseClient | undefined;
 export function publicSupabase(): SupabaseClient {
   if (client) return client;
+  /* Local development and tests (CATALOGUE_SOURCE=database): the same reads are answered from this machine's database and the
+     hosted project is never contacted (lib/supabase/local-source.ts). Unset, as in production, nothing below changes. */
+  if (catalogueSource() === 'database') return (client = localCatalogueClient() as unknown as SupabaseClient);
   /* SUPABASE_URL / SUPABASE_ANON_KEY (server-only, read at runtime) override the NEXT_PUBLIC_ values baked in at build. */
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

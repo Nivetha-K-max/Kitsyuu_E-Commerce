@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -9,6 +10,7 @@ import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Carts & wishlists' };
 const VIEWS = [['active', 'Active'], ['abandoned', 'Abandoned'], ['converted', 'Ordered'], ['all', 'All']] as const;
@@ -25,8 +27,8 @@ export default async function CartsPage({ searchParams }: { searchParams: SP }) 
   const s = list.summary;
   const qs = (v: string, p = 1) => `/carts?view=${v}${query.q ? `&q=${encodeURIComponent(query.q)}` : ''}&page=${p}`;
   return (
-    <>
-      <PageHead title="Carts & wishlists" eyebrow={list.hours ? `A cart counts as abandoned after ${list.hours} hours without changes.` : 'No abandoned-cart threshold is set (Configuration → Carts), so no cart is counted as abandoned.'} />
+    <Workspace name="carts" title="Carts & wishlists" summary={list.hours ? `A cart counts as abandoned after ${list.hours} hours without changes.` : 'No abandoned-cart threshold is set (Configuration → Carts), so no cart is counted as abandoned.'}>
+      <ModuleViews module="customers" label="Customers" current="/carts" />
       <SubNav label="Carts" current="/carts" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       <dl className="report-kpis" data-cart-kpis>
         <div><dt>Active carts</dt><dd>{formatNumber(s.active)}</dd></div>
@@ -58,6 +60,6 @@ export default async function CartsPage({ searchParams }: { searchParams: SP }) 
         {query.page > 1 && <Link className="btn ghost sm" href={qs(query.view, query.page - 1)}>Previous</Link>}
         {list.hasNext && <Link className="btn ghost sm" href={qs(query.view, query.page + 1)}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

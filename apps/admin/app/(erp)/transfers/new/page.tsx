@@ -20,9 +20,10 @@ export default async function NewTransferPage({ searchParams }: { searchParams: 
   const from = locations.find(l => l.id === sp.from), to = locations.find(l => l.id === sp.to);
   const ready = from && to && from.id !== to.id;
   const stock = ready ? await getLocationStock(db(), actor, { locationId: from.id, q: q || undefined, inStockOnly: true }) : null;
+  // 2026-10-09: inside the module's frame (the form, its two steps and its action are unchanged).
   return (
-    <>
-      <PageHead section="Catalogue" title="New transfer" crumbs={crumbs} eyebrow="Choose where the stock goes from and to, then the quantities." />
+    <div className="ord ws" data-workspace="new-transfer">
+      <PageHead section="Catalogue" title="New transfer" crumbs={crumbs} eyebrow="Choose where the stock goes from and to, then the quantities. Saving makes a draft; nothing moves until it is sent." />
       {locations.length < 2 ? <Empty title="Two active locations are needed">Add another location under Locations first.</Empty> : (
         <form className="toolbar" method="get" aria-label="Choose locations" data-transfer-locations>
           <label className="field-inline">From <select className="input" name="from" defaultValue={from?.id ?? ''} required>
@@ -58,6 +59,6 @@ export default async function NewTransferPage({ searchParams }: { searchParams: 
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }

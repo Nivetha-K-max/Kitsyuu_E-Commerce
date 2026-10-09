@@ -11,6 +11,7 @@ export async function moderateReviewAction(_: ActionState, form: FormData): Prom
     const res = await moderateReview(db(), actor, input, await requestContext());
     return { ok: true, message: !res.changed ? 'No change.' : input.decision === 'approved' ? 'Approved: the review is now shown in the store.' : 'Rejected: the review is not shown.' };
   });
-  if (r.ok) revalidatePath('/reviews');
+  // the product page shows the same reviews (its Reviews tab and rating), so it is refreshed with the queue
+  if (r.ok) { revalidatePath('/reviews'); revalidatePath('/products', 'layout'); }
   return r;
 }

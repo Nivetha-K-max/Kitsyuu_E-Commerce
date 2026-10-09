@@ -8,6 +8,7 @@ import { formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Reconciliation' };
 
@@ -20,8 +21,7 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
   let r: Awaited<ReturnType<typeof reconciliation>> | null = null; let error: string | null = null;
   try { r = await reconciliation(db(), actor, range); } catch (e) { if (e instanceof DomainError) error = e.message; else throw e; }
   return (
-    <>
-      <PageHead title="Finance" eyebrow="Orders marked paid vs captured payments vs refunds, day by day (India time)." />
+    <Workspace name="finance-reconciliation" title="Finance" summary="Orders marked paid vs captured payments vs refunds, day by day (India time).">
       <FinanceNav current="/finance/reconciliation" />
       <RangeForm from={range.from} to={range.to} />
       {error && <p className="msg error" role="alert">{error}</p>}
@@ -40,6 +40,6 @@ export default async function ReconciliationPage({ searchParams }: { searchParam
           </table></div>
         )}
       </>}
-    </>
+    </Workspace>
   );
 }

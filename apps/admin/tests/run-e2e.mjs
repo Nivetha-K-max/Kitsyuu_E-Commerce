@@ -6,10 +6,12 @@
           staff/roles/auth browser tests → product/price/stock browser tests → baseline check → stop server → drop DB.
    Usage (repo root): npm run test:admin */
 import {spawn, spawnSync} from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import pg from 'pg';
+import {assertLocalTestEnv} from './local-only.mjs';
 
 const ADMIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.join(ADMIN, '../..');
@@ -60,7 +62,7 @@ try {
   // SKIP_CORE=1: browser tests only (e.g. rerunning them after the core tests already passed).
   for (const f of process.env.SKIP_CORE ? [] : coreFiles) {
     if (!createDb()) throw new Error('could not create the test database');
-    const env = readEnv(path.join(OUT, 'test.env'));
+    const env = assertLocalTestEnv(readEnv(path.join(OUT, 'test.env')));
     if (!(await dbCheck(`before ${f}`, env, {staff: 0}))) failed = true;
     // Explicit file path: `node --test <directory>` is not supported by this Node version.
     const r = node(['--test', '--test-concurrency=1', '--test-reporter=spec', path.join('packages/core/test', f)], env);
@@ -71,11 +73,17 @@ try {
     // customer.test.mjs (M6): 5 customer accounts (asha, ravi, throttle, shared-ip, legacy) and 2 fixture orders.
     // commerce.test.mjs (M7): 2 customers, 17 checkout orders; 16 units net out of stock (sales held by paid / open orders,
     // one test correction of -9); the ledger check proves every one of them is in the ledger.
-    const expect = f === 'commerce.test.mjs' ? {orders: 17, customers: 2, units: 1084}
+    const expect = f === 'commerce.test.mjs' ? {orders: 18, customers: 2, units: 1084}
       : f === 'orders.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 3}
       // m8-operations.test.mjs (M8): 8 fixture orders, one unpaid order cancelled by staff (+2 back).
       : f === 'm8-operations.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 2}
       : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105}
+      // transactional-email.test.mjs (Phase 6): 2 customers, 5 cash-on-delivery orders (6 units held through the ledger); emails move no stock.
+      : f === 'transactional-email.test.mjs' ? {customers: 2, orders: 5, units: 1094, everySizeTen: false}
+      // inventory-integrity.test.mjs (Phase 8): 4 pieces transferred from the online location to a branch and left there; everything else put back.
+      : f === 'inventory-integrity.test.mjs' ? {units: 1096, everySizeTen: false}
+      // purchasing-production-integrity.test.mjs (Phase 9): product receipts go to a branch; 8 + 10 passed pieces enter the online stock.
+      : f === 'purchasing-production-integrity.test.mjs' ? {units: 1118, everySizeTen: false}
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2}
       : f === 'm12-reviews.test.mjs' ? {customers: 2, orders: 4}                   // M12: review fixtures (no stock moved)
       : f === 'm14-production.test.mjs' ? {units: 1108}                            // M14: 8 passed pieces added through the ledger
@@ -108,17 +116,20 @@ try {
 
   // ---------- browser tests against one server ----------
   if (!createDb()) throw new Error('could not recreate the test database');
-  const env = readEnv(path.join(OUT, 'test.env'));
+  const env = assertLocalTestEnv(readEnv(path.join(OUT, 'test.env')));
   if (!(await dbCheck('before browser tests', env, {staff: 0}))) failed = true;
-  const website = fs.existsSync(path.join(REPO, 'apps/website/.env.local')) ? readEnv(path.join(REPO, 'apps/website/.env.local')) : {};
-  // Product images are read from the existing PUBLIC product-images bucket (the same public URLs the store uses).
-  const imageBase = website.NEXT_PUBLIC_SUPABASE_URL ? `${website.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/product-images` : '';
+  // Product images: the repository's own files (dist/store/images/products), copied into this run's local storage folder below
+  // and served by the admin's /media route. Nothing is read from the hosted bucket (2026-10-08).
+  const imageBase = '';
   const log = path.join(OUT, 'server.log'); fs.writeFileSync(log, '');
   const storageDir = path.join(OUT, 'storage'); fs.rmSync(storageDir, {recursive: true, force: true}); fs.mkdirSync(storageDir, {recursive: true});
+  fs.cpSync(path.join(REPO, 'dist/store/images/products'), path.join(storageDir, 'products'), {recursive: true});
   const logFd = fs.openSync(log, 'a');
+  const jobsSecret = crypto.randomBytes(24).toString('hex');   // 48 characters, made for this run only
   server = spawn(process.execPath, [path.join(REPO, 'node_modules/next/dist/bin/next'), 'start', '-p', String(PORT)],
     {cwd: ADMIN, env: {...process.env, ADMIN_DATABASE_URL: env.ADMIN_DATABASE_URL, ADMIN_APP_URL: BASE, MAILER: 'console', NODE_ENV: 'production', PRODUCT_IMAGE_BASE_URL: imageBase,
-        STORAGE_DRIVER: 'local', LOCAL_STORAGE_DIR: storageDir},   // uploads go to a local folder, never the live bucket
+        STORAGE_DRIVER: 'local', LOCAL_STORAGE_DIR: storageDir,   // uploads go to a local folder, never the live bucket
+        JOBS_SECRET: jobsSecret, CRON_SECRET: '', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '', VERCEL: '', KITSYUU_DEPLOYMENT: ''},                 // scheduled jobs: only this run's random secret opens them
       stdio: ['ignore', logFd, logFd]});
   for (let i = 0; i < 100; i++) { try { if ((await fetch(BASE + '/login')).ok) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
 
@@ -132,7 +143,7 @@ try {
   const invites = [];
   try {
     invites.push(invite('root.e2e@test.local', 'super_admin'));
-    const e2e = node(['apps/admin/tests/admin.mjs'], {BASE, SERVER_LOG: log, INVITE_FILE: invites[0], KITSYUU_DB_URL: env.KITSYUU_DB_URL, ADMIN_DATABASE_URL: env.ADMIN_DATABASE_URL});
+    const e2e = node(['apps/admin/tests/admin.mjs'], {BASE, SERVER_LOG: log, INVITE_FILE: invites[0], KITSYUU_DB_URL: env.KITSYUU_DB_URL, ADMIN_DATABASE_URL: env.ADMIN_DATABASE_URL, JOBS_SECRET: jobsSecret});
     if (!step('admin browser tests (staff, roles, auth, audit)', e2e)) failed = true;
 
     const accounts = {root: ['prod.root@test.local', 'super_admin'], inventory: ['prod.inventory@test.local', 'inventory_manager'],
@@ -181,6 +192,43 @@ try {
     const posFiles = Object.fromEntries(Object.entries(posAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const pos = node(['apps/admin/tests/pos.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(posFiles)});
     if (!step('POS billing browser tests', pos)) failed = true;
+
+    // ---------- Phase 5 (2026-10-08): the product control centre: list, every tab, cross-module links, approval, roles, phone width ----------
+    // Adds and removes its own review / production order / discount; changes and restores one product's status; moves no stock.
+    const pcAccounts = {root: ['pc.root@test.local', 'super_admin'], manager: ['pc.manager@test.local', 'manager'], admin: ['pc.admin@test.local', 'admin'],
+      support: ['pc.support@test.local', 'support'], inventory: ['pc.inventory@test.local', 'inventory_manager']};
+    const pcFiles = Object.fromEntries(Object.entries(pcAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const pc = node(['apps/admin/tests/product-centre.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(pcFiles)});
+    if (!step('product control centre browser tests', pc)) failed = true;
+
+    // ---------- Phase 7 (2026-10-08): Catalogue setup on the shared frame: categories, collections, attributes, size charts ----------
+    // Adds one inactive category and one collection group; adds and removes a collection member; assigns and clears a size chart. No stock moved.
+    const csAccounts = {root: ['cs.root@test.local', 'super_admin'], inventory: ['cs.inventory@test.local', 'inventory_manager'], support: ['cs.support@test.local', 'support']};
+    const csFiles = Object.fromEntries(Object.entries(csAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const cs = node(['apps/admin/tests/catalogue-setup.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(csFiles)});
+    if (!step('catalogue setup browser tests', cs)) failed = true;
+
+    // ---------- Phase 8 (2026-10-08): Inventory & Locations: stock, movements (the ledger), locations, adjustments, transfers ----------
+    // +3 / −3 at a branch and one transfer sent and cancelled, all through the existing actions; the online stock ends where it began.
+    const invAccounts = {root: ['inv.root@test.local', 'super_admin'], inventory: ['inv.manager@test.local', 'inventory_manager'], support: ['inv.support@test.local', 'support'], accountant: ['inv.accounts@test.local', 'accountant']};
+    const invFiles = Object.fromEntries(Object.entries(invAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const inv = node(['apps/admin/tests/inventory.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(invFiles)});
+    if (!step('inventory browser tests', inv)) failed = true;
+
+    // ---------- Phase 9 (2026-10-08): Purchasing & Production: orders, receiving in parts, vendors, materials, production, output ----------
+    // Purchase orders are received at a branch (the online stock is not touched); one production order completes with 3 passed pieces (+3 online).
+    const ppAccounts = {root: ['pp.root@test.local', 'super_admin'], inventory: ['pp.inventory@test.local', 'inventory_manager'], support: ['pp.support@test.local', 'support']};
+    const ppFiles = Object.fromEntries(Object.entries(ppAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const pp = node(['apps/admin/tests/purchasing-production.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(ppFiles)});
+    if (!step('purchasing and production browser tests', pp)) failed = true;
+
+    // ---------- ERP segregation, remaining modules (2026-10-09): Marketing (campaign and segment record pages), Pricing & discounts, Reviews,
+    // Support, Store content, Finance, Reports, Team & access, Configuration, System, POS, Carts and Loyalty on the shared frame ----------
+    // Creates one campaign, discount, banner and ticket; no stock, order or price is changed.
+    const mfAccounts = {root: ['mf.root@test.local', 'super_admin'], support: ['mf.support@test.local', 'support']};
+    const mfFiles = Object.fromEntries(Object.entries(mfAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const mf = node(['apps/admin/tests/modules-frame.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(mfFiles)});
+    if (!step('remaining modules browser tests', mf)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
@@ -189,7 +237,8 @@ try {
   // Commerce workflow browser tests: 2 orders (online from a draft: 3 units held from the online stock; offline at a branch:
   // 2 units from the branch's own stock, which is not part of the online total); purchasing: 4 pieces received on a PO (+4).
   // POS browser tests: 3 counter sales at two branches (one voided) and 1 customer; branch stock only, never the online stock.
-  if (!(await dbCheck('after all browser tests', env, {orders: 13, customers: 4, units: 1100 - 11 + 3 + 6 - 3 + 4, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
+  // Purchasing & Production browser tests (Phase 9): receipts go to a branch; 3 passed pieces of one production order enter the online stock (+3).
+  if (!(await dbCheck('after all browser tests', env, {orders: 13, customers: 4, units: 1100 - 11 + 3 + 6 - 3 + 4 + 3, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;
 } finally {

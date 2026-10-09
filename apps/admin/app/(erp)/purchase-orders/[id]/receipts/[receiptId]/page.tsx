@@ -30,6 +30,7 @@ export default async function GoodsReceiptPage({ params }: { params: Params }) {
         <PageHead section="Supply" title={number} crumbs={[{ href: '/purchase-orders', label: 'Purchase orders' }, { href: `/purchase-orders/${id}`, label: g.po_number }]}>
           <PrintButton label="Print GRN" />
         </PageHead>
+        <p className="note" data-grn-trace>What this delivery added to stock is listed, row by row from the stock ledger, under <Link href={`/purchase-orders/${id}?tab=receiving`} data-link="po-receiving">Receiving on {g.po_number}</Link>.</p>
       </div>
       <article className="slip card" data-grn-print>
         <header className="slip-head">

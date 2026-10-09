@@ -47,8 +47,12 @@ export async function productionInputAction(_: ActionState, form: FormData): Pro
 }
 export async function consumeMaterialAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();
+  // What the page showed as already used of the chosen material on this order (used:<materialId>; none shown = 0). Core compares
+  // it under its lock, so a use entered on an out-of-date page or sent twice is refused, not recorded again.
   const r = await handle(consumeMaterialInput, form, async input => {
-    const res = await consumeMaterial(db(), actor, input, await requestContext());
+    const v = form.get(`used:${input.materialId}`);
+    if (v !== null && !(typeof v === 'string' && /^\d{1,10}(\.\d{1,3})?$/.test(v))) return { ok: false, message: 'This page is out of date. Reload it and record the material again.' };
+    const res = await consumeMaterial(db(), actor, { ...input, expectedConsumed: v === null ? 0 : Number(v) }, await requestContext());
     return { ok: true, message: `Recorded. Material left in stock: ${res.materialBalance}.` };
   });
   if (r.ok) refresh(String(form.get('productionOrderId')));

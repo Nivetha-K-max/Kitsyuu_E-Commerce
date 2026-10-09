@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { NotFoundError, uuid } from '@kitsyuu/contracts';
 import { getShipmentDetail, listCouriers, SHIPMENT_MOVES } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
@@ -17,6 +16,14 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   const crumbs = [{ href: '/shipping', label: 'Shipping' }];
   if (!can(actor, 'shipping.read')) return <><PageHead title="Shipment" crumbs={crumbs} /><Forbidden permission="shipping.read" /></>;
   const { id } = await params;
+  if (!uuid.safeParse(id).success) notFound();
+  // A shipment is its order's Fulfilment tab (2026-10-07). Staff who may open orders go there; this page stays for
+  // those with shipping.read only (e.g. the inventory manager).
+  if (can(actor, 'orders.read')) {
+    const row = await db().selectFrom('shipments').select('order_id').where('id', '=', id).executeTakeFirst();
+    if (!row) notFound();
+    redirect(`/orders/${row.order_id}?tab=fulfilment`);
+  }
   let data;
   try { data = await getShipmentDetail(db(), actor, id); } catch (e) { if (e instanceof NotFoundError) notFound(); throw e; }
   const { shipment: s, events } = data;
@@ -27,7 +34,6 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <PageHead title={`Shipment · ${s.order_number}`} crumbs={crumbs} eyebrow={`Order ${s.order_status.replace(/_/g, ' ')} · ${s.courier_name ?? s.carrier_code}`}>
-        {can(actor, 'orders.read') && <Link className="btn ghost" href={`/orders/${s.order_id}`}>Open order</Link>}
       </PageHead>
       <div className="grid-2">
         <section className="card" aria-labelledby="sd-h" data-section="shipment">

@@ -1,5 +1,6 @@
 /* Presentation helpers for the customer account pages. */
 import { paiseToRupees } from '@kitsyuu/contracts';
+import { catalogueSource, localImageUrl } from './catalogue-source';
 
 export const rupees = (paise: number) => `₹${paiseToRupees(paise)}`;
 
@@ -33,7 +34,27 @@ export const NEXT_STEP: Record<string, string> = {
 
 /** Public URL of a product image stored in the product-images bucket (same URLs the catalogue uses). */
 export function productImageUrl(path: string | null): string | null {
+  // Local development and tests: the picture is served by this app from the repository's own files (lib/catalogue-source.ts).
+  if (path && catalogueSource() === 'database') return localImageUrl(path);
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!path || !base) return null;
   return `${base.replace(/\/+$/, '')}/storage/v1/object/public/product-images/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+const MONTH_YEAR = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+export const formatMonthYear = (d: Date | string | null) => (d ? MONTH_YEAR.format(new Date(d)) : '—');
+
+/** Colour tone of a status badge (presentation only): ok, wait, bad, or neutral. */
+const TONES: Record<string, 'ok' | 'wait' | 'bad'> = {
+  delivered: 'ok', paid: 'ok', approved: 'ok', refunded: 'ok', exchanged: 'ok', completed: 'ok', resolved: 'ok', closed: 'ok',
+  pending_payment: 'wait', pending: 'wait', info_requested: 'wait', waiting_customer: 'wait',
+  payment_failed: 'bad', failed: 'bad', cancelled: 'bad', rejected: 'bad',
+};
+export const statusTone = (status: string): 'ok' | 'wait' | 'bad' | undefined => TONES[status];
+
+/** Up to two initials for the account avatar, from the customer's own name (or the first letter of their email). */
+export function initialsOf(name: string | null, email: string): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0]![0]! + parts[parts.length - 1]![0]! : (parts[0] ?? email).slice(0, 1);
+  return letters.toUpperCase();
 }

@@ -4,6 +4,7 @@
    Everything that writes runs inside ONE transaction that is rolled back at the end, so this leaves no data behind
    (checked at the end). Usage (repo root): npm run db:verify-platform */
 import {connect} from './lib/connection.mjs';
+import {requireProductionIntentForUrl} from './lib/target.mjs';
 
 const out = [];
 const ok = (name, pass, extra = '') => out.push(`${pass ? 'PASS' : 'FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
@@ -149,6 +150,7 @@ await c.end();
 
 // ---------- public API (publishable key, exactly what a browser can do) ----------
 const base = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (base) await requireProductionIntentForUrl(base, 'the Supabase project (public API)');
 const api = async (path, init = {}) => {
   const r = await fetch(`${base}/rest/v1/${path}`, {...init, headers: {apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', ...(init.headers || {})}});
   const body = await r.text(); let rows = null; try { const j = JSON.parse(body); rows = Array.isArray(j) ? j.length : null; } catch {}

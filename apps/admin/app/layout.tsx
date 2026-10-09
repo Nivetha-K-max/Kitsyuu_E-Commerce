@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import '@fontsource-variable/inter';
 
 export const metadata: Metadata = {
   title: { default: 'KITSYUU Admin', template: '%s | KITSYUU Admin' },
@@ -7,7 +6,7 @@ export const metadata: Metadata = {
   icons: { icon: { url: '/assets/kitsyuu-icon.svg', type: 'image/svg+xml' } },
 };
 export const viewport: Viewport = {
-  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#f7f7f8' }, { media: '(prefers-color-scheme: dark)', color: '#09090b' }],
+  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#f6f4ef' }, { media: '(prefers-color-scheme: dark)', color: '#101011' }],
 };
 
 /* Applies the stored theme before the first paint (no flash). Default is light; "system" follows the OS setting.
@@ -23,6 +22,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* The brand faces (the store's own files): the text face and the title face are needed for the first paint. */}
+        <link rel="preload" href="/assets/fonts/dm-sans-400.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/assets/fonts/barlow-condensed-600.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="stylesheet" href="/admin.css" />
       </head>
       <body>

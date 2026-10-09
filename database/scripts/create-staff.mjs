@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {createDb, recordAudit} from '@kitsyuu/db';
 import {issueStaffInvite} from '@kitsyuu/auth';
 import {email as emailSchema, roleCode} from '@kitsyuu/contracts';
-import {connectionConfig} from './lib/connection.mjs';
+import {confirmTarget} from './lib/connection.mjs';
 
 const arg = name => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 const email = emailSchema.safeParse(arg('email') ?? '');
@@ -21,7 +21,7 @@ if (!email.success || !role.success || !appUrl) {
   console.error('Usage: ADMIN_APP_URL=<admin base url> create-staff --email=<email> --role=<role code> [--name=<name>]'); process.exit(1);
 }
 
-const cfg = connectionConfig();
+const cfg = await confirmTarget();          // a host that is not this machine needs --target=production and a typed confirmation
 const conn = `postgresql://${encodeURIComponent(cfg.user)}:${encodeURIComponent(cfg.password)}@${cfg.host}:${cfg.port}/${encodeURIComponent(cfg.database)}`;
 const db = createDb({connectionString: conn, max: 1});
 try {

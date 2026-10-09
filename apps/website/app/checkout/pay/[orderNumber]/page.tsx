@@ -6,7 +6,7 @@ import { getCustomerOrder, preparePayment } from '@kitsyuu/core';
 import PaymentStep from '@/components/PaymentStep';
 import { OrderItems, OrderSums } from '@/components/OrderSummary';
 import { Crumbs } from '@/components/ui';
-import { paymentProvider } from '@/lib/commerce';
+import { onlinePaymentNotice, paymentProvider } from '@/lib/commerce';
 import { db, requireCustomer } from '@/lib/server';
 import { formatDateTime, rupees } from '@/lib/account-format';
 
@@ -25,7 +25,7 @@ export default async function PayPage({ params }: { params: Promise<{ orderNumbe
   const provider = paymentProvider();
 
   let start: Awaited<ReturnType<typeof preparePayment>> | null = null, problem = '';
-  if (!provider) problem = 'Online payment is not set up yet. Your order is saved.';
+  if (!provider) problem = `${onlinePaymentNotice()} Your order is saved.`;
   else {
     try { start = await preparePayment(db(), provider, me, o.orderNumber); }
     catch (e) { if (e instanceof DomainError) problem = e.message; else throw e; }

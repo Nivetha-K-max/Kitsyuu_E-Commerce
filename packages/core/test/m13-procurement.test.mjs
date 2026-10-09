@@ -97,7 +97,12 @@ test('purchase order: draft lines (cost only with costs.read), place, cancel rul
 test('receiving: partial then full, into the material ledger; over-receiving refused; receive permission', async () => {
   const po = globalThis.PO;
   const lines = (await getPurchaseOrder(db, root, po)).lines, dl = lines.find(l => l.materialId === denim), tl = lines.find(l => l.materialId === thread);
-  const recv = (who, ls, note) => receiveGoods(db, who, receiveGoodsInput.parse({purchaseOrderId: po, lines: ls, ...(note && {note})}), ctx);
+  // As the screen does: each line is sent with what is already received on it at that moment.
+  const recv = async (who, ls, note) => {
+    const input = receiveGoodsInput.parse({purchaseOrderId: po, lines: ls, ...(note && {note})});
+    const seen = new Map((await q(`select id, qty_received::float r from purchase_order_lines where purchase_order_id = $1`, [po])).map(x => [x.id, x.r]));
+    return receiveGoods(db, who, {...input, lines: input.lines.map(l => ({...l, expectedReceived: seen.get(l.lineId) ?? 0}))}, ctx);
+  };
   await assert.rejects(recv(accountant, [{lineId: dl.id, qty: '10'}]), ForbiddenError);
   assert.deepEqual((await recv(inventory, [{lineId: dl.id, qty: '60.25'}], 'Challan 118')).status, 'partially_received');
   assert.equal(await stock(denim), 60.25);

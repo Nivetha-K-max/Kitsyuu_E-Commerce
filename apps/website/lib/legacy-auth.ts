@@ -7,10 +7,18 @@ import 'server-only';
    accounts have moved). */
 import { createClient } from '@supabase/supabase-js';
 import type { LegacyPasswordCheck } from '@kitsyuu/auth';
+import { isDeployed } from './db-guard';
+
+/** On unless switched off in a production deployment (unchanged there). Anywhere else it is OFF unless LEGACY_SUPABASE_AUTH=on
+    is set on purpose: a local or test store must not send sign-in attempts to the hosted Supabase project (2026-10-08). */
+export function legacyAuthEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  const v = env.LEGACY_SUPABASE_AUTH;
+  return v === 'on' || (v !== 'off' && isDeployed(env));
+}
 
 export const supabasePasswordCheck: LegacyPasswordCheck = async (email, password) => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || process.env.LEGACY_SUPABASE_AUTH === 'off') return false;
+  if (!url || !key || !legacyAuthEnabled()) return false;
   const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   try {
     const { data, error } = await sb.auth.signInWithPassword({ email, password });

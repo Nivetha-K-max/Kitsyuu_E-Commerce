@@ -6,7 +6,6 @@ import { Command } from 'cmdk';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Icon } from './icons';
-import { NAV_ICON } from './NavLinks';
 import { GO_KEYS } from './shortcuts';
 import { setTheme, THEME_OPTIONS } from './ThemeToggle';
 
@@ -14,7 +13,7 @@ export interface QuickAction { href: string; label: string; icon: string }
 
 export default function CommandPalette({ open, onOpenChange, items, actions, onToggleSidebar }: {
   open: boolean; onOpenChange: (o: boolean) => void;
-  items: { href: string; label: string; group: string }[]; actions: QuickAction[]; onToggleSidebar: () => void;
+  items: { href: string; label: string; group: string; icon: string }[]; actions: QuickAction[]; onToggleSidebar: () => void;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -49,7 +48,7 @@ export default function CommandPalette({ open, onOpenChange, items, actions, onT
               <Command.Group heading="Go to">
                 {items.map(i => (
                   <Command.Item key={i.href} value={`${i.label} ${i.group}`} onSelect={() => go(i.href)}>
-                    <Icon name={NAV_ICON[i.href] ?? 'dashboard'} />{i.label}
+                    <Icon name={i.icon} />{i.label}
                     <span className="cmdk-hint">{GO_KEYS[i.href] ? <><kbd>G</kbd><kbd>{GO_KEYS[i.href]}</kbd></> : i.group}</span>
                   </Command.Item>
                 ))}

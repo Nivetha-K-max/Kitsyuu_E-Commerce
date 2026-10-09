@@ -10,6 +10,7 @@ import { one, pageOf, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { createInvoiceAction } from '../actions';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Invoices' };
 
@@ -23,8 +24,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: SP 
   const [list, pending] = await Promise.all([listInvoices(db(), actor, { q, status, page }), ordersWithoutInvoice(db(), actor, 25)]);
   const manage = can(actor, 'finance.manage');
   return (
-    <>
-      <PageHead title="Finance" eyebrow="GST invoices for paid orders, built exactly from what the order was charged. Numbers are gap-free per financial year." />
+    <Workspace name="finance-invoices" title="Finance" summary="GST invoices for paid orders, built exactly from what the order was charged. Numbers are gap-free per financial year.">
       <FinanceNav current="/finance/invoices" />
       <FilterForm className="actions" role="search" aria-label="Filter invoices">
         <label className="sr-only" htmlFor="iv-q">Search</label>
@@ -60,6 +60,6 @@ export default async function InvoicesPage({ searchParams }: { searchParams: SP 
           </table></div>
         )}
       </section>
-    </>
+    </Workspace>
   );
 }

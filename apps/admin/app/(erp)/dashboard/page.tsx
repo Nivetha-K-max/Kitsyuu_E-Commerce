@@ -4,7 +4,7 @@ import { can } from '@kitsyuu/auth';
 import { dashboardTrends, getDashboard, listOrders } from '@kitsyuu/core';
 import { CategoryDonut, RevenueChart } from '@/components/charts';
 import { Icon } from '@/components/icons';
-import { Delta, Sparkline } from '@/components/trend';
+import { Delta, Sparkline, trendDirection } from '@/components/trend';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
@@ -44,29 +44,29 @@ export default async function DashboardPage() {
   const pipeMax = Math.max(1, ...pipeline.map(p => p.value));
 
   return (
-    <>
+    <div className="dash-page" data-dashboard>
       <PageHead title={`${greeting()}, ${firstName}`} eyebrow={`Here is how KITSYUU is doing · live figures, updated ${formatDateTime(d.generatedAt)}`} />
 
       <dl className="kpis hero" data-kpis>
         <div className="kpi" data-kpi="Revenue (paid orders)">
           <dt><span className="kpi-icon" aria-hidden="true"><Icon name="value" size={17} /></span>Revenue</dt>
           <dd>{formatPaise(d.revenue.totalPaise)}<small>All time · {formatPaise(t.current.revenue)} in {t.days} days</small></dd>
-          <div className="kpi-foot"><Delta now={t.current.revenue} before={t.previous.revenue} /><Sparkline values={s.map(x => x.revenue)} /></div>
+          <div className="kpi-foot"><Delta now={t.current.revenue} before={t.previous.revenue} /><Sparkline tone={trendDirection(t.current.revenue, t.previous.revenue)} values={s.map(x => x.revenue)} /></div>
         </div>
         <div className="kpi" data-kpi="Orders">
           <dt><span className="kpi-icon" aria-hidden="true"><Icon name="orders" size={17} /></span>Orders</dt>
           <dd>{formatNumber(d.orders.total)}<small>{formatNumber(d.orders.open)} open · {formatNumber(t.current.orders)} sold in {t.days} days</small></dd>
-          <div className="kpi-foot"><Delta now={t.current.orders} before={t.previous.orders} /><Sparkline values={s.map(x => x.orders)} /></div>
+          <div className="kpi-foot"><Delta now={t.current.orders} before={t.previous.orders} /><Sparkline tone={trendDirection(t.current.orders, t.previous.orders)} values={s.map(x => x.orders)} /></div>
         </div>
         <div className="kpi" data-kpi="Average order">
           <dt><span className="kpi-icon" aria-hidden="true"><Icon name="payments" size={17} /></span>Average order</dt>
           <dd>{formatPaise(t.current.averageOrder)}<small>{formatNumber(t.current.units)} units sold in {t.days} days</small></dd>
-          <div className="kpi-foot"><Delta now={t.current.averageOrder} before={t.previous.averageOrder} /><Sparkline values={s.map(x => (x.orders ? x.revenue / x.orders : 0))} /></div>
+          <div className="kpi-foot"><Delta now={t.current.averageOrder} before={t.previous.averageOrder} /><Sparkline tone={trendDirection(t.current.averageOrder, t.previous.averageOrder)} values={s.map(x => (x.orders ? x.revenue / x.orders : 0))} /></div>
         </div>
         <div className="kpi" data-kpi="Customers">
           <dt><span className="kpi-icon" aria-hidden="true"><Icon name="customers" size={17} /></span>Customers</dt>
           <dd>{formatNumber(d.customers.total)}<small>{formatNumber(d.customers.active)} active · {formatNumber(d.customers.disabled)} disabled</small></dd>
-          <div className="kpi-foot"><Delta now={t.current.newCustomers} before={t.previous.newCustomers} label="new vs prior" /><Sparkline values={s.map(x => x.newCustomers)} /></div>
+          <div className="kpi-foot"><Delta now={t.current.newCustomers} before={t.previous.newCustomers} label="new vs prior" /><Sparkline tone={trendDirection(t.current.newCustomers, t.previous.newCustomers)} values={s.map(x => x.newCustomers)} /></div>
         </div>
       </dl>
 
@@ -79,8 +79,9 @@ export default async function DashboardPage() {
                 <p className="card-sub">Paid, processing, shipped and delivered orders, by day (India time)</p>
               </div>
               <div className="chart-legend">
-                <span><i className="dot accent" />Last {t.days} days <b>{formatPaise(t.current.revenue)}</b></span>
+                <span><i className="dot solid" />Last {t.days} days <b>{formatPaise(t.current.revenue)}</b></span>
                 <span><i className="dot muted" />Previous {t.days} days <b>{formatPaise(t.previous.revenue)}</b></span>
+                <span className="chart-key" data-chart-key><i className="dot up" />Rising<i className="dot down" />Falling<i className="dot flat" />Steady</span>
               </div>
             </div>
             {t.current.revenue === 0 && t.previous.revenue === 0
@@ -176,6 +177,6 @@ export default async function DashboardPage() {
 
         </aside>
       </div>
-    </>
+    </div>
   );
 }

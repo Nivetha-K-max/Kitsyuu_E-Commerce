@@ -1,11 +1,12 @@
 /* Starts the production build of the store on :3021 against a throwaway LOCAL database (the same settings as
-   tests/run-account.mjs: customer data, carts and payments local; the public catalogue read from the Supabase API,
-   read-only), runs tests/perf.mjs and stops. Usage (repo root): node apps/website/tests/run-perf.mjs <label> */
+   tests/run-account.mjs: customer data, carts, payments AND the public catalogue all local; needs the local build,
+   node apps/website/tests/build-local.mjs), runs tests/perf.mjs and stops. Usage (repo root): node apps/website/tests/run-perf.mjs <label> */
 import {spawn, spawnSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {localStoreEnv} from './local-store-env.mjs';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.join(WEB, '../..');
@@ -22,12 +23,10 @@ try {
   if (c.status !== 0) throw new Error('could not create the test database: ' + c.stdout + c.stderr);
   const env = readEnv(path.join(REPO, 'apps/admin/tests/.output/test.env'));
   if (!/@localhost[:/].*kitsyuu_test/.test(env.WEBSITE_DATABASE_URL)) throw new Error('refusing: not the local test database');
-  const website = readEnv(path.join(WEB, '.env.local'));
   const log = fs.openSync(path.join(OUT, `perf-server-${label}.log`), 'w');
   server = spawn(process.execPath, [path.join(REPO, 'node_modules/next/dist/bin/next'), 'start', '-p', String(PORT)], {cwd: WEB, stdio: ['ignore', log, log], env: {
     ...process.env, NODE_ENV: 'production', SITE_URL: BASE,
-    NEXT_PUBLIC_SUPABASE_URL: website.NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: website.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL, MAILER: 'console', LEGACY_SUPABASE_AUTH: 'off',
+    ...localStoreEnv(env),   // catalogue and content from the local test database: a load run never reaches the hosted project
     PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on', PAYMENTS_TEST_SECRET: randomBytes(32).toString('hex'),
     RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: '', SUPABASE_SERVICE_ROLE_KEY: ''}});
   for (let i = 0; i < 150; i++) { try { if ((await fetch(BASE + '/')).status < 500) break; } catch {} await new Promise(r => setTimeout(r, 200)); }

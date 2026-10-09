@@ -7,7 +7,8 @@ import { bulkUpdatePrices, cancelPriceChange, saveDiscount, schedulePriceChange,
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
-const done = (r: ActionState) => { if (r.ok) revalidatePath('/pricing', 'layout'); return r; };
+// Prices are edited on the product page (Pricing tab) and listed under Pricing & discounts: both are refreshed.
+const done = (r: ActionState) => { if (r.ok) { revalidatePath('/pricing', 'layout'); revalidatePath('/products', 'layout'); } return r; };
 
 export async function setPricingAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();

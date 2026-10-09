@@ -5,13 +5,14 @@
 import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'm8 e2e passphrase';
-const pool = new pg.Pool({connectionString: KITSYUU_DB_URL, max: 1});
+const pool = new pg.Pool({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL), max: 1});
 const q = async (text, params = []) => (await pool.query(text, params)).rows;
 
 const b = await launch(9392);
@@ -86,12 +87,27 @@ try {
   await visit('/customers?status=disabled');
   ok('customers filter: empty state', await exists('[data-empty=customers]'));
   await visit(`/customers/${ravi.id}`, '!!document.querySelector("[data-section=profile]")');
-  ok('customer detail: orders, addresses, sessions, audit sections', (await exists('[data-customer-orders]')) && (await exists('[data-section=addresses]'))
-    && (await exists('[data-sessions-table]')) && (await exists('[data-section=audit]')));
+  // 2026-10-07: the customer is a control centre on the shared entity frame: header + seven tabs, only the selected tab's content.
+  ok('customer page: tabs Overview · Orders · Payments · Returns · Loyalty · Support · Activity', (await ev(`[...document.querySelectorAll('[data-entity=customer] [data-entity-tab]')].map(a=>a.dataset.entityTab).join()`)) === 'overview,orders,payments,returns,loyalty,support,activity');
+  ok('customer header: name, status, email, joined, orders and lifetime value', (await exists('.ent-head [data-customer-status=active]')) && /Email[\s\S]*ravi[\s\S]*Joined[\s\S]*Orders[\s\S]*3[\s\S]*Lifetime value[\s\S]*₹/.test(await text('[data-customer-facts]')));
+  ok('customer overview: contact, account, order summary, addresses and notes; no tables of other records', (await exists('[data-section=account]')) && (await exists('[data-customer-kpis]')) && (await exists('[data-section=addresses]')) && (await exists('[data-section=notes]')) && !(await exists('[data-tab-panel=overview] table')));
   ok('customer detail: 1 active session', (await text('[data-active-sessions]')) === '1');
   const html = await ev('document.documentElement.outerHTML');
   ok('customer detail: no secrets, IP addresses or user agents in the page', !SECRETS.test(html) && !/10\.9\.9\.9|secret-agent-e2e/.test(html));
-  ok('customer detail: order links to the order page', await exists('[data-customer-orders] a[href^="/orders/"]'));
+  await visit(`/customers/${ravi.id}?tab=orders`, '!!document.querySelector("[data-customer-orders]")');
+  ok('customer → Orders tab: every order links to the order page', (await ev(`document.querySelectorAll('[data-customer-orders] tbody tr').length`)) === 3 && await ev(`[...document.querySelectorAll('[data-customer-orders] a.row-link')].every(a=>/^\\/orders\\/[0-9a-f-]{36}$/.test(a.getAttribute('href')))`));
+  await visit(`/customers/${ravi.id}?tab=payments`, '!!document.querySelector("[data-customer-payments]")');
+  ok('customer → Payments tab: every row opens Order → Payment; no form in the customer page', await ev(`[...document.querySelectorAll('[data-customer-payments] tbody tr a')].every(a=>/^\\/orders\\/[0-9a-f-]{36}\\?tab=payment/.test(a.getAttribute('href')))`) && !(await exists('[data-tab-panel] form')));
+  await ev(`document.querySelector('[data-customer-payments] a.row-link').click(),true`);
+  ok('customer → payment → order → Payment tab', await until(`/^\\/orders\\//.test(location.pathname) && location.search === '?tab=payment' && !!document.querySelector('[data-payment-screen]')`, 20000));
+  await visit(`/customers/${ravi.id}?tab=returns`, '!!document.querySelector("[data-tab-panel=returns]")');
+  ok('customer → Returns tab: empty state when there are none', await exists('[data-state=empty]'));
+  await visit(`/customers/${ravi.id}?tab=activity`, '!!document.querySelector("[data-sessions-table]")');
+  ok('customer → Activity tab: timeline, sign-in history and audit', (await exists('[data-customer-activity]')) && (await exists('[data-section=audit]')) && !SECRETS.test(await ev('document.documentElement.outerHTML')) && !/10\.9\.9\.9|secret-agent-e2e/.test(await ev('document.documentElement.outerHTML')));
+  await visit(`/customers/${ravi.id}`, '!!document.querySelector("[data-section=profile]")');
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=status]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=status]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=status] form')`);
 
   const S = '#customer-status-form';
   await autoConfirm();
@@ -112,6 +128,10 @@ try {
   ok('enable: saved', /Account enabled/.test(await message(S)) && (await q(`select status from customers where id = $1`, [ravi.id]))[0].status === 'active');
 
   const C = '#customer-contact-form';
+  await b.send('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27}); await w(400);
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=contact]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=contact]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=contact] form')`);
   await fill(`${C} [name=phone]`, '12');
   await submit(C);
   ok('contact: invalid mobile rejected', !!(await fieldError(C, 'phone')));
@@ -123,7 +143,7 @@ try {
 
   // ---------- fulfilment on the order page ----------
   const o2 = await id('KTS-TEST-0002');
-  await visit(`/orders/${o2}`, '!!document.querySelector("[data-section=fulfilment]")');
+  await visit(`/orders/${o2}?tab=fulfilment`, '!!document.querySelector("[data-section=fulfilment]")');
   ok('order page links the customer account', await exists('[data-customer-link]'));
   ok('fulfilment: packing not started', /Not started/i.test(await text('[data-packing-state]')));
   const P = '#packing-form';
@@ -160,13 +180,74 @@ try {
   await visit('/orders', '!!document.querySelector("[data-export-orders]")');
   ok('orders list has an Export CSV link', await exists('a[data-export-orders][href^="/orders/export"]'));
 
+  // ---------- 2026-10-07: the order is the control centre; the queues open the same order on the matching tab ----------
+  const o4 = await id('KTS-TEST-0004');
+  await visit(`/orders/${o4}`, '!!document.querySelector("[data-entity=order]")');
+  ok('shipped order: header offers Mark delivered as the one primary action', (await exists('[data-order-actions=shipped] #quick-delivered-form')) && (await ev(`document.querySelectorAll('[data-order-actions] form').length`)) === 1);
+  await autoConfirm();
+  await submit('#quick-delivered-form');
+  ok('Mark delivered from the header: saved, the header follows', (await statusOf('KTS-TEST-0004')) === 'delivered' && await until(`document.querySelector('[data-order-status]')?.dataset.orderStatus==='delivered' && document.querySelectorAll('[data-order-actions] form').length===0`));
+  // Shipping → Order → Fulfilment
+  const [sh] = await q(`select id from shipments where order_id = $1`, [o2]);
+  await visit('/shipping?status=all', '!!document.querySelector("[data-shipments-table]")');
+  ok('shipping queue: the row says the state and the next step; no form in the queue', /Delivered/.test(await text('[data-shipment="KTS-TEST-0002"]')) && /View/.test(await text('[data-shipment="KTS-TEST-0002"] [data-next-step]')) && !(await exists('[data-shipments-table] form')));
+  ok('shipping queue: a row opens its order on the Fulfilment tab', (await ev(`document.querySelector('[data-shipment="KTS-TEST-0002"] a.row-link')?.getAttribute('href')`)) === `/orders/${o2}?tab=fulfilment`);
+  await ev(`document.querySelector('[data-shipment="KTS-TEST-0002"] a.row-link').click(),true`);
+  ok('shipping → order → fulfilment: lands on the order, Fulfilment tab selected', await until(`location.pathname + location.search === '/orders/${o2}?tab=fulfilment' && !!document.querySelector('[data-section=fulfilment]')`, 20000)
+    && /AWB-E2E-1/.test(await text('[data-tracking]')) && (await exists('[data-shipment-events]')));
+  await visit(`/shipping/shipments/${sh.id}`, '!!document.querySelector("[data-section=fulfilment]")');
+  ok('old shipment address opens the same order on its Fulfilment tab', (await ev('location.pathname + location.search')) === `/orders/${o2}?tab=fulfilment`);
+  // Order → Returns (returns switched on in this LOCAL test database only, and switched off again below)
+  await visit(`/orders/${o2}?tab=returns`, '!!document.querySelector("[data-tab-panel=returns]")');
+  ok('returns off: the Returns tab says so and offers no start form', /all sales are final/.test(await text('[data-tab-panel=returns]')) && !(await exists('#start-return-form')));
+  await q(`insert into settings (key, value, description, is_public) values ('returns.enabled', '"on"', 'e2e', false), ('returns.window_days', '7', 'e2e', false) on conflict (key) do update set value = excluded.value`);
+  await visit(`/orders/${o2}`, '!!document.querySelector("[data-entity=order]")');
+  ok('delivered order inside the return window: header offers Start return / exchange', await exists(`[data-order-actions=delivered] a[data-next=start-return][href="/orders/${o2}?tab=returns#start-return"]`));
+  await visit(`/orders/${o2}?tab=returns`, '!!document.querySelector("#start-return-form")');
+  const SR = '#start-return-form';
+  await submit(SR);
+  ok('start return without a quantity: explained, nothing created', /quantity being returned/.test(await message(SR)) && (await q(`select count(*)::int n from return_requests`))[0].n === 0, await message(SR));
+  const [line] = await q(`select id from order_items where order_id = $1 order by name limit 1`, [o2]);
+  await fill(`${SR} [name="qty_${line.id}"]`, '1');
+  await submit(SR);
+  ok('order → returns: the return opens on the same order, Returns tab', await until(`location.pathname === '/orders/${o2}' && /tab=returns&return=/.test(location.search) && !!document.querySelector('[data-return-status=requested]')`, 20000));
+  const [rt] = await q(`select id, number, status from return_requests where order_id = $1`, [o2]);
+  ok('the return is the existing return record (staff-opened, requested)', rt?.status === 'requested' && (await q(`select count(*)::int n from audit_logs where action = 'return.staff_create' and entity_id = $1`, [rt.id]))[0].n === 1);
+  ok('return steps offered are the workflow\'s own for "requested"', (await ev(`[...document.querySelectorAll('[data-section=return-actions] [data-step]')].map(d=>d.dataset.step).sort().join()`)) === 'approve,cancel,reject,request_info,review');
+  await ev(`document.querySelector('[data-step=approve]').open = true`);
+  await submit('#step-approve');
+  ok('approve on the Returns tab: saved through the existing return action', (await q(`select status, resolution from return_requests where id = $1`, [rt.id]))[0].status === 'approved' && await until(`!!document.querySelector('[data-return-status=approved]')`));
+  await visit(`/orders/${o2}`, '!!document.querySelector("[data-entity=order]")');
+  ok('order with an open return: the primary action is Continue return; the Returns tab shows 1', (await exists(`[data-order-actions] a[data-next=return][href="/orders/${o2}?tab=returns&return=${rt.id}"]`)) && /1/.test(await text('[data-entity-tab=returns]')));
+  // Returns → Order → Returns
+  await visit('/returns?status=all', '!!document.querySelector("[data-returns-table]")');
+  ok('returns queue: the row says the state and the next step; no form in the queue', (await exists(`[data-return="${rt.number}"][data-return-state=approved]`)) && /Schedule pickup or receive/.test(await text(`[data-return="${rt.number}"] [data-next-step]`)) && !(await exists('[data-returns-table] form')));
+  ok('returns queue: status chips are the existing statuses with counts', (await ev(`[...document.querySelectorAll('[data-return-status-chip]')].map(c=>c.dataset.returnStatusChip).join()`)) === 'open,approved,all');
+  ok('returns queue: a row opens its order on the Returns tab', (await ev(`document.querySelector('[data-return="${rt.number}"] a.row-link')?.getAttribute('href')`)) === `/orders/${o2}?tab=returns&return=${rt.id}`);
+  await ev(`document.querySelector('[data-return="${rt.number}"] a.row-link').click(),true`);
+  ok('returns → order → returns: lands on the order, Returns tab selected, that return shown', await until(`location.pathname === '/orders/${o2}' && !!document.querySelector('[data-tab-panel=returns] [data-return="${rt.number}"]')`, 20000));
+  await visit(`/returns/${rt.id}`, '!!document.querySelector("[data-return]")');
+  ok('old return address opens the same order on its Returns tab', (await ev('location.pathname + location.search')) === `/orders/${o2}?tab=returns&return=${rt.id}`);
+  await ev(`document.querySelector('[data-step=cancel]').open = true`);
+  await submit('#step-cancel');
+  ok('the return is cancelled again (test clean-up through the workflow)', (await q(`select status from return_requests where id = $1`, [rt.id]))[0].status === 'cancelled');
+  await q(`delete from settings where key in ('returns.enabled', 'returns.window_days')`);
+  // Order → Payment (admin: billing.read)
+  await visit(`/orders/${o2}?tab=payment`, '!!document.querySelector("[data-payment-screen]")');
+  ok('order → Payment tab: method, status, attempts and timeline of the same order', (await exists('[data-payment-facts]')) && (await exists('[data-attempts-table]')) && (await exists('[data-payment-timeline]')));
+
   // ---------- payments ----------
   const o6 = await id('KTS-TEST-0006');
   await q(`insert into payments (order_id, provider, provider_payment_id, amount_paise, status, captured_at) values ($1, 'razorpay', 'pay_E2ELATE', 49900, 'captured', now())`, [o6]);
   await q(`insert into payment_events (id, provider, type, payload, order_id, outcome, processed_at) values ('razorpay:evt_e2e', 'razorpay', 'payment.captured', '{"secret":"hidden-e2e"}', $1, 'applied', now())`, [o6]);
   await visit('/payments?view=exceptions', '!!document.querySelector("[data-payments-tabs]")');
   ok('payments: exceptions queue lists the payment received after cancellation', await exists('[data-exception="captured_after_cancel"][data-exception-order="KTS-TEST-0006"]'));
-  const R = '[data-exception-order="KTS-TEST-0006"] form';
+  // 2026-10-07 (queues are doorways): nothing is recorded in the queue; the row opens the order's Payment tab, where the existing action is taken.
+  ok('exceptions queue: no form in the queue; the next step opens Order → Payment', !(await exists('[data-exceptions-table] form')) && (await ev(`document.querySelector('[data-exception-order="KTS-TEST-0006"] [data-next-step] a')?.getAttribute('href')`)) === `/orders/${o6}?tab=payment#exc-h`
+    && /Record manual refund/.test(await text('[data-exception-order="KTS-TEST-0006"] [data-next-step]')));
+  await ev(`document.querySelector('[data-exception-order="KTS-TEST-0006"] [data-next-step] a').click(),true`);
+  ok('exception → order → Payment tab with the exception and its handling', await until(`location.pathname === '/orders/${o6}' && location.search === '?tab=payment' && !!document.querySelector('[data-section=payment-exception] form')`, 20000));
+  const R = '[data-section=payment-exception] form';
   await autoConfirm();
   await submit(R);
   ok('manual refund without a note: field error', !!(await ev(`document.querySelector('${R} .field-error')?.innerText ?? ''`)));
@@ -176,7 +257,9 @@ try {
   const [rf] = await q(`select r.status, s.email from refunds r join staff_users s on s.id = r.requested_by where r.order_id = $1`, [o6]);
   ok('manual refund recorded (requested) and audited', rf?.status === 'requested' && rf.email === 'm8.admin@test.local'
     && (await q(`select count(*)::int n from audit_logs where action = 'payment.manual_refund_recorded' and entity_id = $1`, [o6]))[0].n === 1);
-  ok('queue shows it as recorded', await until(`/Manual refund recorded/.test(document.querySelector('[data-exception-order="KTS-TEST-0006"] [data-exception-handling]')?.innerText ?? '')`));
+  ok('Payment tab shows it as recorded, the form is gone', await until(`/Manual refund recorded/.test(document.querySelector('[data-section=payment-exception] [data-exception-handling]')?.innerText ?? '') && !document.querySelector('[data-section=payment-exception] form')`));
+  await visit('/payments?view=exceptions', '!!document.querySelector("[data-exceptions-table]")');
+  ok('queue shows it as recorded', await until(`/Manual refund recorded/.test(document.querySelector('[data-exception-order="KTS-TEST-0006"] [data-exception-handling]')?.innerText ?? '')`) && /View/.test(await text('[data-exception-order="KTS-TEST-0006"] [data-next-step]')));
   ok('payment and order records untouched', (await q(`select status from payments where provider_payment_id = 'pay_E2ELATE'`))[0].status === 'captured' && (await statusOf('KTS-TEST-0006')) === 'cancelled');
   await visit(`/orders/${o6}`, '!!document.querySelector("[data-section=billing]")');
   ok('order page: Cancelled · paid, manual refund recorded', await exists('[data-cancelled-money="cancelled_paid_refund_recorded"]'));
@@ -205,7 +288,7 @@ try {
     'notifications.abandoned_cart','notifications.abandoned_checkout','notifications.order_cancelled','notifications.order_delivered','notifications.order_shipped','notifications.refund_processed','notifications.return_status','notifications.support_reply',
     'payments.cod_discount','payments.cod_enabled','payments.cod_max_order','payments.cod_min_order','pricing.max_sale_discount_percent','returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method',
     // commerce workflows (2026-10-01)
-    'discounts.staff_max_percent','emails.cart_reminder_intro','emails.cart_reminder_subject','notifications.abandoned_cart_auto','notifications.order_packed','notifications.payment_request',
+    'discounts.staff_max_percent','emails.cart_reminder_intro','emails.cart_reminder_subject','notifications.abandoned_cart_auto','notifications.order_packed','notifications.order_tracking','notifications.payment_request',   // order_tracking: Phase 6 (2026-10-08)
     'payments.cod_discount_min_order','payments.cod_discount_percent','payments.cod_discount_with_other',
     ].sort().join(), editable);   // ERP modules add business switches (all off) and staff alert switches
   ok('settings: returns/refunds policy shown as none', /Returns and refunds[\s\S]*None/.test(await text('[data-policies]')));
@@ -231,7 +314,7 @@ try {
   await visit('/payments', '!!document.querySelector("[data-payments-tabs]")');
   ok('manager (billing.read, no refunds.create) sees payments', await exists('[data-payments-tabs]'));
   await visit(`/customers/${ravi.id}`, '!!document.querySelector("[data-section=profile]")');
-  ok('manager (customers.read) cannot change customers', (await exists('[data-readonly=customer]')) && !(await exists('#customer-status-form')));
+  ok('manager (customers.read) cannot change customers', (await exists('[data-readonly=customer]')) && !(await exists('#customer-status-form')) && !(await exists('[data-drawer-open=status]')) && !(await exists('[data-drawer-open=contact]')));
 
   // ================= support =================
   ok('support signs in', await signIn('support', 'Support M8'));
@@ -275,7 +358,7 @@ try {
   const slip = await text('[data-packing-slip]');
   ok('M10 packing slip: company, order number and items, no prices', /KITSYUU E2E Pvt Ltd/.test(slip) && (await exists('[data-slip-items] tbody tr')) && !/₹/.test(slip), slip.slice(0, 120));
   await b.viewport(390, 844, true);
-  for (const p of ['/customers', `/customers/${ravi.id}`, '/payments', '/payments?view=attempts', '/settings', `/orders/${o2}`, '/dashboard']) {
+  for (const p of ['/customers', `/customers/${ravi.id}`, `/customers/${ravi.id}?tab=orders`, `/customers/${ravi.id}?tab=payments`, `/customers/${ravi.id}?tab=activity`, '/payments', '/payments?view=attempts', '/settings', `/orders/${o2}`, `/orders/${o2}?tab=payment`, `/orders/${o2}?tab=fulfilment`, `/orders/${o2}?tab=returns`, '/dashboard']) {
     await visit(p);
     ok(`no horizontal page scroll at 390px: ${p.replace(ravi.id, ':id').replace(o2, ':id')}`, await ev('document.documentElement.scrollWidth <= innerWidth + 1'));
   }

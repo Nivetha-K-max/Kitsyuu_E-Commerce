@@ -39,7 +39,8 @@ export default function BuyForm({ productId }: { productId: string }) {
       const r = await addToCart(p, size, n, coloured ? colour : null).finally(() => setBusy(false));
       if (!r.ok) { setStatus(r.message ?? 'Your cart could not be saved in this browser.'); return; }
       const what = `${colourLabel ? `${colourLabel}, ` : ''}size ${size}`;
-      setStatus(<>{r.capped ? `Your cart now has the maximum of ${MAX_QTY} in ${what}.` : `Added to cart: ${what}, quantity ${r.merged ? `now ${r.qty}` : r.qty}.`} <Link href={url.cart}>View cart</Link></>);
+      setStatus(<>{r.capped ? `Your cart now has the maximum of ${MAX_QTY} in ${what}.` : `Added to cart: ${what}, quantity ${r.merged ? `now ${r.qty}` : r.qty}.`}{' '}
+        <span className="st-buy-next"><Link className="button button-outline" href={url.cart}>View cart</Link><Link className="button" href={url.checkout} data-buy-checkout>Checkout</Link></span></>);
     }}>
       {coloured && (
         <fieldset className="st-fieldset st-colours-set">

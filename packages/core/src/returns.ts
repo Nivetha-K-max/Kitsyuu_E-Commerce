@@ -428,9 +428,8 @@ export async function refundReturn(db: Db, actor: StaffPrincipal, provider: Paym
 }
 
 /** Customer email about a return (approved, rejected, information needed, completed) or a refund; only when switched on. */
-export async function notifyReturn(db: Db, mailer: Mailer, returnId: string, kind: 'status' | 'refund', opts: { storeUrl?: string | null } = {}) {
-  return sendCustomerEmail(db, mailer, kind === 'refund' ? 'refund.processed' : 'return.status', async () => {
-    const r = await db.selectFrom('return_requests as r').innerJoin('orders as o', 'o.id', 'r.order_id')
+export async function returnEmail(q: Queryable, returnId: string, kind: 'status' | 'refund', opts: { storeUrl?: string | null } = {}) {
+    const r = await q.selectFrom('return_requests as r').innerJoin('orders as o', 'o.id', 'r.order_id')
       .select(['r.number', 'r.status', 'r.refund_amount_paise', 'o.id as order_id', 'o.order_number', 'o.contact']).where('r.id', '=', returnId).executeTakeFirst();
     if (!r) return null;
     const contact = (r.contact ?? {}) as Record<string, unknown>;
@@ -449,9 +448,12 @@ export async function notifyReturn(db: Db, mailer: Mailer, returnId: string, kin
       completed: `Your return ${r.number} for order ${r.order_number} is complete.`,
     };
     if (!lines[r.status]) return null;
-    return { to, orderId: r.order_id, subject: `Your KITSYUU return ${r.number}`, text: [hello(contact.name), '', lines[r.status], '', ...link].join('\n') };
-  });
+    // The subject names the update, so each one is its own email (and is sent once): approved, more information, complete…
+    const what: Record<string, string> = { approved: 'is approved', rejected: 'could not be accepted', info_requested: 'needs more information', completed: 'is complete' };
+    return { to, orderId: r.order_id, subject: `Your KITSYUU return ${r.number} ${what[r.status]}`, text: [hello(contact.name), '', lines[r.status], '', ...link].join('\n') };
 }
+export const notifyReturn = (db: Db, mailer: Mailer, returnId: string, kind: 'status' | 'refund', opts: { storeUrl?: string | null } = {}) =>
+  sendCustomerEmail(db, mailer, kind === 'refund' ? 'refund.processed' : 'return.status', q => returnEmail(q, returnId, kind, opts));
 
 /** Returns and refunds for a period: requests by status and reason, units restocked, refunds by method and status. */
 export async function returnsReport(db: Db, actor: StaffPrincipal, range: { from: string; to: string }) {

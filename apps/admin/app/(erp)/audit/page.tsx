@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -7,6 +8,7 @@ import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Audit log' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -22,10 +24,9 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
   const link = (page: number) => `/audit?${new URLSearchParams({ ...(query.action && { action: query.action }), ...(query.entityType && { entityType: query.entityType }), ...(query.staffId && { staffId: query.staffId }), page: String(page) })}`;
   const show = (v: unknown) => (v === null || v === undefined ? '' : JSON.stringify(v, null, 1));
   return (
-    <>
-      <PageHead section="System" title="Audit log" eyebrow="Every important admin action, append-only. Times are IST.">
-        <Link className="btn ghost sm" href="/audit/sign-ins" data-link="sign-ins">Sign-in history</Link>
-      </PageHead>
+    <Workspace name="audit" title="Audit log" summary="Every important admin action, append-only. Times are IST."
+      actions={<div className="ord-head-actions"><Link className="btn ghost sm" href="/audit/sign-ins" data-link="sign-ins">Sign-in history</Link></div>}>
+      <ModuleViews module="team" label="Team & access" current="/audit" />
       <FilterForm className="actions" data-audit-filters>
         <label className="sr-only" htmlFor="f-action">Action</label>
         <select id="f-action" name="action" className="input" defaultValue={query.action ?? ''}>
@@ -63,6 +64,6 @@ export default async function AuditPage({ searchParams }: { searchParams: SP }) 
         <span className="pager-page">Page {query.page}</span>
         {hasNext ? <Link className="btn ghost sm" href={link(query.page + 1)}>Older →</Link> : <span />}
       </nav>
-    </>
+    </Workspace>
   );
 }

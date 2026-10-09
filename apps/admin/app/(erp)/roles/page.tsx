@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -5,6 +6,7 @@ import { listRoles } from '@kitsyuu/core';
 import { Icon } from '@/components/icons';
 import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Roles & permissions' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -16,10 +18,9 @@ export default async function RolesPage({ searchParams }: { searchParams: SP }) 
   const manage = can(actor, 'roles.manage');
   const deleted = (await searchParams).notice === 'deleted';
   return (
-    <>
-      <PageHead section="System" title="Roles & permissions" eyebrow={`${roles.length} roles`}>
-        {manage && <Link className="btn" href="/roles/new"><Icon name="plus" size={16} />New role</Link>}
-      </PageHead>
+    <Workspace name="roles" title="Roles & permissions" summary={`${roles.length} roles`}
+      actions={<div className="ord-head-actions">{manage && <Link className="btn" href="/roles/new"><Icon name="plus" size={16} />New role</Link>}</div>}>
+      <ModuleViews module="team" label="Team & access" current="/roles" />
       {deleted && <p className="msg ok" role="status">Role deleted.</p>}
       <div className="table-wrap"><table data-roles-table>
         <thead><tr><th>Role</th><th>Description</th><th className="num">Permissions</th><th className="num">Staff</th><th className="num">Actions</th></tr></thead>
@@ -34,6 +35,6 @@ export default async function RolesPage({ searchParams }: { searchParams: SP }) 
           </tr>))}
         </tbody>
       </table></div>
-    </>
+    </Workspace>
   );
 }

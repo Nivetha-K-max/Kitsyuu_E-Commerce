@@ -6,6 +6,7 @@ import RoleChecks from '@/components/RoleChecks';
 import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { inviteStaffAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Invite staff' };
 
@@ -15,8 +16,7 @@ export default async function InviteStaffPage() {
   if (!can(actor, 'staff.manage')) return <><PageHead section="System" title="Invite staff" crumbs={crumbs} /><Forbidden permission="staff.manage" /></>;
   const roles = can(actor, 'roles.read') ? await listRoles(db(), actor) : [];
   return (
-    <>
-      <PageHead section="System" title="Invite staff" crumbs={crumbs} />
+    <Workspace name="invite-staff" title="Invite staff" crumbs={crumbs}>
       <p className="note lead-note">The person receives a one-time link to set their own password. No password is ever chosen or seen by the inviter.</p>
       {roles.length === 0 ? <p className="msg error">Assigning roles needs the roles.read permission.</p> : (
         <ActionForm action={inviteStaffAction} submitLabel="Send invitation" pendingLabel="Inviting…">
@@ -26,6 +26,6 @@ export default async function InviteStaffPage() {
           <FieldError name="roleIds" />
         </ActionForm>
       )}
-    </>
+    </Workspace>
   );
 }

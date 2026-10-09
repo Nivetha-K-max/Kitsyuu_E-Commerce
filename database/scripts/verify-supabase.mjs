@@ -6,11 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createClient} from '@supabase/supabase-js';
+import {requireProductionIntentForUrl} from './lib/target.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../apps/website'); // data/products.json lives with the website
 const {NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: anon} = process.env;
 if (!url || !anon) { console.error('Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local'); process.exit(1); }
 const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/products.json'), 'utf8'));
+await requireProductionIntentForUrl(url, 'the Supabase project');
 const sb = createClient(url, anon, {auth: {persistSession: false}});
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const must = r => { if (r.error) throw new Error(r.error.message); return r.data; };

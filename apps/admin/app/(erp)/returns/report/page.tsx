@@ -7,6 +7,7 @@ import { formatNumber, formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import ReturnsNav from '../ReturnsNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Returns report' };
 
@@ -19,8 +20,7 @@ export default async function ReturnsReportPage({ searchParams }: { searchParams
   const r = await returnsReport(db(), actor, range);
   const total = r.byStatus.reduce((n, s) => n + s.n, 0);
   return (
-    <>
-      <PageHead title="Returns & refunds" eyebrow="Return requests made in the period, their reasons, stock put back, and refunds." />
+    <Workspace name="returns-report" title="Returns & refunds" summary="Return requests made in the period, their reasons, stock put back, and refunds.">
       <ReturnsNav current="/returns/report" />
       <RangeForm from={range.from} to={range.to} />
       <dl className="report-kpis">
@@ -38,6 +38,6 @@ export default async function ReturnsReportPage({ searchParams }: { searchParams
         <table><thead><tr><th>How</th><th>Status</th><th className="num">Count</th><th className="num">Amount</th></tr></thead>
           <tbody>{r.refunds.map(x => <tr key={`${x.method}-${x.status}`}><td>{x.method === 'provider' ? 'Payment provider' : x.method === 'manual' ? 'Manual' : 'Other (payments page)'}</td>
             <td><StatusBadge status={x.status} /></td><td className="num">{x.n}</td><td className="num money">{formatPaise(x.paise)}</td></tr>)}</tbody></table>)}</section>
-    </>
+    </Workspace>
   );
 }

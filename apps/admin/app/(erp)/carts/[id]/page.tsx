@@ -9,10 +9,12 @@ import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { cartRecoveryAction, sendReminderAction } from '../actions';
+import { Entity, Section } from '@/components/frame';
+import RecordActivity from '@/components/RecordActivity';
 
 export const metadata: Metadata = { title: 'Cart' };
 
-export default async function CartPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CartPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor();
   const crumbs = [{ href: '/carts', label: 'Carts' }];
   if (!can(actor, 'carts.read')) return <><PageHead title="Cart" crumbs={crumbs} /><Forbidden permission="carts.read" /></>;
@@ -22,11 +24,23 @@ export default async function CartPage({ params }: { params: Promise<{ id: strin
   try { data = await getCart(db(), actor, id); } catch (e) { if (e instanceof NotFoundError) notFound(); throw e; }
   const { cart: c, items, abandoned } = data;
   const manage = can(actor, 'carts.manage');
+  const seeAudit = can(actor, 'audit.read');
+  const tab = (await searchParams).tab === 'activity' && seeAudit ? 'activity' : 'main';
+  const selfHref = `/carts/${c.id}`;
   return (
-    <>
-      <PageHead title={c.email ? `Cart · ${c.email}` : 'Guest cart'} crumbs={crumbs} eyebrow={`${abandoned ? 'Abandoned' : c.status} · last activity ${formatDateTime(c.last_activity as Date)} · ${formatPaise(c.value_paise)} at today’s prices`}>
+    <Entity module={{ href: '/carts', label: 'Carts & wishlists' }} name="cart" title={c.email ? `Cart · ${c.email}` : 'Guest cart'}
+      status={<span className="badge as-written" data-cart-state>{abandoned ? 'Abandoned' : c.status}</span>}
+      factsAttr="data-cart-facts" facts={[{ label: 'Last activity', value: formatDateTime(c.last_activity as Date) }, { label: 'Value at today’s prices', value: formatPaise(c.value_paise) }]}
+      tabs={[{ id: 'main', label: 'Items' }, ...(seeAudit ? [{ id: 'activity', label: 'Activity' }] : [])]} current={tab} tabHref={x => (x === 'main' ? selfHref : `${selfHref}?tab=${x}`)}
+      actions={<div className="ord-head-actions">
         {c.customer_id && can(actor, 'customers.read') && <Link className="btn ghost" href={`/customers/${c.customer_id}`}>Customer</Link>}
-      </PageHead>
+      </div>}>
+      {tab === 'activity' && (
+        <Section id="act-h" title="Activity" name="activity" wide hint="Changes to this cart, from the audit log.">
+          <RecordActivity entityType="carts" entityId={c.id} name="cart" empty="Changes to this cart are listed here as they are made." />
+        </Section>
+      )}
+      {tab === 'main' && <>
       <p className="note">Read-only: staff cannot change a customer’s cart. Stock is not held for carts.</p>
       <div className="table-wrap"><table data-cart-items>
         <thead><tr><th>Product</th><th>Size</th><th className="num">Qty</th><th className="num">Price now</th><th className="num">In stock</th><th>Added / changed</th></tr></thead>
@@ -53,6 +67,7 @@ export default async function CartPage({ params }: { params: Promise<{ id: strin
           )}
         </div>}
       </section>
-    </>
+      </>}
+    </Entity>
   );
 }

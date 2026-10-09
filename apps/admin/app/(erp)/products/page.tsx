@@ -4,6 +4,8 @@ import { can } from '@kitsyuu/auth';
 import { productListQuery, type ProductListQuery } from '@kitsyuu/contracts';
 import { listCategories, listCollections, listProducts } from '@kitsyuu/core';
 import { Icon } from '@/components/icons';
+import { ViewTabs } from '@/components/frame';
+import { NavFrame } from '@/components/NavFrame';
 import { Forbidden, PageHead } from '@/components/ui';
 import { formatNumber } from '@/lib/format';
 import { db, productImageUrl, requireActor } from '@/lib/server';
@@ -23,7 +25,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
   const query: ProductListQuery = parsed.success ? parsed.data : { status: 'all', q: undefined, category: undefined, collection: undefined, stock: 'all' };
   const [products, categories, collections] = await Promise.all([listProducts(db(), actor, query), listCategories(db(), actor),
     can(actor, 'categories.read') ? listCollections(db(), actor) : Promise.resolve([])]);
-  const write = can(actor, 'products.write');
+  const write = can(actor, 'products.write'), publish = can(actor, 'products.publish');
   const store = process.env.STORE_URL?.replace(/\/+$/, '') || null;
   const rows: ProductRowView[] = products.map(p => ({
     id: p.id, sku: p.sku, name: p.name, status: p.status, categoryLabel: p.categoryLabel, subcategoryLabel: p.subcategoryLabel,
@@ -33,18 +35,26 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
   }));
   const filtered = !!(query.q || query.category || query.status !== 'all' || query.collection || query.stock !== 'all');
   const units = products.reduce((s, p) => s + p.stockUnits, 0);
+  // The views are the product statuses that exist; the other filters (search, category, collection…) carry over.
+  const viewHref = (status: string) => {
+    const qs = new URLSearchParams(Object.entries({ status: status === 'all' ? '' : status, q: query.q ?? '', category: query.category ?? '', collection: query.collection ?? '',
+      stock: query.stock === 'all' ? '' : query.stock, pmin: rupeeBound(one(sp.pmin)), pmax: rupeeBound(one(sp.pmax)) }).filter(([, v]) => v)).toString();
+    return qs ? `/products?${qs}` : '/products';
+  };
+  const views = [['all', 'All products'], ['active', 'Published'], ['draft', 'Draft'], ['review', 'Pending approval'], ['archived', 'Archived']].map(([id, label]) => ({ id, label, href: viewHref(id) }));
   return (
-    <>
+    <NavFrame className="ord ws" data-workspace="products">
       <PageHead title="Products"
         eyebrow={`${formatNumber(products.length)} ${products.length === 1 ? 'product' : 'products'}${filtered ? ' matching the filters' : ` · ${formatNumber(units)} units in stock`}`}>
         {write && <Link className="btn ghost" href="/products/bulk" data-bulk-edit>Bulk edit</Link>}
         {write && <Link className="btn" href="/products/new" data-new-product><Icon name="plus" size={15} />New product</Link>}
       </PageHead>
+      <ViewTabs label="Product views" items={views} current={query.status} />
       <ProductsTable rows={rows} categories={categories.map(c => ({ id: c.id, label: c.label, parent_id: c.parent_id }))}
         collections={collections.map(c => ({ id: c.id, label: c.label }))}
         filters={{ q: query.q ?? '', category: query.category ?? '', status: query.status, pmin: rupeeBound(one(sp.pmin)), pmax: rupeeBound(one(sp.pmax)),
           collection: query.collection ?? '', stock: query.stock }}
-        canWrite={write} bulkAction={bulkStatusAction} statusAction={setProductStatusAction} />
-    </>
+        canWrite={write} canPublish={publish} bulkAction={bulkStatusAction} statusAction={setProductStatusAction} />
+    </NavFrame>
   );
 }

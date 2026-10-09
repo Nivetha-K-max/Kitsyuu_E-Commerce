@@ -5,7 +5,7 @@
    attempt, each recorded in shipment_events. Marking a shipment delivered here moves the order to delivered through the
    same workflow, in the same transaction. No courier API is called: tracking numbers are typed in by staff; an API
    courier plugs in through the CarrierProvider interface with keys from the environment. */
-import { recordAudit, sql, type Db } from '@kitsyuu/db';
+import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type Mailer, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
@@ -242,13 +242,13 @@ export async function shippingReport(db: Db, actor: StaffPrincipal, range: { fro
 
 
 /** Customer email when an order is delivered (only when Configuration → "Email when an order is delivered" is on). */
-export async function notifyOrderDelivered(db: Db, mailer: Mailer, orderId: string, opts: { storeUrl?: string | null } = {}) {
-  return sendCustomerEmail(db, mailer, 'order.delivered', async () => {
-    const o = await db.selectFrom('orders').select(['id', 'order_number', 'status', 'contact']).where('id', '=', orderId).executeTakeFirst();
+export async function orderDeliveredEmail(q: Queryable, orderId: string, opts: { storeUrl?: string | null } = {}) {
+    const o = await q.selectFrom('orders').select(['id', 'order_number', 'status', 'contact']).where('id', '=', orderId).executeTakeFirst();
     if (!o || o.status !== 'delivered') return null;
     const c = (o.contact ?? {}) as Record<string, unknown>;
     return { to: typeof c.email === 'string' ? c.email : '', orderId: o.id, subject: `Your KITSYUU order ${o.order_number} was delivered`,
       text: [hello(c.name), '', `Your order ${o.order_number} has been marked as delivered.`, 'If anything is wrong with it, reply to this email.', '',
         ...storeLink(opts.storeUrl, '/account/orders', 'Your orders')].join('\n') };
-  });
 }
+export const notifyOrderDelivered = (db: Db, mailer: Mailer, orderId: string, opts: { storeUrl?: string | null } = {}) =>
+  sendCustomerEmail(db, mailer, 'order.delivered', q => orderDeliveredEmail(q, orderId, opts));

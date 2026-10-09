@@ -1,5 +1,6 @@
 /* M6 customer account + M7 commerce browser tests against a throwaway LOCAL database (never the live one).
-   Needs database/.env.test.local (TEST_PG_ADMIN_URL) and a production build of the website (npm run build -w @kitsyuu/website).
+   Needs database/.env.test.local (TEST_PG_ADMIN_URL) and a LOCAL build of the website (node apps/website/tests/build-local.mjs):
+   the catalogue is read from the local test database, never from the hosted project (2026-10-08).
    Steps: fresh local DB → a local fake Razorpay → three website instances (next start) on the same local DB, all as the
    kitsyuu_website role, console mailer (emails → server log), Supabase password check off:
      :3011  PAYMENT_PROVIDER=test      (main store)
@@ -7,6 +8,8 @@
      :3014  database unreachable       (failure states)
      :3015  PAYMENT_PROVIDER=test WITHOUT PAYMENTS_ALLOW_TEST_PROVIDER (must be refused in production: payment off)
      :3016  PAYMENT_PROVIDER unset     (the default: payment off)
+     :3017  PAYMENT_PROVIDER=razorpay with NO credentials            (must stay off: "temporarily unavailable")
+     :3018  PAYMENT_PROVIDER=razorpay with a live-format key, RAZORPAY_LIVE_MODE unset (must be refused; the key is made up)
    → tests/account.mjs → tests/commerce.mjs → stop → drop DB. The catalogue is still read from the public Supabase API (read-only).
    Usage (repo root): npm run test:account -w @kitsyuu/website   (ONLY=account|commerce runs one file) */
 import {spawn, spawnSync} from 'node:child_process';
@@ -15,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {startFakeRazorpay, TEST_KEY_ID} from '../../../packages/core/test/fake-razorpay.mjs';
+import {localStoreEnv} from './local-store-env.mjs';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.join(WEB, '../..');
@@ -49,15 +53,13 @@ try {
   if (!step('create local test database', node(['--env-file=' + ENV_TEST, 'database/scripts/test-db.mjs', '--create']))) throw new Error('could not create the test database');
   const env = readEnv(path.join(REPO, 'apps/admin/tests/.output/test.env'));
   if (!/@localhost[:/].*kitsyuu_test/.test(env.WEBSITE_DATABASE_URL) || !/kitsyuu_website/.test(env.WEBSITE_DATABASE_URL)) throw new Error('refusing: not the local website role');
-  const website = fs.existsSync(path.join(WEB, '.env.local')) ? readEnv(path.join(WEB, '.env.local')) : {};
   const keySecret = randomBytes(16).toString('hex'), webhookSecret = randomBytes(16).toString('hex');
   rzp = await startFakeRazorpay({keySecret, webhookSecret});
   // Explicit values win over .env.local: every customer-data and payment setting here is local; only the public catalogue settings are reused.
   const base = {...process.env, NODE_ENV: 'production',
-    NEXT_PUBLIC_SUPABASE_URL: website.NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: website.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL, MAILER: 'console', LEGACY_SUPABASE_AUTH: 'off',
+    ...localStoreEnv(env),   // catalogue and content from the local test database, pictures from the repository: the hosted project is never contacted
     PAYMENT_PROVIDER: '', PAYMENTS_ALLOW_TEST_PROVIDER: '', PAYMENTS_TEST_SECRET: '',
-    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: ''};
+    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', RAZORPAY_LIVE_MODE: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: ''};
   const cronSecret = randomBytes(24).toString('hex');
   const log = await startServer(PORT, 'account-server.log', {...base, SITE_URL: BASE, CRON_SECRET: cronSecret,
     PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on', PAYMENTS_TEST_SECRET: randomBytes(32).toString('hex')});
@@ -65,10 +67,14 @@ try {
     RAZORPAY_KEY_ID: TEST_KEY_ID, RAZORPAY_KEY_SECRET: keySecret, RAZORPAY_WEBHOOK_SECRET: webhookSecret,
     RAZORPAY_API_BASE: rzp.url, RAZORPAY_CHECKOUT_URL: `${rzp.url}/v1/checkout.js`});
   await startServer(3014, 'db-down-server.log', {...base, SITE_URL: DOWN_BASE, PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on',
-    WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL.replace(/@localhost:\d+\//, '@localhost:1/')});
+    WEBSITE_DATABASE_URL: env.WEBSITE_DATABASE_URL.replace(/@localhost:\d+\//, '@localhost:1/'),
+    CATALOGUE_DATABASE_URL: env.WEBSITE_DATABASE_URL});   // the customer database is down; the catalogue (a separate service in production) is not
   const refusedLog = await startServer(3015, 'test-refused-server.log', {...base, SITE_URL: 'http://localhost:3015', PAYMENT_PROVIDER: 'test'});
   await startServer(3016, 'no-provider-server.log', {...base, SITE_URL: 'http://localhost:3016'});
-  const testEnv = {CRON_SECRET: cronSecret, TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
+  const rzpOffLog = await startServer(3017, 'razorpay-no-keys-server.log', {...base, SITE_URL: 'http://localhost:3017', PAYMENT_PROVIDER: 'razorpay'});
+  const rzpLiveLog = await startServer(3018, 'razorpay-live-refused-server.log', {...base, SITE_URL: 'http://localhost:3018', PAYMENT_PROVIDER: 'razorpay',
+    RAZORPAY_KEY_ID: 'rzp_live_NotARealKey0001', RAZORPAY_KEY_SECRET: randomBytes(12).toString('hex'), RAZORPAY_WEBHOOK_SECRET: randomBytes(12).toString('hex')});
+  const testEnv = {RZP_OFF_BASE: 'http://localhost:3017', RZP_LIVE_BASE: 'http://localhost:3018', RZP_OFF_LOG: rzpOffLog, RZP_LIVE_LOG: rzpLiveLog, CRON_SECRET: cronSecret, TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
     BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL: rzp.url, RZP_WEBHOOK_SECRET: webhookSecret, SERVER_LOG: log, RZP_SERVER_LOG: rzpLog, KITSYUU_DB_URL: env.KITSYUU_DB_URL};
   for (const f of ['account', 'commerce']) {
     if (process.env.ONLY && process.env.ONLY !== f) continue;

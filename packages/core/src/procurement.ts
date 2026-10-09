@@ -337,8 +337,12 @@ export async function setPurchaseOrderStatus(db: Db, actor: StaffPrincipal, inpu
 
 /** Records a delivery as a numbered goods receipt (GRN) linked to the order: each line's quantity (≤ what is still
     outstanding) goes into stock through the ledger — product sizes into product stock at the order's location (reason
-    purchase_in, with the line's unit cost), materials into material stock. Only what actually arrived is added. */
-export async function receiveGoods(db: Db, actor: StaffPrincipal, input: { purchaseOrderId: string; lines: { lineId: string; qty: number }[]; note: string | null; vendorRef?: string | null }, ctx: MutationContext) {
+    purchase_in, with the line's unit cost), materials into material stock. Only what actually arrived is added.
+    2026-10-08: every line carries expectedReceived, what the caller saw as already received on it when the delivery was entered
+    (as expectedQty does for a stock adjustment). It is compared with the line AFTER the order and its lines are locked, in the
+    same transaction, so the same delivery sent twice (two tabs, two people, an old page) is refused instead of being received
+    again while it still fits in what is outstanding. A refused request writes nothing. */
+export async function receiveGoods(db: Db, actor: StaffPrincipal, input: { purchaseOrderId: string; lines: { lineId: string; qty: number; expectedReceived: number }[]; note: string | null; vendorRef?: string | null }, ctx: MutationContext) {
   requirePermission(actor, 'procurement.receive');
   const lines = input.lines.filter(l => l.qty > 0);
   if (!lines.length) throw new DomainError('invalid', 'Enter the quantity received for at least one line.');
@@ -353,6 +357,7 @@ export async function receiveGoods(db: Db, actor: StaffPrincipal, input: { purch
       for (const l of lines) {
         const c = byId.get(l.lineId);
         if (!c) throw new NotFoundError('One of the lines does not belong to this order.');
+        if (!(typeof l.expectedReceived === 'number' && Math.abs(qty(c.qty_received) - l.expectedReceived) < 1e-9)) throw new ConflictError('Goods were received on this order since you opened the page. Reload and check what is still to come.');
         if (c.variant_id && !Number.isInteger(l.qty)) throw new DomainError('invalid', 'Products are received in whole pieces.');
         if (l.qty > qty(c.qty_ordered) - qty(c.qty_received) + 1e-9) throw new ConflictError('More was entered than is still outstanding on a line.');
       }

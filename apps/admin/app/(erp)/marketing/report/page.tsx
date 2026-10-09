@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { can } from '@kitsyuu/auth';
 import { promotionReport } from '@kitsyuu/core';
 import RangeForm from '@/components/RangeForm';
-import { Empty, Forbidden, PageHead } from '@/components/ui';
+import { StateBlock, Workspace } from '@/components/frame';
+import { Forbidden, PageHead } from '@/components/ui';
 import { formatNumber, formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
@@ -18,11 +19,10 @@ export default async function PromotionReportPage({ searchParams }: { searchPara
   const range = { from: /^\d{4}-\d{2}-\d{2}$/.test(one(sp.from)) ? one(sp.from) : d.from, to: /^\d{4}-\d{2}-\d{2}$/.test(one(sp.to)) ? one(sp.to) : d.to };
   const rows = await promotionReport(db(), actor, range);
   return (
-    <>
-      <PageHead title="Marketing" eyebrow="Discount and coupon use on paid orders in the period (from recorded redemptions)." />
+    <Workspace name="marketing-report" title="Marketing" summary="Discount and coupon use on paid orders in the period (from recorded redemptions).">
       <MarketingNav current="/marketing/report" />
       <RangeForm from={range.from} to={range.to} />
-      {rows.length === 0 ? <Empty title="No discounts were used in this period" kind="promotions" /> : (
+      {rows.length === 0 ? <StateBlock title="No discounts were used in this period" name="promotions">Choose another period, or wait for orders that use a discount.</StateBlock> : (
         <div className="table-wrap"><table data-promotion-report>
           <thead><tr><th>Discount</th><th>Campaign</th><th className="num">Orders</th><th className="num">Customers</th><th className="num">Discount given</th><th className="num">Order revenue</th></tr></thead>
           <tbody>{rows.map(r => (
@@ -31,6 +31,6 @@ export default async function PromotionReportPage({ searchParams }: { searchPara
           ))}</tbody>
         </table></div>
       )}
-    </>
+    </Workspace>
   );
 }

@@ -8,6 +8,7 @@ import { formatDateTime, formatPaise } from '@/lib/format';
 import { one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { closeSessionAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'POS sessions' };
 
@@ -23,8 +24,7 @@ export default async function PosSessionsPage({ searchParams }: { searchParams: 
     c.session ? listPosSales(db(), actor, { sessionId: c.session.id, limit: 200 }) : [],
   ]);
   return (
-    <>
-      <PageHead title="Cashier sessions" crumbs={crumbs} eyebrow={can(actor, 'pos.reports') ? 'Every cashier' : 'Your sessions'} />
+    <Workspace name="pos-sessions" title="Cashier sessions" summary={can(actor, 'pos.reports') ? 'Every cashier' : 'Your sessions'} crumbs={crumbs}>
       {one(sp.closed) === '1' && <p className="msg ok" role="status" data-session-closed>Session closed.</p>}
       {c.session && sum && (
         <section className="card" id="close" aria-labelledby="cur-h" data-session-current>
@@ -71,6 +71,6 @@ export default async function PosSessionsPage({ searchParams }: { searchParams: 
           </table></div>
         )}
       </section>
-    </>
+    </Workspace>
   );
 }

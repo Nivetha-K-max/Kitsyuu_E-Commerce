@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
@@ -12,7 +13,7 @@ const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  $
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'products e2e passphrase';
 const PID = 'ky-proto-001';
-const q = async (text, params) => { const c = new pg.Client({connectionString: KITSYUU_DB_URL}); await c.connect(); try { return (await c.query(text, params)).rows; } finally { await c.end(); } };
+const q = async (text, params) => { const c = new pg.Client({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL)}); await c.connect(); try { return (await c.query(text, params)).rows; } finally { await c.end(); } };
 
 const b = await launch(9381);
 const ev = e => b.eval(e);
@@ -45,6 +46,12 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const allErrors = [];
 // Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
 const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+/** Opens a drawer of the page (the product's details and status forms live in drawers on Overview). */
+const openDrawer = async name => {
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=${name}]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=${name}]').click(),true`);
+  return until(`!!document.querySelector('[data-drawer=${name}] form')`);
+};
 let confirmQuestions = [];
 /* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
@@ -68,7 +75,7 @@ try {
   // ================= super admin =================
   ok('super admin signs in', await signInWithInvite('root', 'Products Root'));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('menu has Products, Categories and Inventory under Catalogue', nav.includes('Products|Categories|Collections|Attributes|Size charts|Inventory'), nav);
+  ok('menu has Products, Inventory and Catalogue setup', nav.includes('Products|Inventory') && nav.includes('Catalogue setup'), nav);
 
   // ---------- product list ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');
@@ -95,10 +102,14 @@ try {
   ok('detail shows category / subcategory', /\//.test(await fact('category')), await fact('category'));
   ok('detail shows the current price', (await fact('price')).includes('₹'), await fact('price'));
   ok('detail shows the stock summary (50 units in 5 sizes)', /50 units in 5 sizes/.test(await fact('stock')), await fact('stock'));
+  await visit(`/products/${PID}?tab=media`, '!!document.querySelector("[data-image]")');
   ok('detail shows the product image', await until(`[...document.querySelectorAll('[data-image] img')].some(i=>i.complete&&i.naturalWidth>0)`, 15000));
+  await visit(`/products/${PID}?tab=variants`, '!!document.querySelector("[data-variants-table]")');
   ok('stock by size lists every size at 10', (await ev(`[...document.querySelectorAll('[data-variant] [data-qty]')].map(td=>td.innerText).join(',')`)) === '10,10,10,10,10');
 
   // ---------- product edit: validation, success, audit ----------
+  await visit(`/products/${PID}`, '!!document.querySelector("[data-drawer-open=details]")');
+  await openDrawer('details');
   await fill('#details-form [name=colourLabel]', 'Typed before the error');
   await fill('#details-form [name=name]', ' ');
   await submit('#details-form');
@@ -121,6 +132,7 @@ try {
 
   // ---------- price ----------
   const priceNow = async () => (await q(`select price_paise from products where id=$1`, [PID]))[0].price_paise;
+  await visit(`/products/${PID}?tab=pricing`, '!!document.querySelector("#price-form")');
   for (const [bad, re] of [['abc', /Enter an amount/], ['0', /more than ₹0/], ['-5', /Enter an amount/], ['12.345', /Enter an amount/]]) {
     await fill('#price-form [name=price]', bad); await submit('#price-form');
     ok(`price "${bad}" rejected with a field error`, re.test(await fieldError('#price-form', 'price')) && (await priceNow()) === orig.price_paise, await fieldError('#price-form', 'price'));
@@ -139,6 +151,8 @@ try {
   ok('price restored', (await priceNow()) === orig.price_paise);
 
   // ---------- status ----------
+  await visit(`/products/${PID}`, '!!document.querySelector("[data-drawer-open=status]")');
+  await openDrawer('status');
   await autoConfirm();
   await fill('#status-form [name=status]', 'archived'); await submit('#status-form');
   await confirmsSeen();
@@ -146,13 +160,18 @@ try {
   ok('status: archived', (await q(`select status from products where id=$1`, [PID]))[0].status === 'archived' && /archived/.test(await message('#status-form')));
   await visit('/products?status=inactive');
   ok('inactive filter shows the archived product', (await ev(`[...document.querySelectorAll('[data-product-row]')].map(r=>r.dataset.productRow).join()`)) === PID);
-  await visit(`/products/${PID}`, '!!document.querySelector("#status-form")');
+  await visit(`/products/${PID}`, '!!document.querySelector("[data-drawer-open=status]")');
+  await openDrawer('status');
   await fill('#status-form [name=status]', 'active'); await submit('#status-form');
   ok('status: reactivated', (await q(`select status from products where id=$1`, [PID]))[0].status === 'active');
 
   // ---------- stock view ----------
   await visit('/inventory', '!!document.querySelector("[data-stock-table]")');
-  ok('stock list shows all 110 sizes', (await ev(`document.querySelectorAll('[data-stock-row]').length`)) === 110);
+  // Phase 8: the stock list is paged (50 sizes a page); all 110 are there across the pages.
+  const stockPages = [await ev(`document.querySelectorAll('[data-stock-row]').length`)];
+  for (const pg of [2, 3]) { await visit(`/inventory?page=${pg}`, '!!document.querySelector("[data-stock-table]")'); stockPages.push(await ev(`document.querySelectorAll('[data-stock-row]').length`)); }
+  ok('stock list shows all 110 sizes (50 a page)', stockPages.join() === '50,50,10' && /110 sizes/.test(await ev(`document.querySelector('[data-pager]').innerText`)), stockPages.join());
+  await visit('/inventory', '!!document.querySelector("[data-stock-table]")');
   // The eyebrow is shown in capitals by CSS (text-transform), so compare case-insensitively.
   ok('stock totals: 1,100 units across 110 sizes', /1,100 units across 110 sizes/i.test(await ev(`document.querySelector('.page-head').innerText`)));
   await visit('/inventory?status=attention');
@@ -161,7 +180,8 @@ try {
   // ---------- stock adjustment ----------
   const form = `[id="adjust-${V.sku}"]`;
   const qtyNow = async () => (await q(`select stock_qty from product_variants where id=$1`, [V.id]))[0].stock_qty;
-  await visit(`/products/${PID}`, `!!document.querySelector('${form}')`);
+  await visit(`/products/${PID}?tab=variants`, `!!document.querySelector('${form}')`);
+  await ev(`document.querySelector('[data-adjust-row="${V.sku}"]').open = true`);
   await fill(`${form} [name=quantity]`, '5'); await submit(form);
   ok('adjust: missing reason → field error, nothing changed', /Choose a reason/.test(await fieldError(form, 'reason')) && (await qtyNow()) === 10, await fieldError(form, 'reason'));
   await fill(`${form} [name=direction]`, 'increase'); await fill(`${form} [name=quantity]`, '5'); await fill(`${form} [name=reason]`, 'restock'); await fill(`${form} [name=note]`, 'e2e delivery');
@@ -197,7 +217,7 @@ try {
   await b.shot('products-detail.png', true);
 
   // ---------- keyboard ----------
-  await visit(`/products/${PID}`, '!!document.querySelector("#price-form")');
+  await visit(`/products/${PID}?tab=pricing`, '!!document.querySelector("#price-form")');
   await ev(`document.querySelector('#price-form [name=price]').focus(),true`);
   ok('keyboard: price field is focusable and labelled', await ev(`document.activeElement.name==='price' && !!document.querySelector('label[for="'+document.activeElement.id+'"]')`));
   await b.key('Tab', 'Tab', 9);
@@ -205,20 +225,27 @@ try {
 
   // ================= inventory manager: stock yes, price/details no =================
   ok('inventory manager signs in', await signInWithInvite('inventory', 'Inventory E2E'));
-  await visit(`/products/${PID}`, '!!document.querySelector("[data-section=price]")');
-  ok('inventory manager: no price, status or details forms (read-only notes instead)', !(await exists('#price-form')) && !(await exists('#status-form')) && !(await exists('#details-form')) && (await exists('[data-readonly=price]')));
+  await visit(`/products/${PID}`, '!!document.querySelector("[data-section=status]")');
+  const invOverview = !(await exists('[data-drawer-open=status]')) && !(await exists('[data-drawer-open=details]')) && !(await exists('#status-form')) && !(await exists('#details-form')) && (await exists('[data-readonly=status]'));
+  await visit(`/products/${PID}?tab=pricing`, '!!document.querySelector("[data-section=price]")');
+  ok('inventory manager: no price, status or details forms (read-only notes instead)', invOverview && !(await exists('#price-form')) && (await exists('[data-readonly=price]')));
+  await visit(`/products/${PID}?tab=variants`, '!!document.querySelector("[data-section=stock]")');
   ok('inventory manager: can adjust stock', await exists(`${form}`));
 
   // ================= support: read-only =================
   ok('support signs in', await signInWithInvite('support', 'Support E2E'));
-  await visit(`/products/${PID}`, '!!document.querySelector("[data-section=stock]")');
+  await visit(`/products/${PID}?tab=pricing`, '!!document.querySelector("[data-section=price]")');
+  const supNoPrice = !(await exists('#price-form'));
+  await visit(`/products/${PID}?tab=variants`, '!!document.querySelector("[data-section=stock]")');
   ok('support (read-only): sees product and stock, no mutation forms', (await exists('[data-product-facts]')) && (await exists('[data-variants-table]'))
-    && !(await exists('#price-form')) && !(await exists('[data-stock-forms]')) && (await exists('[data-readonly=stock]')));
+    && supNoPrice && !(await exists('[data-stock-forms]')) && (await exists('[data-readonly=stock]')));
 
   // ================= accountant: no catalogue access =================
   ok('accountant signs in', await signInWithInvite('accountant', 'Accounts E2E'));
   const accNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('accountant menu has no Products / Inventory', !/Products|Inventory/.test(accNav), accNav);
+  // The accountant may open one Inventory view (Stock value, costs.read): the module shows and opens on that view only.
+  ok('accountant menu has no Products; Inventory opens on Stock value only', !/Products/.test(accNav)
+    && (await ev(`document.querySelector('.nav a[data-module=inventory]')?.getAttribute('href')`)) === '/stock-value', accNav);
   for (const p of ['/products', `/products/${PID}`, '/inventory']) {
     await visit(p);
     ok(`accountant gets "not permitted" on ${p} (server-side, no data rendered)`, (await exists('[data-gate=forbidden]')) && !(await exists('[data-products-table],[data-product-facts],[data-stock-table]')));

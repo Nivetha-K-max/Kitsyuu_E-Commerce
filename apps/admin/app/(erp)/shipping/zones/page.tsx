@@ -9,6 +9,7 @@ import { rupeesField } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { checkQuoteAction, deleteRateAction, saveRateAction, saveZoneAction } from '../actions';
 import ShippingNav from '../ShippingNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Delivery zones and rates' };
 type Zone = Awaited<ReturnType<typeof listShippingZones>>['zones'][number];
@@ -64,8 +65,7 @@ export default async function ZonesPage() {
   const manage = can(actor, 'shipping.manage');
   const methodText = method === 'zones' ? 'Checkout uses these zone rates.' : method === 'flat' ? 'Checkout uses the flat rate from Configuration; these rates are not used.' : 'Delivery charges are not set up (Configuration → Shipping); these rates are not used.';
   return (
-    <>
-      <PageHead title="Shipping" eyebrow={methodText} />
+    <Workspace name="shipping-zones" title="Shipping" summary={methodText}>
       <ShippingNav current="/shipping/zones" />
       {zones.length === 0 ? <Empty title="No delivery zones yet" kind="zones">Add a zone (states and/or PIN prefixes), then its rates.</Empty> : zones.map(z => (
         <section key={z.id} className="card" aria-labelledby={`z-${z.id}`} data-zone={z.name}>
@@ -114,6 +114,6 @@ export default async function ZonesPage() {
           </ActionForm>
         </section>
       </div>
-    </>
+    </Workspace>
   );
 }

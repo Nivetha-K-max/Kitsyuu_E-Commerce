@@ -7,7 +7,7 @@ import { refundProvider } from '@/lib/payments';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
 
 const storeUrl = () => process.env.STORE_URL || null;
-const done = (r: ActionState) => { if (r.ok) { revalidatePath('/returns', 'layout'); revalidatePath('/inventory'); } return r; };
+const done = (r: ActionState) => { if (r.ok) { revalidatePath('/returns', 'layout'); revalidatePath('/orders', 'layout'); revalidatePath('/payments', 'layout'); revalidatePath('/inventory'); } return r; };
 
 export async function returnStepAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();

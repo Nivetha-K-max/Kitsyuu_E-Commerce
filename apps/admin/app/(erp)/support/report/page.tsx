@@ -7,6 +7,7 @@ import { formatNumber } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import SupportNav from '../SupportNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Support report' };
 
@@ -19,8 +20,7 @@ export default async function SupportReportPage({ searchParams }: { searchParams
   const r = await supportReport(db(), actor, range);
   const total = r.byStatus.reduce((n, s) => n + s.n, 0);
   return (
-    <>
-      <PageHead title="Support" eyebrow="Tickets opened in the period." />
+    <Workspace name="support-report" title="Support" summary="Tickets opened in the period.">
       <SupportNav current="/support/report" manage={can(actor, 'support.manage')} />
       <RangeForm from={range.from} to={range.to} />
       <dl className="report-kpis">
@@ -34,6 +34,6 @@ export default async function SupportReportPage({ searchParams }: { searchParams
         <section className="card"><h2>By status now</h2>{r.byStatus.length === 0 ? <Empty compact title="No tickets" /> : (
           <table><tbody>{r.byStatus.map(x => <tr key={x.status}><td><StatusBadge status={x.status} /></td><td className="num">{x.n}</td></tr>)}</tbody></table>)}</section>
       </div>
-    </>
+    </Workspace>
   );
 }

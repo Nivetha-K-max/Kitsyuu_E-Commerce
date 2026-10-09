@@ -9,18 +9,15 @@ import { DomainError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type Mailer, type MailMessage, type StaffPrincipal } from '@kitsyuu/auth';
 import { getShipment } from './fulfilment.ts';
 import type { MutationContext } from './staff.ts';
+import { emailEnabled, sendTransactionalEmail } from './transactional-email.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 // ---------------------------------------------------------------- order emails
 export type OrderEmailEvent = 'order.shipped' | 'order.cancelled';
-const SETTING: Record<OrderEmailEvent, string> = { 'order.shipped': 'notifications.order_shipped', 'order.cancelled': 'notifications.order_cancelled' };
 
-export async function orderEmailEnabled(q: Queryable, event: OrderEmailEvent): Promise<boolean> {
-  const r = await q.selectFrom('settings').select('value').where('key', '=', SETTING[event]).executeTakeFirst();
-  return r?.value === 'on';
-}
+export const orderEmailEnabled = (q: Queryable, event: OrderEmailEvent): Promise<boolean> => emailEnabled(q, event);
 
 /** The email for an order that was just shipped or cancelled, or null (no contact email, or the order is not in that state). */
 export async function orderStatusEmail(q: Queryable, orderId: string, event: OrderEmailEvent, opts: { storeUrl?: string | null } = {}): Promise<MailMessage | null> {
@@ -41,20 +38,10 @@ export async function orderStatusEmail(q: Queryable, orderId: string, event: Ord
     'If you have questions about this, reply to this email.', '', ...link].join('\n') };
 }
 
-/** Sends the email for an order status change when that email is switched on; logs the attempt. Never throws. */
-export async function notifyOrderStatus(db: Db, mailer: Mailer, orderId: string, event: OrderEmailEvent, opts: { storeUrl?: string | null } = {}) {
-  try {
-    if (!(await orderEmailEnabled(db, event))) return { sent: false as const, reason: 'off' };
-    const m = await orderStatusEmail(db, orderId, event, opts);
-    if (!m) return { sent: false as const, reason: 'no_recipient' };
-    let error: string | null = null;
-    try { await mailer.send(m); } catch (e) { error = String((e as Error).message ?? e).slice(0, 500); }
-    await db.insertInto('notification_log').values({ event, order_id: orderId, recipient: m.to, subject: m.subject, status: error ? 'failed' : 'sent', error }).execute();
-    return error ? { sent: false as const, reason: 'failed' } : { sent: true as const };
-  } catch (e) {
-    console.error('[notifications] order email could not be prepared', e);
-    return { sent: false as const, reason: 'error' };
-  }
+/** Sends the email for an order status change when that email is switched on; once per order; logs the attempt. Never
+    throws. (2026-10-08: through the transactional email service.) */
+export function notifyOrderStatus(db: Db, mailer: Mailer, orderId: string, event: OrderEmailEvent, opts: { storeUrl?: string | null } = {}) {
+  return sendTransactionalEmail(db, mailer, event, async q => { const m = await orderStatusEmail(q, orderId, event, opts); return m && { ...m, orderId }; });
 }
 
 export async function listNotificationLog(db: Db, actor: StaffPrincipal, limit = 50) {

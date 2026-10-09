@@ -4,6 +4,7 @@ import { globalSearch } from '@kitsyuu/core';
 import { Empty, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Search' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -15,8 +16,7 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
   const term = (Array.isArray(raw) ? raw[0] : raw ?? '').slice(0, 80);
   const groups = term.trim().length >= 2 ? await globalSearch(db(), actor, term) : [];
   return (
-    <>
-      <PageHead section="Overview" title="Search" eyebrow="Products, orders, customers, vendors, purchase orders, materials and production." />
+    <Workspace name="search" title="Search" summary="Products, orders, customers, vendors, purchase orders, materials and production.">
       <FilterForm className="actions" role="search" data-global-search>
         <label className="sr-only" htmlFor="gs-q">Search</label>
         <input id="gs-q" name="q" className="input" placeholder="Name, SKU, order number, email…" defaultValue={term} autoFocus />
@@ -32,6 +32,6 @@ export default async function SearchPage({ searchParams }: { searchParams: SP })
             ))}</ul>
           </section>
         ))}</div>}
-    </>
+    </Workspace>
   );
 }

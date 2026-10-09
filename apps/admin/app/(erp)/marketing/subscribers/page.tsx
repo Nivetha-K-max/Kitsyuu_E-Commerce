@@ -4,7 +4,8 @@ import { can } from '@kitsyuu/auth';
 import { listSubscribers, NEWSLETTER_CONSENT } from '@kitsyuu/core';
 import { ActionForm, Hidden } from '@/components/forms';
 import FilterForm from '@/components/FilterForm';
-import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { StateBlock, Workspace } from '@/components/frame';
+import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { one, pageOf, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
@@ -25,10 +26,8 @@ export default async function SubscribersPage({ searchParams }: { searchParams: 
   const list = await listSubscribers(db(), actor, { q, status, page });
   const qs = (p: number) => `/marketing/subscribers?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}&page=${p}`;
   return (
-    <>
-      <PageHead title="Marketing" eyebrow={`${formatNumber(list.counts.subscribed)} subscribed · ${formatNumber(list.counts.unsubscribed)} unsubscribed. Consent wording: “${NEWSLETTER_CONSENT}”`}>
-        {can(actor, 'customers.read') && <a className="btn ghost" href="/marketing/subscribers/export" download data-subscribers-export>Download CSV</a>}
-      </PageHead>
+    <Workspace name="marketing-subscribers" title="Marketing" summary={`${formatNumber(list.counts.subscribed)} subscribed · ${formatNumber(list.counts.unsubscribed)} unsubscribed. Consent wording: “${NEWSLETTER_CONSENT}”`}
+      actions={can(actor, 'customers.read') ? <a className="btn ghost" href="/marketing/subscribers/export" download data-subscribers-export>Download CSV</a> : undefined}>
       <MarketingNav current="/marketing/subscribers" />
       <FilterForm className="actions" role="search" aria-label="Filter subscribers" data-subscriber-filters>
         <label className="sr-only" htmlFor="ns-q">Email</label>
@@ -37,7 +36,7 @@ export default async function SubscribersPage({ searchParams }: { searchParams: 
         <select id="ns-s" name="status" className="input" defaultValue={status}><option value="subscribed">Subscribed</option><option value="unsubscribed">Unsubscribed</option><option value="all">All</option></select>
         <button className="btn ghost" type="submit">Apply</button>
       </FilterForm>
-      {list.rows.length === 0 ? <Empty title="No subscribers here" kind="subscribers">People who sign up for the newsletter in the store appear here.</Empty> : (
+      {list.rows.length === 0 ? <StateBlock title="No subscribers here" name="subscribers">People who sign up for the newsletter in the store appear here. No newsletter is sent from this page.</StateBlock> : (
         <div className="table-wrap"><table data-subscribers-table>
           <thead><tr><th>Email</th><th>Status</th><th>Signed up</th><th>Where</th><th>Unsubscribed</th>{can(actor, 'marketing.manage') && <th />}</tr></thead>
           <tbody>{list.rows.map(s => (
@@ -55,6 +54,6 @@ export default async function SubscribersPage({ searchParams }: { searchParams: 
         {page > 1 && <Link className="btn ghost sm" href={qs(page - 1)}>Previous</Link>}
         {list.hasNext && <Link className="btn ghost sm" href={qs(page + 1)}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

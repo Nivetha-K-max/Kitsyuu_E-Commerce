@@ -42,7 +42,9 @@ function useActive(idx: Index, query: string): Active {
     const p = idx.bySlug(decodeURIComponent(path.split('/')[2] || ''));
     return p ? { key: 'cat:' + p.category, exact: false, sub: p.subcategory } : {};
   }
-  const tool = ({ '/cart': 'cart', '/wishlist': 'wishlist', '/search': 'search', '/account': 'account', '/login': 'account', '/signup': 'account' } as Record<string, string>)[path];
+  if (path === '/account/wishlist') return { tool: 'wishlist' };
+  if (path === '/account' || path.startsWith('/account/')) return { tool: 'account' };
+  const tool = ({ '/cart': 'cart', '/wishlist': 'wishlist', '/search': 'search', '/login': 'account', '/signup': 'account' } as Record<string, string>)[path];
   return tool ? { tool } : {};
 }
 
@@ -132,6 +134,8 @@ export default function Header() {
   /* Auth state is a UI hint only (the server decides access). Until it is known, the link says "Account". */
   const auth = useAuth(), signedIn = hydrated && auth.status === 'user';
   const accountHref = hydrated && auth.status === 'guest' ? '/login' : '/account', accountLabel = hydrated && auth.status === 'guest' ? 'Log in' : 'Account';
+  // One wishlist: signed-in customers open it inside their account, guests on its own page.
+  const wishHref = signedIn ? '/account/wishlist' : url.wishlist;
   const [query, setQuery] = useState('');
   const active = useActive(idx, query), path = usePathname();
   // The menus depend only on the catalogue: worked out once, not on every render (e.g. each cart change).
@@ -188,7 +192,7 @@ export default function Header() {
           })}
         </ul>
         <ul className="st-nav-extra">
-          <li><Link href={url.wishlist} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
+          <li><Link href={wishHref} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
           <li><Link href={accountHref} {...cur('account')}>{accountLabel}</Link></li>
           <li><a href="/our-story">Our story</a></li>
         </ul>
@@ -196,7 +200,7 @@ export default function Header() {
       <div className="st-tools">
         <ThemeToggle />
         <Link className="st-tool" href={url.search()} {...cur('search')}>{Icons.search}<span className="st-tool-label">Search</span></Link>
-        <Link className="st-tool st-tool-wish" href={url.wishlist} {...cur('wishlist')}>{Icons.heart}<span className="st-tool-label">Wishlist</span> <span className="st-count-badge">(<span data-badge="wish">{wishCount}</span>)<span className="sr-only"> saved</span></span></Link>
+        <Link className="st-tool st-tool-wish" href={wishHref} {...cur('wishlist')}>{Icons.heart}<span className="st-tool-label">Wishlist</span> <span className="st-count-badge">(<span data-badge="wish">{wishCount}</span>)<span className="sr-only"> saved</span></span></Link>
         <Link className="st-tool" href={url.cart} {...cur('cart')}>{Icons.bag}<span className="st-tool-label">Cart</span> <span className="st-count-badge">(<span data-badge="cart">{cartCount}</span>)<span className="sr-only"> items</span></span></Link>
         <Link className="st-tool st-tool-account" href={accountHref} data-auth={signedIn ? 'customer' : hydrated && auth.status === 'guest' ? 'guest' : 'unknown'} {...cur('account')}>{Icons.user}<span className="st-tool-label">{accountLabel}</span></Link>
         <button className="st-tool st-menu-toggle" type="button" aria-expanded={open} aria-controls="st-nav" ref={toggle} onClick={() => setOpen(o => !o)}>{Icons.menu}<span className="st-menu-label">{open ? 'Close' : 'Menu'}</span></button>

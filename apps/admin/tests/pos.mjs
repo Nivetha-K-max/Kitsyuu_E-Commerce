@@ -8,13 +8,14 @@
 import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'pos e2e passphrase';
-const pool = new pg.Pool({connectionString: KITSYUU_DB_URL, max: 1});
+const pool = new pg.Pool({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL), max: 1});
 const q = async (text, params = []) => (await pool.query(text, params)).rows;
 
 const b = await launch(9397);

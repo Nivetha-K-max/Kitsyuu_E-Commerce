@@ -5,35 +5,55 @@
    - order.payment_request: when staff confirm a draft order for online payment (the link to pay it from the account).
    - cart.auto_reminder: the automatic "your cart is waiting" email (below). */
 import { sql, type Db, type Queryable } from '@kitsyuu/db';
-import type { Mailer } from '@kitsyuu/auth';
+import type { Mailer, MailMessage } from '@kitsyuu/auth';
 import { customerEmailEnabled, hello, sendCustomerEmail, storeLink, type EmailResult } from './customer-email.ts';
 import { lineLabel, pricedLine, variantQuery } from './cart.ts';
+import { getShipment } from './fulfilment.ts';
 
 const inr = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const contactOf = (c: unknown) => { const o = (c ?? {}) as Record<string, unknown>; return { email: typeof o.email === 'string' ? o.email.trim() : '', name: o.name }; };
 
-export async function notifyOrderPacked(db: Db, mailer: Mailer, orderId: string, storeUrl?: string | null): Promise<EmailResult> {
-  return sendCustomerEmail(db, mailer, 'order.packed', async () => {
-    const o = await db.selectFrom('orders').select(['id', 'order_number', 'contact', 'channel']).where('id', '=', orderId).executeTakeFirst();
-    if (!o || o.channel !== 'online') return null;
+type OrderMessage = MailMessage & { orderId: string };
+
+export async function orderPackedEmail(q: Queryable, orderId: string, storeUrl?: string | null): Promise<OrderMessage | null> {
+    const o = await q.selectFrom('orders').select(['id', 'order_number', 'contact', 'channel', 'status']).where('id', '=', orderId).executeTakeFirst();
+    if (!o || o.channel !== 'online' || o.status === 'cancelled') return null;
     const c = contactOf(o.contact);
     return { orderId: o.id, to: c.email, subject: `Your KITSYUU order ${o.order_number} is packed`,
       text: [hello(c.name), '', `Your order ${o.order_number} is packed and will be handed to the courier next.`, '',
         ...storeLink(storeUrl, `/account/orders/${encodeURIComponent(o.order_number)}`, 'Your order')].join('\n') };
-  });
 }
+export const notifyOrderPacked = (db: Db, mailer: Mailer, orderId: string, storeUrl?: string | null): Promise<EmailResult> =>
+  sendCustomerEmail(db, mailer, 'order.packed', q => orderPackedEmail(q, orderId, storeUrl));
 
-export async function notifyPaymentRequest(db: Db, mailer: Mailer, orderId: string, storeUrl?: string | null): Promise<EmailResult> {
-  return sendCustomerEmail(db, mailer, 'order.payment_request', async () => {
-    const o = await db.selectFrom('orders').select(['id', 'order_number', 'contact', 'total_paise', 'status']).where('id', '=', orderId).executeTakeFirst();
+export async function paymentRequestEmail(q: Queryable, orderId: string, storeUrl?: string | null): Promise<OrderMessage | null> {
+    const o = await q.selectFrom('orders').select(['id', 'order_number', 'contact', 'total_paise', 'status']).where('id', '=', orderId).executeTakeFirst();
     if (!o || o.status !== 'pending_payment') return null;
     const c = contactOf(o.contact);
     return { orderId: o.id, to: c.email, subject: `Your KITSYUU order ${o.order_number} is ready to pay`,
       text: [hello(c.name), '', `We have prepared your order ${o.order_number} (${inr(o.total_paise)}).`,
         'Sign in to your account and open the order to pay it. The items are set aside for you until then.', '',
         ...storeLink(storeUrl, `/account/orders/${encodeURIComponent(o.order_number)}`, 'Pay your order')].join('\n') };
-  });
 }
+export const notifyPaymentRequest = (db: Db, mailer: Mailer, orderId: string, storeUrl?: string | null): Promise<EmailResult> =>
+  sendCustomerEmail(db, mailer, 'order.payment_request', q => paymentRequestEmail(q, orderId, storeUrl));
+
+/** Tracking details of a shipped order (2026-10-08): sent when staff add or correct the courier / tracking number after
+    dispatch, or the shipment is marked in transit. The tracking number is part of the subject, so a corrected number is a
+    new email and the same one is never sent twice. Nothing to say without a tracking number. */
+export async function orderTrackingEmail(q: Queryable, orderId: string, storeUrl?: string | null): Promise<OrderMessage | null> {
+  const o = await q.selectFrom('orders').select(['id', 'order_number', 'contact', 'channel', 'status']).where('id', '=', orderId).executeTakeFirst();
+  if (!o || o.channel !== 'online' || o.status !== 'shipped') return null;
+  const s = await getShipment(q, o.id);
+  if (!s?.trackingNumber) return null;
+  const c = contactOf(o.contact);
+  return { orderId: o.id, to: c.email, subject: `Tracking for your KITSYUU order ${o.order_number}: ${s.trackingNumber}`,
+    text: [hello(c.name), '', `Your order ${o.order_number} is on its way.`, '',
+      `Courier: ${s.carrierLabel}`, `Tracking number: ${s.trackingNumber}`, ...(s.trackingUrl ? [`Track it: ${s.trackingUrl}`] : []), '',
+      ...storeLink(storeUrl, `/account/orders/${encodeURIComponent(o.order_number)}`, 'Your order')].join('\n') };
+}
+export const notifyOrderTracking = (db: Db, mailer: Mailer, orderId: string, storeUrl?: string | null): Promise<EmailResult> =>
+  sendCustomerEmail(db, mailer, 'order.tracking', q => orderTrackingEmail(q, orderId, storeUrl));
 
 // ---------------------------------------------------------------- automatic "your cart is waiting"
 /** Minutes a cart must stay unchanged before the reminder: ABANDONED_CART_DELAY_MINUTES (15–1440), else 45. */

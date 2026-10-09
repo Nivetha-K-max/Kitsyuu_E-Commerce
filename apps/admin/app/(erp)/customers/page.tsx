@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -7,6 +8,7 @@ import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
+import { FilterLink, NavFrame, NavLink } from '@/components/NavFrame';
 
 export const metadata: Metadata = { title: 'Customers' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -29,13 +31,15 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
   const link = (page: number) => `/customers?${new URLSearchParams({ ...Object.fromEntries(active), page: String(page) })}`;
   const v = (k: string) => raw[k] ?? '';
   return (
-    <>
+    <NavFrame className="ord ws queue" data-workspace="customers">
       <PageHead section="Commerce" title="Customers"
         eyebrow={`${formatNumber(totals.total)} account${totals.total === 1 ? '' : 's'} · ${formatNumber(totals.disabled)} disabled${query.page > 1 ? ` · page ${query.page}` : ''}`} />
+      <ModuleViews module="customers" label="Customers" current="/customers" />
       {!parsed.success && <p className="msg error" role="alert">Some filters were not valid and were ignored.</p>}
-      <FilterForm className="actions" role="search" aria-label="Filter customers" data-customer-filters>
+      <div className="ord-toolbar cust-toolbar">
+      <FilterForm debounce={200} role="search" aria-label="Filter customers" data-customer-filters>
         <label className="sr-only" htmlFor="c-q">Search</label>
-        <input id="c-q" name="q" className="input" placeholder="Email, name or phone" defaultValue={query.q ?? ''} />
+        <input id="c-q" name="q" className="input" placeholder="Search name, email or phone" defaultValue={query.q ?? ''} />
         <label className="sr-only" htmlFor="c-status">Account status</label>
         <select id="c-status" name="status" className="input" defaultValue={query.status}>
           <option value="all">All accounts</option><option value="active">Active</option><option value="disabled">Disabled</option>
@@ -71,39 +75,39 @@ export default async function CustomersPage({ searchParams }: { searchParams: SP
               <option value="newest">Newest first</option><option value="spend">Highest spend</option><option value="orders">Most orders</option><option value="last_order">Last order</option><option value="points">Most points</option></select>
           </div>
         </details>
-        <button className="btn ghost" type="submit">Apply</button>
-        {filtered && <Link className="btn link" href="/customers">Clear</Link>}
+        <button className="btn ghost sr-only" type="submit">Apply</button>
       </FilterForm>
+      {filtered && <FilterLink className="btn link" group="clear" current={false} href="/customers" data-clear-filters>Clear all</FilterLink>}
+      </div>
       {rows.length === 0 ? (
         <Empty title={filtered ? 'No matching customers' : 'No customers yet'} kind="customers"
           action={filtered ? <Link className="btn ghost" href="/customers">Clear filters</Link> : undefined}>
           {filtered ? 'No customer accounts match these filters.' : 'Customer accounts appear here once people sign up on the store.'}
         </Empty>
       ) : (
-        <div className="table-wrap"><table data-customers-table>
-          <thead><tr><th>Customer</th><th>Status</th><th className="num">Orders</th><th className="num">Paid orders</th><th className="num">Lifetime value</th><th className="num">Points</th><th>Last order</th><th>Joined</th></tr></thead>
+        <div className="table-wrap ord-table" data-fresh key={link(query.page)}><table data-customers-table>
+          <thead><tr><th>Customer</th><th>Account</th><th className="num">Orders</th><th className="num">Lifetime value</th><th className="num">Points</th><th>Last order</th><th>Joined</th></tr></thead>
           <tbody>{rows.map(c => (
             <tr key={c.id} data-customer-row={c.email}>
-              <td><Link className="row-link" href={`/customers/${c.id}`}>{c.fullName || c.email}</Link>
-                <div className="note">{c.email}{c.phone ? ` · ${c.phone}` : ''}{!c.verified && ' · email not verified'}</div></td>
-              <td><StatusBadge status={c.status} /></td>
-              <td className="num" data-orders-count>{formatNumber(c.ordersCount)}</td>
-              <td className="num">{formatNumber(c.paidOrdersCount)}</td>
-              <td className="num money" data-lifetime-value>{formatPaise(c.lifetimeValuePaise)}</td>
-              <td className="num" data-points>{formatNumber(c.points)}{c.subscribed ? <div className="note">subscribed</div> : null}</td>
-              <td className="nowrap">{formatDateTime(c.lastOrderAt)}</td>
-              <td className="nowrap">{formatDateTime(c.createdAt)}</td>
+              <td className="ord-who"><NavLink prefetch className="row-link" href={`/customers/${c.id}`}>{c.fullName || c.email}</NavLink>
+                <div className="ord-no">{c.email}{c.phone ? <span> · {c.phone}</span> : null}</div></td>
+              <td className="ord-stage"><StatusBadge status={c.status} />{!c.verified && <div className="note">email not verified</div>}{c.subscribed ? <div className="note">subscribed to emails</div> : null}</td>
+              <td className="num ord-extra" data-label="Orders"><span data-orders-count>{formatNumber(c.ordersCount)}</span>{c.ordersCount > 0 && <div className="note">{formatNumber(c.paidOrdersCount)} paid</div>}</td>
+              <td className="num money ord-amount" data-lifetime-value>{formatPaise(c.lifetimeValuePaise)}</td>
+              <td className="num ord-extra" data-label="Points" data-points>{formatNumber(c.points)}</td>
+              <td className="nowrap ord-extra" data-label="Last order">{c.lastOrderAt ? formatDateTime(c.lastOrderAt) : <span className="note">no orders yet</span>}</td>
+              <td className="nowrap ord-placed">{formatDateTime(c.createdAt)}</td>
             </tr>))}
           </tbody>
         </table></div>
       )}
       {(query.page > 1 || hasNext) && (
         <nav className="pager" aria-label="Customer pages">
-          {query.page > 1 ? <Link className="btn ghost sm" href={link(query.page - 1)}>← Newer</Link> : <span />}
+          {query.page > 1 ? <FilterLink className="btn ghost sm" group="page" current={false} href={link(query.page - 1)}>← Newer</FilterLink> : <span />}
           <span className="pager-page">Page {query.page}</span>
-          {hasNext ? <Link className="btn ghost sm" href={link(query.page + 1)}>Older →</Link> : <span />}
+          {hasNext ? <FilterLink className="btn ghost sm" group="page" current={false} href={link(query.page + 1)}>Older →</FilterLink> : <span />}
         </nav>
       )}
-    </>
+    </NavFrame>
   );
 }

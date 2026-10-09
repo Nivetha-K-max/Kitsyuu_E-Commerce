@@ -27,7 +27,7 @@ export function NavFrame({ children, ...rest }: { children: ReactNode } & HTMLAt
     if (t.closest('a,button,input,label,select,textarea,summary,details,form,[role=menuitem],[data-no-row-click]')) return;
     const row = t.closest('tbody tr');
     const link = row?.querySelector<HTMLAnchorElement>('a.row-link');
-    if (!row || !link || window.getSelection()?.toString()) return;
+    if (!row || !link || row.closest('.dt') || window.getSelection()?.toString()) return;
     e.preventDefault();
     go({ href: link.getAttribute('href')!, group: 'open' }, true);
   };

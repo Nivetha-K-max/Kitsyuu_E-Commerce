@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { listCustomerOrders } from '@kitsyuu/core';
+import { EmptyNote, StatusPill } from '@/components/account-ui';
 import { db, requireCustomer } from '@/lib/server';
 import { formatDate, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, rupees } from '@/lib/account-format';
 
@@ -16,19 +17,20 @@ export default async function OrdersPage() {
         <div className="st-plp-aside"><p className="st-result-count">{orders.length} {orders.length === 1 ? 'order' : 'orders'}</p><p>Newest first. Open an order for its items, payment and delivery details.</p></div>
       </header>
       {orders.length === 0 ? (
-        <div className="st-account-empty" data-empty="orders"><p>You have not placed any orders yet.</p><Link className="button" href="/shop">Start shopping</Link></div>
+        <EmptyNote data-empty="orders" action={{ href: '/shop', label: 'Start shopping' }}>You have not placed any orders yet.</EmptyNote>
       ) : (
         <div className="st-table-wrap"><table className="st-order-table" data-orders-table>
           <caption className="sr-only">Your orders</caption>
-          <thead><tr><th scope="col">Order</th><th scope="col">Placed</th><th scope="col">Items</th><th scope="col">Status</th><th scope="col">Payment</th><th scope="col" className="num">Total</th></tr></thead>
+          <thead><tr><th scope="col">Order</th><th scope="col">Placed</th><th scope="col">Items</th><th scope="col">Status</th><th scope="col">Payment</th><th scope="col" className="num">Total</th><th scope="col"><span className="sr-only">Open</span></th></tr></thead>
           <tbody>{orders.map(o => (
             <tr key={o.orderNumber} data-order={o.orderNumber}>
               <th scope="row"><Link href={`/account/orders/${encodeURIComponent(o.orderNumber)}`}>{o.orderNumber}</Link></th>
-              <td>{formatDate(o.createdAt)}</td>
-              <td>{o.units}</td>
-              <td>{ORDER_STATUS_LABEL[o.status] ?? o.status}</td>
-              <td>{o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : '—'}</td>
-              <td className="num">{rupees(o.totalPaise)}</td>
+              <td data-label="Placed">{formatDate(o.createdAt)}</td>
+              <td data-label="Items">{o.units}</td>
+              <td data-label="Status"><StatusPill status={o.status} label={ORDER_STATUS_LABEL[o.status] ?? o.status} /></td>
+              <td data-label="Payment">{o.paymentStatus ? PAYMENT_STATUS_LABEL[o.paymentStatus] ?? o.paymentStatus : '—'}</td>
+              <td data-label="Total" className="num">{rupees(o.totalPaise)}</td>
+              <td className="st-order-open"><Link className="st-acc-action" href={`/account/orders/${encodeURIComponent(o.orderNumber)}`} aria-label={`View order ${o.orderNumber}`}>View<span aria-hidden="true"> →</span></Link></td>
             </tr>
           ))}</tbody>
         </table></div>

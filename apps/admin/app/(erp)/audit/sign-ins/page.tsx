@@ -6,6 +6,7 @@ import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Sign-in history' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -23,8 +24,7 @@ export default async function SignInsPage({ searchParams }: { searchParams: SP }
   const { rows, hasNext } = await listSignIns(db(), actor, { page, realm, failedOnly, email });
   const link = (p: number) => `/audit/sign-ins?${new URLSearchParams({ ...(realm && { realm }), ...(failedOnly && { failed: '1' }), ...(email && { email }), page: String(p) })}`;
   return (
-    <>
-      <PageHead section="System" title="Sign-in history" crumbs={[{ href: '/audit', label: 'Audit log' }]} eyebrow="Staff and customer sign-in attempts, newest first. Times are IST." />
+    <Workspace name="audit-sign-ins" title="Sign-in history" summary="Staff and customer sign-in attempts, newest first. Times are IST." crumbs={[{ href: '/audit', label: 'Audit log' }]}>
       <FilterForm className="actions" data-signin-filters>
         <label className="sr-only" htmlFor="f-realm">Who</label>
         <select id="f-realm" name="realm" className="input" defaultValue={realm ?? ''}>
@@ -53,6 +53,6 @@ export default async function SignInsPage({ searchParams }: { searchParams: SP }
         {page > 1 && <Link className="btn ghost sm" href={link(page - 1)}>Newer</Link>}
         {hasNext && <Link className="btn ghost sm" href={link(page + 1)}>Older</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

@@ -11,13 +11,14 @@
 import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'workflow e2e passphrase';
-const pool = new pg.Pool({connectionString: KITSYUU_DB_URL, max: 1});
+const pool = new pg.Pool({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL), max: 1});
 const q = async (text, params = []) => (await pool.query(text, params)).rows;
 
 const b = await launch(9396);
@@ -91,18 +92,19 @@ try {
 
   // ---------- purchasing (super admin: approves, sees costs) ----------
   await autoConfirm();
-  await visit('/vendors', '!!document.querySelector("#create-vendor-form")');
+  await visit('/vendors', '!!document.querySelector("[data-drawer-open=new-vendor]")');
+  await until(`(()=>{if(document.querySelector('#create-vendor-form'))return true;const t=document.querySelector('[data-drawer-open=new-vendor]');if(t&&Object.keys(t).some(k=>k.startsWith('__reactProps')))t.click();return false})()`, 20000);
   await fill('#create-vendor-form input[name=name]', 'WF Knits'); await submit('#create-vendor-form');
-  ok('vendor added', await until(`!!document.querySelector('[data-vendor="WF Knits"] form[id^=vendor-products-]')`, 15000));
-  const vpForm = '#' + await ev(`document.querySelector('[data-vendor="WF Knits"] form[id^=vendor-products-]').id`);
-  await ev(`document.querySelector('${vpForm}').closest('details').open = true`);
+  ok('vendor added', await until(`!!document.querySelector('[data-vendor="WF Knits"]')`, 15000));
+  const [vend] = await q(`select id from vendors where name = 'WF Knits'`);
+  await visit(`/vendors/${vend.id}?tab=products`, '!!document.querySelector("form[id^=vendor-products-]")');
+  const vpForm = '#' + await ev(`document.querySelector('form[id^=vendor-products-]').id`);
   await until(`(()=>{const c=document.querySelector('${vpForm} [data-pick]');return !!c && Object.keys(c).some(k=>k.startsWith('__reactProps'))})()`, 20000);
   await ev(`(()=>{for(const sku of ['KTS-TOP-001','KTS-TOP-002']){const c=document.querySelector('${vpForm} [data-pick="'+sku+'"]');if(!c)throw new Error('no '+sku);if(!c.checked)c.click();}return true})()`);
   ok('product picker counts the selection', /2 selected/.test(await text(`${vpForm} [data-picker-count]`)));
   await submit(vpForm);
   ok('vendor supplies 2 products (saved together)', /2 products supplied/.test(await message(vpForm)), await message(vpForm));
-  const [vend] = await q(`select id from vendors where name = 'WF Knits'`);
-  await visit(`/purchase-orders?vendor=${vend.id}`, '!!document.querySelector("#create-po-form tr[data-po-product]")');
+  await visit(`/purchase-orders/new?vendor=${vend.id}`, '!!document.querySelector("#create-po-form tr[data-po-product]")');
   const poRow = `#create-po-form tr[data-po-product]:not([hidden])`;
   ok('new PO: only what this vendor supplies is listed', (await ev(`document.querySelectorAll('${poRow}').length`)) > 0 && /^KTS-TOP-00[12]/.test(await ev(`document.querySelector('${poRow}').dataset.poProduct`)));
   const poSku = await ev(`document.querySelector('${poRow}').dataset.poProduct`);
@@ -112,18 +114,22 @@ try {
   await autoConfirm(); await submit('#create-po-form');
   ok('purchase order created → its page', await until(atDetail('purchase-orders'), 15000), await ev('location.pathname') + ' ' + await message('#create-po-form'));
   const poPath = await ev('location.pathname');
+  await visit(poPath + '?tab=items', '!!document.querySelector("[data-po-lines]")');
   ok('PO lines: ordered / received / remaining', /Remaining/.test(await text('[data-po-lines]')) && await exists(`[data-line="${poSku}"][data-line-kind=product]`));
   ok('creating a PO does not touch stock', (await q(`select stock_qty from product_variants where sku = $1`, [poSku]))[0].stock_qty === st0.stock_qty);
+  await visit(poPath, '!!document.querySelector("#po-approve-form")');
   await autoConfirm(); await submit('#po-approve-form');
   await until('!!document.querySelector("#po-place-form") && !document.querySelector("#po-approve-form")', 15000);
   ok('approved (approver shown)', /Approved/.test(await text('[data-po-meta]')));
   await autoConfirm(); await submit('#po-place-form');
+  await until('!document.querySelector("#po-place-form")', 15000);
+  await visit(poPath + '?tab=receiving', '!!document.querySelector("[data-section=receipts]")');
   ok('sent to the vendor → receiving form', await until('!!document.querySelector("#receive-form")', 15000));
   await fill('#receive-form input[name^="received:"]', '4'); await fill('#receive-form input[name=vendorRef]', 'DC-9');
-  await submit('#receive-form');
+  await autoConfirm(); await submit('#receive-form');
   ok('partial delivery recorded with a GRN number', /^GRN.* recorded\. Some items are still to come\./.test(await message('#receive-form')), await message('#receive-form'));
-  await visit(poPath, '!!document.querySelector("[data-po-receipts]")');
-  ok('PO shows received 4, remaining 2, and the GRN with the vendor ref', /4/.test(await text(`[data-line="${poSku}"] [data-received]`)) && /2/.test(await text(`[data-line="${poSku}"] [data-remaining]`))
+  await visit(poPath + '?tab=receiving', '!!document.querySelector("[data-po-receipts]")');
+  ok('PO shows received 4, remaining 2, and the GRN with the vendor ref', /4/.test(await text(`[data-receiving-line="${poSku}"] [data-received]`)) && /2/.test(await text(`[data-receiving-line="${poSku}"] [data-remaining]`))
     && /GRN.*ref DC-9/.test(await text('[data-po-receipts]')), await text('[data-po-receipts]'));
   ok('stock +4 through the receipt', (await q(`select stock_qty from product_variants where sku = $1`, [poSku]))[0].stock_qty === st0.stock_qty + 4);
   const grnHref = await ev(`document.querySelector('[data-po-receipts] a').getAttribute('href')`);
@@ -148,7 +154,7 @@ try {
     && (await q(`select sku, price_paise from products where sku in ('KTS-TOP-001','KTS-TOP-002') order by sku`)).every((p, i) => p.price_paise === Math.round(prices0[i].price_paise * 1.1) || p.price_paise > prices0[i].price_paise), await text('[data-bulk-result]'));
   await q(`update products p set price_paise = x.price_paise from (values ('KTS-TOP-001', $1::int), ('KTS-TOP-002', $2::int)) x(sku, price_paise) where p.sku = x.sku`, [prices0[0].price_paise, prices0[1].price_paise]);
   // Production: two sizes as one batch, linked to the purchase order.
-  await visit('/production', '!!document.querySelector("#create-production-batch-form")');
+  await visit('/production/new', '!!document.querySelector("#create-production-batch-form")');
   await hydrated('#create-production-batch-form tr[data-po-product] input[name="qtys[]"]');
   await fillNth('#create-production-batch-form tr[data-po-product] input[name="qtys[]"]', 0, '5');
   await fillNth('#create-production-batch-form tr[data-po-product] input[name="qtys[]"]', 1, '3');
@@ -173,6 +179,7 @@ try {
   await fill('#location-adjust-form select[name=variant]', variantValue); await fill('#location-adjust-form input[name=delta]', '20');
   await fill('#location-adjust-form select[name=reason]', 'restock'); await fill('#location-adjust-form input[name=note]', 'Received 20 units from supplier.');
   await fill('#location-adjust-form input[name=unitCost]', '850');
+  await autoConfirm();   // Phase 8: a location adjustment asks before it is written to the ledger
   await submit('#location-adjust-form');
   ok('restock at the branch: "Now 20 at this location"', /Now 20 at this location/.test(await message('#location-adjust-form')), await message('#location-adjust-form'));
   await visit(branchPath, '!!document.querySelector("[data-location-movements]")');
@@ -253,7 +260,7 @@ try {
 
   // ---------- customer page, abandoned checkouts ----------
   const [asha] = await q(`select id from customers where email = 'asha.fixture@test.local'`);
-  await visit(`/customers/${asha.id}`, '!!document.querySelector("[data-section=customer-drafts]")');
+  await visit(`/customers/${asha.id}?tab=orders`, '!!document.querySelector("[data-section=customer-drafts]")');
   ok('customer page: draft orders, abandoned checkouts and discount history', (await exists('[data-customer-drafts]')) && (await exists('[data-section=customer-abandoned]'))
     && /Staff discount 10%: Customer loyalty discount/.test(await text('[data-customer-discounts]')), await text('[data-section=customer-discounts]'));
   ok('customer page: "New draft order" button', await exists('[data-link=new-draft]'));

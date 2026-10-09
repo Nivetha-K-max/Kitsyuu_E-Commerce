@@ -15,7 +15,7 @@ import { ActionForm, Hidden, RadioGroup } from './forms';
 export type AddressOption = { id: string; label: string; isDefault: boolean };
 /** The payment choices the server worked out for this cart and address. */
 export type PaymentOptions = {
-  method: 'online' | 'cod'; onlineAvailable: boolean;
+  method: 'online' | 'cod'; onlineAvailable: boolean; onlineNote?: string;
   cod: { offered: boolean; available: boolean; reason: string | null; note: string | null };
   points: { redeemable: boolean; balance: number; usable: number; valueLabel: string | null; using: boolean; message: string | null } | null;
 };
@@ -65,7 +65,7 @@ export default function CheckoutForm({ addresses, idempotencyKey, expectedTotalP
           <fieldset className="st-radio-group">
             <legend>Payment</legend>
             <label className="st-radio"><input type="radio" name="paymentMethod" value="online" defaultChecked={!cod} disabled={!payment.onlineAvailable} />
-              <span>Pay online now{!payment.onlineAvailable && <small> · not available yet</small>}</span></label>
+              <span>Pay online now{!payment.onlineAvailable && <small data-online-unavailable> · {payment.onlineNote ?? 'not available yet'}</small>}</span></label>
             <label className="st-radio"><input type="radio" name="paymentMethod" value="cod" defaultChecked={cod} disabled={!payment.cod.available} />
               <span>Cash on delivery{payment.cod.note && <small> · {payment.cod.note}</small>}</span></label>
           </fieldset>
@@ -74,6 +74,7 @@ export default function CheckoutForm({ addresses, idempotencyKey, expectedTotalP
       )}
       {payment?.points && payment.points.redeemable && payment.points.balance > 0 && (
         <div className="st-form-group" aria-busy={pending || undefined} data-points>
+          <p className="st-group-title">Points</p>
           <label className="st-check">
             <input type="checkbox" name="usePoints" value="on" defaultChecked={payment.points.using} disabled={!payment.points.usable}
               onChange={e => go(chosen!, selectedDeliveryId, payment.method, e.currentTarget.checked)} />
@@ -83,6 +84,7 @@ export default function CheckoutForm({ addresses, idempotencyKey, expectedTotalP
         </div>
       )}
       <div className="st-form-group" data-billing>
+        <p className="st-group-title">Billing address</p>
         {/* With only one saved address there is nothing to choose: a clear statement and an obvious way to add another,
             instead of a greyed-out (disabled) checkbox that looked broken. */}
         {others.length > 0 ? (

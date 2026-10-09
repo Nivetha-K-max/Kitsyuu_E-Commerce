@@ -11,7 +11,7 @@ export async function saveMaterialAction(_: ActionState, form: FormData): Promis
     const m = await saveMaterial(db(), actor, input, await requestContext());
     return { ok: true, message: input.materialId ? (m.changed ? 'Saved.' : 'No changes.') : `Material ${input.code} added.` };
   });
-  if (r.ok) revalidatePath('/materials');
+  if (r.ok) revalidatePath('/materials', 'layout');
   return r;
 }
 
@@ -21,6 +21,6 @@ export async function adjustMaterialAction(_: ActionState, form: FormData): Prom
     const res = await adjustMaterialStock(db(), actor, input, await requestContext());
     return { ok: true, message: `Stock is now ${res.balance}.` };
   });
-  if (r.ok) revalidatePath('/materials');
+  if (r.ok) revalidatePath('/materials', 'layout');
   return r;
 }

@@ -1,8 +1,10 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { listTransfers } from '@kitsyuu/core';
-import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
+import { StateBlock, ViewTabs, Workspace } from '@/components/frame';
+import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 
@@ -16,30 +18,29 @@ export default async function TransfersPage({ searchParams }: { searchParams: Se
   const actor = await requireActor();
   if (!can(actor, 'inventory.read')) return <><PageHead section="Catalogue" title="Transfers" /><Forbidden permission="inventory.read" /></>;
   const { status = '' } = await searchParams;
-  const transfers = await listTransfers(db(), actor, { status: status || undefined });
+  const current = STATUSES.some(s => s[0] === status) ? status : '';
+  const transfers = await listTransfers(db(), actor, { status: current || undefined });
+  const manage = can(actor, 'inventory.transfer');
   return (
-    <>
-      <PageHead section="Catalogue" title="Transfers" eyebrow="Stock leaves the sender when a transfer is sent and arrives when it is received.">
-        {can(actor, 'inventory.transfer') && <Link className="btn" href="/transfers/new">New transfer</Link>}
-      </PageHead>
-      <nav className="tabs" aria-label="Filter by status">
-        {STATUSES.map(([v, label]) => <Link key={v} href={v ? `/transfers?status=${v}` : '/transfers'} aria-current={status === v ? 'page' : undefined}>{label}</Link>)}
-      </nav>
-      {transfers.length === 0 ? <Empty title="No transfers" kind="transfers">{can(actor, 'inventory.transfer') ? 'Start one with New transfer.' : undefined}</Empty> : (
-        <div className="table-wrap"><table data-transfers-table>
+    <Workspace name="transfers" title="Transfers" summary="Stock leaves the sender when a transfer is sent and arrives when it is received"
+      actions={manage ? <Link className="btn" href="/transfers/new" data-link="new-transfer">New transfer</Link> : undefined}>
+      <ModuleViews module="inventory" label="Inventory" current="/transfers" />
+      <div data-transfer-views><ViewTabs label="Transfer status" current={current || 'all'} items={STATUSES.map(([v, label]) => ({ id: v || 'all', label: v ? label : 'All transfers', href: v ? `/transfers?status=${v}` : '/transfers' }))} /></div>
+      {transfers.length === 0 ? <StateBlock title={current ? `No ${current} transfers` : 'No transfers yet'} name="transfers">{manage ? 'Start one with New transfer: choose the two locations, then the quantities.' : 'Transfers between locations appear here.'}</StateBlock> : (
+        <div className="table-wrap ord-table" data-fresh key={current}><table data-transfers-table>
           <thead><tr><th>Transfer</th><th>From</th><th>To</th><th className="num">Units</th><th>Status</th><th>Received</th></tr></thead>
           <tbody>{transfers.map(t => (
             <tr key={t.id} data-transfer={t.number}>
-              <td><Link href={`/transfers/${t.id}`} className="row-link mono-strong">{t.number}</Link><div className="note">{formatDateTime(t.created_at as Date)}</div></td>
-              <td>{t.from_name}</td>
-              <td>{t.to_name}</td>
-              <td className="num">{formatNumber(t.units)}<div className="note">{t.lines} size(s)</div></td>
-              <td><StatusBadge status={t.status} /></td>
-              <td>{t.received_at ? formatDateTime(t.received_at as Date) : '—'}</td>
+              <td className="ord-who"><Link href={`/transfers/${t.id}`} className="row-link mono-strong">{t.number}</Link><div className="note">{formatDateTime(t.created_at as Date)}</div></td>
+              <td className="ord-extra" data-label="From">{t.from_name}</td>
+              <td className="ord-extra" data-label="To">{t.to_name}</td>
+              <td className="num ord-amount">{formatNumber(t.units)}<div className="note">{t.lines} size(s)</div></td>
+              <td className="ord-stage"><StatusBadge status={t.status} /></td>
+              <td className="ord-extra" data-label="Received">{t.received_at ? formatDateTime(t.received_at as Date) : '—'}</td>
             </tr>
           ))}</tbody>
         </table></div>
       )}
-    </>
+    </Workspace>
   );
 }

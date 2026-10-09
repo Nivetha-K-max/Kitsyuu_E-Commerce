@@ -31,6 +31,7 @@ export default function UserMenu({ user, logout, variant, onShortcuts }: {
         ) : (
           <Dropdown.Trigger className="avatar-btn" data-user-menu="avatar" aria-label="Account menu" title={user.email}>
             <span className="avatar" aria-hidden="true">{initials}</span>
+            <span className="avatar-text"><b>{user.name || user.email}</b><small>KITSYUU Store</small></span>
           </Dropdown.Trigger>
         )}
         <Dropdown.Portal>

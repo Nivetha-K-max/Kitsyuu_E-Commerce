@@ -43,6 +43,7 @@ export { orderConfirmationEmail } from './notifications.ts';
 export type { PaymentProvider, ProviderPayment, PaymentSession, PaymentOrderInfo, ProviderPaymentStatus, ProviderRefund } from './payments/provider.ts';
 export { testPaymentProvider, type TestPaymentProvider } from './payments/test-provider.ts';
 export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';
+export { productSales, productReviews, productProduction, productActivity } from './product-context.ts';
 // ---------- M8: operations ----------
 export { listCustomers, getCustomer, setCustomerStatus, updateCustomerContact, CUSTOMER_PAGE_SIZE } from './customers.ts';
 export {
@@ -171,8 +172,12 @@ export { RETAIL_ONLY_REASONS } from './inventory.ts';
 export { getCustomerInvoice, pricingView } from './customer-account.ts';
 export { listDraftOrders, getDraftOrder, draftSizeOptions, orderOrigin, customerOrderWorkflows, createDraftOrder, setDraftItem, setDraftAddresses, setDraftDiscount, setDraftNote, cancelDraftOrder, confirmDraftOrder,
   checkStaffDiscount, staffDiscountMaxBp, IN_STORE_PAYMENTS, type DraftPayment, type Address as DraftAddress } from './draft-orders.ts';
-export { sendOrderPlacedEmail, orderEmails, type OrderEmailResult } from './notifications.ts';
-export { notifyOrderPacked, notifyPaymentRequest, sendAbandonedCartReminders, abandonedCartDelayMinutes, type CartReminderRun } from './workflow-emails.ts';
+export { sendOrderPlacedEmail, orderPlacedMessage, orderEmails, type OrderEmailResult } from './notifications.ts';
+// ---------- transactional email service (2026-10-08): one sender, sent once per order, logged, retried ----------
+export { EMAIL_EVENTS, EMAIL_RETRY_MINUTES, EMAIL_RETRY_WINDOW_HOURS, emailEnabled, emailIdempotencyKey, sendTransactionalEmail, retryTransactionalEmails,
+  type EmailEvent, type BuiltEmail, type TransactionalEmailResult, type EmailRetryRun, type EmailRebuilder } from './transactional-email.ts';
+export { orderEmailRebuilders, retryOrderEmails, retryOrderEmailsThrottled, type EmailRetryOptions } from './email-retry.ts';
+export { notifyOrderPacked, notifyOrderTracking, notifyPaymentRequest, orderPackedEmail, orderTrackingEmail, paymentRequestEmail, sendAbandonedCartReminders, abandonedCartDelayMinutes, type CartReminderRun } from './workflow-emails.ts';
 export { setProductMinPrice } from './products.ts';
 export { syncShipmentTracking, type TrackingSyncRun } from './fulfilment/tracking-sync.ts';
 export { adjustPointsForRefunds, loyaltyTotals } from './loyalty.ts';

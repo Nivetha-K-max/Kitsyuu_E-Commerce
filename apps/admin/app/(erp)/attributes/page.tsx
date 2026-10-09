@@ -1,9 +1,15 @@
+/* Catalogue setup → Attributes (2026-10-08: on the shared workspace frame; a new attribute is made in a drawer). */
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { listAttributes, type AttributeRow } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import FilterForm from '@/components/FilterForm';
-import { Empty, Forbidden, PageHead } from '@/components/ui';
+import ModuleViews from '@/components/ModuleViews';
+import { StateBlock, Workspace } from '@/components/frame';
+import { FilterLink } from '@/components/NavFrame';
+import { Drawer } from '@/components/overlays';
+import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import {
   addAttributeValueAction, createAttributeAction, deleteAttributeValueAction, moveAttributeAction, moveAttributeValueAction,
@@ -115,32 +121,34 @@ export default async function AttributesPage({ searchParams }: { searchParams: S
   );
 
   return (
-    <>
-      <PageHead section="Catalogue" title="Attributes" eyebrow={`${all.length} attribute${all.length === 1 ? '' : 's'} · ${all.filter(a => a.isActive).length} shown in store`} />
-      <p className="note lead-note">Attributes are tags customers can filter by (Colour, Fabric, Fit, Occasion…). Add values with <b>+ Add value</b>; click a value to rename,
-        deactivate or reactivate it. Tag products on each product&apos;s page or many at once in Bulk edit. Colour is the one list of colours: the store&apos;s colour filter uses it once it is shown.</p>
-      <FilterForm className="actions" role="search" aria-label="Search attributes" data-attribute-filters>
-        <label className="sr-only" htmlFor="at-q">Search attributes and values</label>
-        <input id="at-q" name="q" className="input" placeholder="Search attributes or values" defaultValue={q} />
-        <label className="sr-only" htmlFor="at-s">Values</label>
-        <select id="at-s" name="status" className="input" defaultValue={status}><option value="all">All values</option><option value="active">Active values</option><option value="inactive">Deactivated values</option></select>
-        <button className="btn ghost" type="submit">Apply</button>
-      </FilterForm>
-      {list.length ? list.map(card) : filtered ? <Empty title="Nothing matches" kind="attributes">Try another word or show all values.</Empty>
-        : <Empty title="No attributes yet" kind="attributes">Add attributes for anything customers should filter by, e.g. Colour, Fabric, Fit or Occasion.</Empty>}
-      {write ? (
-        <section className="card form-panel" data-section="new-attribute" aria-labelledby="na-h">
-          <h2 id="na-h">New attribute</h2>
+    <Workspace name="attributes" title="Attributes" summary={`${all.length} attribute${all.length === 1 ? '' : 's'} · ${all.filter(a => a.isActive).length} shown in store`}
+      actions={write ? (
+        <Drawer trigger="New attribute" name="new-attribute" scope="ord" title="New attribute" description="A tag customers can filter by (Colour, Fabric, Fit, Occasion…). It starts with no values: add them after creating it.">
           <ActionForm action={createAttributeAction} submitLabel="Create attribute" id="create-attribute-form" label="Create attribute" resetOnSuccess>
             <Field name="label" label="Name" autoComplete="off" required hint="e.g. Colour, Fabric, Fit, Occasion" />
             <Select name="selection" label="Values per product" defaultValue="multi" options={SELECTION} />
             <Field name="description" label="Description (optional, staff only)" autoComplete="off" />
-            <details className="advanced"><summary className="note">Link (optional)</summary>
-              <Field name="id" label="Link id" autoComplete="off" hint="Made from the name when empty, e.g. Fabric → /shop?fabric=cotton. Cannot be changed later." />
-            </details>
+            <Field name="id" label="Link id (optional)" autoComplete="off" hint="Made from the name when empty, e.g. Fabric → /shop?fabric=cotton. Cannot be changed later." />
           </ActionForm>
-        </section>
-      ) : <p className="note section-foot" data-readonly="attributes">Changing attributes needs the categories.write permission.</p>}
-    </>
+        </Drawer>
+      ) : undefined}>
+      <ModuleViews module="catalogue" label="Catalogue setup" current="/attributes" />
+      <div className="ord-toolbar">
+        <FilterForm debounce={200} role="search" aria-label="Search attributes" data-attribute-filters>
+          <label className="sr-only" htmlFor="at-q">Search attributes and values</label>
+          <input id="at-q" name="q" className="input" placeholder="Search attributes or values" defaultValue={q} />
+          <label className="sr-only" htmlFor="at-s">Values</label>
+          <select id="at-s" name="status" className="input" defaultValue={status}><option value="all">All values</option><option value="active">Active values</option><option value="inactive">Deactivated values</option></select>
+          <button className="btn ghost sr-only" type="submit">Apply</button>
+        </FilterForm>
+        {filtered && <FilterLink className="btn link" group="clear" current={false} href="/attributes" data-clear-filters>Clear</FilterLink>}
+      </div>
+      {list.length ? <div data-fresh key={`${q}|${status}`}>{list.map(card)}</div>
+        : filtered ? <StateBlock title="Nothing matches" name="attributes" action={<Link className="btn ghost sm" href="/attributes">Clear filters</Link>}>Try another word or show all values.</StateBlock>
+        : <StateBlock title="No attributes yet" name="attributes">Add attributes for anything customers should filter by, e.g. Colour, Fabric, Fit or Occasion.</StateBlock>}
+      <p className="note section-foot">{write
+        ? <>Click a value to rename, deactivate or reactivate it. Products are tagged on their own page (Product → Merchandising) or many at once in <Link href="/products/bulk">Bulk edit</Link>. The number on a value is how many products have it.</>
+        : <span data-readonly="attributes">Changing attributes needs the categories.write permission.</span>}</p>
+    </Workspace>
   );
 }

@@ -8,6 +8,7 @@ import { istDate, rupeesField } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { saveVendorPaymentAction } from '../actions';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Vendor payments' };
 const METHODS = [['bank_transfer', 'Bank transfer'], ['upi', 'UPI'], ['cheque', 'Cheque'], ['cash', 'Cash'], ['card', 'Card'], ['other', 'Other']] as const;
@@ -39,8 +40,7 @@ export default async function VendorPaymentsPage() {
   const manage = can(actor, 'finance.manage');
   const due = rows.filter(r => r.status === 'scheduled').reduce((n, r) => n + r.amount_paise, 0);
   return (
-    <>
-      <PageHead title="Finance" eyebrow={`Payments to suppliers, recorded by staff (no bank connection). Scheduled to pay: ${formatPaise(due)}.`} />
+    <Workspace name="finance-vendor-payments" title="Finance" summary={`Payments to suppliers, recorded by staff (no bank connection). Scheduled to pay: ${formatPaise(due)}.`}>
       <FinanceNav current="/finance/vendor-payments" />
       {rows.length === 0 ? <Empty title="No vendor payments recorded" kind="vendor-payments" /> : (
         <div className="table-wrap"><table data-vendor-payments>
@@ -58,6 +58,6 @@ export default async function VendorPaymentsPage() {
         <section className="card form-panel" aria-labelledby="nvp-h"><h2 id="nvp-h">Record a vendor payment</h2>
           <ActionForm action={saveVendorPaymentAction} submitLabel="Save payment" id="vendor-payment-form" label="Record vendor payment" resetOnSuccess><PaymentFields look={look} /></ActionForm></section>
       ))}
-    </>
+    </Workspace>
   );
 }

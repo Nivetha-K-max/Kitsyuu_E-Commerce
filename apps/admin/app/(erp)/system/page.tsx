@@ -6,6 +6,7 @@ import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import pkg from '../../../package.json';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'System' };
 export const dynamic = 'force-dynamic';
@@ -27,8 +28,7 @@ export default async function SystemPage() {
     <div key={k}><dt>{k}</dt><dd data-state={state}>{v}</dd></div>
   );
   return (
-    <>
-      <PageHead section="System" title="System" eyebrow="Health of the admin app and its database. Nothing here shows secrets." />
+    <Workspace name="system" title="System" summary="Health of the admin app and its database. Nothing here shows secrets.">
       <section className="card" aria-labelledby="sys-alerts" data-section="alerts">
         <SectionTitle id="sys-alerts">Needs attention</SectionTitle>
         <ul className="plain alerts" data-alerts>
@@ -80,6 +80,6 @@ export default async function SystemPage() {
             reachable and 503 when it is not, and shows nothing else.</p>
         </section>
       </div>
-    </>
+    </Workspace>
   );
 }

@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {createClient} from '@supabase/supabase-js';
+import {requireProductionIntentForUrl} from './lib/target.mjs';
 
 const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const {NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key} = process.env;
@@ -14,6 +15,7 @@ if (!url || !key || /REPLACE_WITH/.test(key)) { console.error('Set NEXT_PUBLIC_S
 
 const data = JSON.parse(fs.readFileSync(path.join(REPO, 'apps/website/data/products.json'), 'utf8'));
 const SRC = path.join(REPO, 'dist/store/images/products');
+await requireProductionIntentForUrl(url, 'the Supabase project');
 const supabase = createClient(url, key, {auth: {persistSession: false, autoRefreshToken: false}});
 const md5 = b => crypto.createHash('md5').update(b).digest('hex');
 

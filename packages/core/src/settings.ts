@@ -114,6 +114,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // Commerce workflows (2026-10-01): staff discounts, order emails, automatic cart reminders. Everything starts off / empty.
   def('discounts.staff_max_percent', 'Maximum staff discount', 'Discounts', 'The largest % staff with the order-discount permission can give on a draft order (for example 10). A product’s minimum price (Products) is never undercut. With no value, staff cannot give discounts.',
     { kind: 'integer', min: 1, max: 90, unit: '%' }),
+  def('notifications.order_tracking', 'Email with tracking updates', 'Customer emails', 'Sends the customer an email when the courier or tracking number of a shipped order is added or corrected, or the parcel is marked in transit.', ON_OFF),
   def('notifications.order_packed', 'Email when an order is packed', 'Customer emails', 'Sends the customer an email when staff mark the order packed.', ON_OFF),
   def('notifications.payment_request', 'Email with a payment link for staff orders', 'Customer emails', 'When staff confirm a draft order for online payment, sends the customer an email with the link to pay it from their account.', ON_OFF),
   def('notifications.abandoned_cart_auto', 'Automatic "your cart is waiting" email', 'Customer emails', 'Sends one email per cart to a signed-in customer whose cart has not changed for the abandoned-cart delay (ABANDONED_CART_DELAY_MINUTES, 45 minutes unless set) and who has not ordered since. Only items still in stock are listed; a cart with nothing left in stock gets no email.', ON_OFF),

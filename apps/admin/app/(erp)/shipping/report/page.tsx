@@ -8,6 +8,7 @@ import { formatNumber, formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import ShippingNav from '../ShippingNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Shipping report' };
 
@@ -21,8 +22,7 @@ export default async function ShippingReportPage({ searchParams }: { searchParam
   try { if (!/^\d{4}-\d{2}-\d{2}$/.test(range.from) || !/^\d{4}-\d{2}-\d{2}$/.test(range.to) || range.from > range.to) throw new DomainError('invalid', 'Choose a valid date range.'); r = await shippingReport(db(), actor, range); }
   catch (e) { if (e instanceof DomainError) error = e.message; else throw e; }
   return (
-    <>
-      <PageHead title="Shipping" eyebrow="Shipments dispatched in the period, by courier; delivery charges collected on paid orders." />
+    <Workspace name="shipping-report" title="Shipping" summary="Shipments dispatched in the period, by courier; delivery charges collected on paid orders.">
       <ShippingNav current="/shipping/report" />
       <RangeForm from={range.from} to={range.to} />
       {error && <p className="msg error" role="alert">{error}</p>}
@@ -45,6 +45,6 @@ export default async function ShippingReportPage({ searchParams }: { searchParam
           {r.byStatus.length === 0 ? <Empty compact title="No shipments" /> : <p>{r.byStatus.map(s => <span key={s.status}><StatusBadge status={s.status} /> {s.n} </span>)}</p>}
         </section>
       </>}
-    </>
+    </Workspace>
   );
 }

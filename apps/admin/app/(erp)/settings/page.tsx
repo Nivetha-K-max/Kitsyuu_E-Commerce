@@ -8,6 +8,7 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { updateSettingAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Configuration' };
 
@@ -52,8 +53,7 @@ export default async function SettingsPage() {
   const { groups, unregistered, policies } = await listSettings(db(), actor);
   const has = new Set(groups.map(g => g.group));
   return (
-    <>
-      <PageHead section="System" title="Configuration" eyebrow="Business rules are locked here; only safe operational settings can be changed, and every change is audited." />
+    <Workspace name="configuration" title="Configuration" summary="Business rules are locked here; only safe operational settings can be changed, and every change is audited.">
       <section className="card" aria-labelledby="areas-h" data-section="config-areas">
         <h2 id="areas-h">Configuration areas</h2>
         <dl className="facts" data-config-areas>{AREAS.map(a => {
@@ -98,7 +98,7 @@ export default async function SettingsPage() {
           <ul className="plain">{unregistered.map(u => <li key={u.key}><span className="mono">{u.key}</span> <span className="note">{JSON.stringify(u.value)}</span></li>)}</ul>
         </section>
       )}
-    </>
+    </Workspace>
   );
 }
 

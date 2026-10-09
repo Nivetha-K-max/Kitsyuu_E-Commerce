@@ -20,9 +20,14 @@ const SETTLE = `(async()=>{for(const i of ${SHOWN}){if(i.complete&&i.naturalWidt
 const settle = () => b.eval(SETTLE);
 /* The store menu: Home, Shop, then the collections the store can see (Men / Women / Sale / New Arrivals… whichever staff made
    visible, in their admin order: the same public read the store makes), then the top-level categories. */
-const env = Object.fromEntries(fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
-const visibleCollections = await (await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/collections?select=label,sort_order&order=sort_order`,
-  {headers: {apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY, Authorization: `Bearer ${env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`}})).json();
+// 2026-10-08: the store under test reads its catalogue from the LOCAL test database (CATALOGUE_SOURCE=database), so the expected
+// collections are read from that same database, with the rule the store's own read is under (active collections, menu order).
+// Nothing is asked of the hosted project.
+const {localTestDatabase} = await import('./local-store-env.mjs');
+const pgClient = new (await import('pg')).default.Client({connectionString: localTestDatabase().KITSYUU_DB_URL});
+await pgClient.connect();
+const visibleCollections = (await pgClient.query('select label, sort_order from public.collections where is_active order by sort_order')).rows;
+await pgClient.end();
 const navExpect = ['Home', 'Shop', ...visibleCollections.map(c => c.label), 'Tops', 'Bottoms', 'Outerwear'];
 const skus = sel => `[...document.querySelectorAll("${sel} .st-card[data-sku]")].map(e=>e.dataset.sku)`;
 const bySku = Object.fromEntries(data.products.map(p => [p.sku, p]));

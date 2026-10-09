@@ -5,13 +5,17 @@ import path from 'node:path';
 // Screenshots and the throwaway Chrome profile live in tests/.output (git-ignored).
 const DIR = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '.output');
 fs.mkdirSync(DIR, {recursive: true});
+// KITSYUU_TEST_OFFLINE=1 (see tests/offline-guard.cjs): the test browser can resolve no name but localhost and does no background
+// networking of its own, so a page that asked for anything on another machine would fail visibly instead of fetching it.
+const OFFLINE = process.env.KITSYUU_TEST_OFFLINE === '1'
+  ? ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-default-apps', '--no-default-browser-check'] : [];
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function launch(port = 9333) {
   // One profile per debugging port: two suites running at once must not share a Chrome profile (the second Chrome would hand
   // over to the first and exit, leaving no debugging port).
-  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${DIR}/chrome-prof-${port}`, '--no-first-run', '--hide-scrollbars', '--disable-gpu', 'about:blank'], {stdio: 'ignore'});
+  const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${DIR}/chrome-prof-${port}`, '--no-first-run', '--hide-scrollbars', '--disable-gpu', ...OFFLINE, 'about:blank'], {stdio: 'ignore'});
   let list;
   for (let i = 0; i < 50; i++) { try { list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (list.find(t => t.type === 'page')) break; } catch {} await sleep(200); }
   const target = list?.find(t => t.type === 'page');

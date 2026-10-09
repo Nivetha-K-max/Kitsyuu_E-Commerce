@@ -5,14 +5,16 @@
      read back from Razorpay's API (and captured if only authorised). A failure report is accepted only as Razorpay's API
      describes that payment.
    - Webhooks: signature HMAC-SHA256(raw body, webhook secret), event id from the x-razorpay-event-id header.
-   Test mode only: live keys (rzp_live_…) are refused unless allowLive is set explicitly. */
+   Live keys (rzp_live_…) are refused unless allowLive is set explicitly (the apps set it only from RAZORPAY_LIVE_MODE=on).
+   With requireWebhookSecret the adapter does not start without a webhook secret: the store asks for that in live mode, so a
+   payment whose browser never came back is still confirmed by Razorpay's signed notification. */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { UnavailableError } from '@kitsyuu/contracts';
 import type { PaymentProvider, ProviderPayment } from './provider.ts';
 
 export interface RazorpayConfig {
   keyId: string; keySecret: string; webhookSecret?: string;
-  apiBase?: string; checkoutScriptUrl?: string; allowLive?: boolean; timeoutMs?: number;
+  apiBase?: string; checkoutScriptUrl?: string; allowLive?: boolean; requireWebhookSecret?: boolean; timeoutMs?: number;
 }
 
 const UNAVAILABLE = 'The payment service is not responding right now. Your order is saved; please try paying again in a moment.';
@@ -24,8 +26,10 @@ function hmacMatches(secret: string, payload: string, signature: string): boolea
 
 export function razorpayProvider(cfg: RazorpayConfig): PaymentProvider {
   if (!/^rzp_(test|live)_[A-Za-z0-9]{6,}$/.test(cfg.keyId)) throw new Error('RAZORPAY_KEY_ID is not a Razorpay key id.');
-  if (cfg.keyId.startsWith('rzp_live_') && !cfg.allowLive) throw new Error('Refusing a live Razorpay key: payments run in test mode only.');
+  if (cfg.keyId.startsWith('rzp_live_') && !cfg.allowLive) throw new Error('Refusing a live Razorpay key: live payments are not switched on (RAZORPAY_LIVE_MODE).');
   if (!cfg.keySecret || /^REPLACE|^</.test(cfg.keySecret)) throw new Error('RAZORPAY_KEY_SECRET is not set.');
+  if (cfg.webhookSecret && /^REPLACE|^</.test(cfg.webhookSecret)) throw new Error('RAZORPAY_WEBHOOK_SECRET is a placeholder.');
+  if (cfg.requireWebhookSecret && !cfg.webhookSecret) throw new Error('RAZORPAY_WEBHOOK_SECRET is not set (needed for live payments).');
   const base = (cfg.apiBase || 'https://api.razorpay.com').replace(/\/$/, '');
   const auth = 'Basic ' + Buffer.from(`${cfg.keyId}:${cfg.keySecret}`).toString('base64');
   const scriptUrl = cfg.checkoutScriptUrl || 'https://checkout.razorpay.com/v1/checkout.js';

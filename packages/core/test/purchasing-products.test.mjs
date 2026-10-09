@@ -108,20 +108,20 @@ test('purchase order: creating it moves no stock; approval needed; partial recei
   await assert.rejects(setPurchaseOrderStatus(admin, manager, {purchaseOrderId: po.id, status: 'approved', expectedStatus: 'draft', note: null}, ctx), ForbiddenError, 'a manager cannot approve');
   await assert.rejects(setPurchaseOrderStatus(admin, manager, {purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'draft', note: null}, ctx), ForbiddenError, 'nor send an unapproved draft');
   await setPurchaseOrderStatus(admin, root, {purchaseOrderId: po.id, status: 'approved', expectedStatus: 'draft', note: null}, ctx);
-  await assert.rejects(receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: d.lines[0].id, qty: 1}], note: null}, ctx), ConflictError, 'nothing is received before it is sent');
+  await assert.rejects(receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: d.lines[0].id, qty: 1, expectedReceived: 0}], note: null}, ctx), ConflictError, 'nothing is received before it is sent');
   await setPurchaseOrderStatus(admin, manager, {purchaseOrderId: po.id, status: 'ordered', expectedStatus: 'approved', note: null}, ctx);
   d = await getPurchaseOrder(admin, manager, po.id);
   const [l1, l2] = d.lines;
   assert.ok(d.order.approved_at && d.order.approved_by === 'pp.root@test.local' && d.order.ordered_at);
   // First delivery: 4 of 10.
-  const g1 = await receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 4}], note: 'First lot', vendorRef: 'DC-101'}, ctx);
+  const g1 = await receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 4, expectedReceived: 0}], note: 'First lot', vendorRef: 'DC-101'}, ctx);
   assert.match(g1.receiptNumber, /^GRN/); assert.equal(g1.status, 'partially_received');
   assert.equal(await stock(v1.id), s1 + 4);
   const [m] = await q(`select reason, delta, unit_cost_paise, goods_receipt_id from inventory_movements where variant_id = $1 order by id desc limit 1`, [v1.id]);
   assert.deepEqual([m.reason, m.delta, m.unit_cost_paise, m.goods_receipt_id], ['purchase_in', 4, 40000, g1.receiptId], 'through the ledger, with cost and its GRN');
-  await assert.rejects(receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 7}], note: null}, ctx), /more|outstanding|ordered/i, 'never more than remains');
+  await assert.rejects(receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 7, expectedReceived: 4}], note: null}, ctx), /more|outstanding|ordered/i, 'never more than remains');
   // Second delivery: the rest of line 1, 2 of line 2.
-  const g2 = await receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 6}, {lineId: l2.id, qty: 2}], note: null, vendorRef: 'DC-102'}, ctx);
+  const g2 = await receiveGoods(admin, manager, {purchaseOrderId: po.id, lines: [{lineId: l1.id, qty: 6, expectedReceived: 4}, {lineId: l2.id, qty: 2, expectedReceived: 0}], note: null, vendorRef: 'DC-102'}, ctx);
   assert.notEqual(g2.receiptNumber, g1.receiptNumber);
   d = await getPurchaseOrder(admin, manager, po.id);
   assert.deepEqual(d.lines.map(l => [l.ordered, l.received, l.outstanding]), [[10, 10, 0], [5, 2, 3]]);

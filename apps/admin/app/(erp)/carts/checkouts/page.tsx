@@ -9,6 +9,7 @@ import { formatDateTime, formatPaise } from '@/lib/format';
 import { pageOf, type SP } from '@/lib/erp';
 import { db, mailer, requireActor } from '@/lib/server';
 import { sendCheckoutRemindersAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Abandoned checkouts' };
 
@@ -22,8 +23,7 @@ export default async function AbandonedCheckoutsPage({ searchParams }: { searchP
   const provider = mailer().kind !== 'console';
   const state = !on ? 'Reminder emails are OFF (Configuration → Customer emails).' : !provider ? 'Reminder emails are on, but no email provider is configured, so nothing is sent.' : 'Reminder emails are on.';
   return (
-    <>
-      <PageHead title="Carts & wishlists" eyebrow={`Orders still unpaid ${list.hours} hours after they were placed · ${list.total} now. ${state}`} />
+    <Workspace name="carts-checkouts" title="Carts & wishlists" summary={`Orders still unpaid ${list.hours} hours after they were placed · ${list.total} now. ${state}`}>
       <SubNav label="Carts" current="/carts/checkouts" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       {can(actor, 'carts.manage') && on && provider && (
         <ActionForm action={sendCheckoutRemindersAction} submitLabel="Send due reminders now" variant="ghost" className="inline-form" id="send-checkout-reminders" label="Send reminders"
@@ -48,6 +48,6 @@ export default async function AbandonedCheckoutsPage({ searchParams }: { searchP
         {page > 1 && <Link className="btn ghost sm" href={`/carts/checkouts?page=${page - 1}`}>Previous</Link>}
         {list.hasNext && <Link className="btn ghost sm" href={`/carts/checkouts?page=${page + 1}`}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

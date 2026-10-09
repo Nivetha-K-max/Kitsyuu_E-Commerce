@@ -9,6 +9,7 @@ import { defaultRange, istDate, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { saveExpenseAction, voidExpenseAction } from '../actions';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Expenses' };
 
@@ -22,8 +23,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
   const manage = can(actor, 'finance.manage');
   const live = rows.filter(r => !r.voided_at);
   return (
-    <>
-      <PageHead title="Finance" eyebrow={`${live.length} expense(s) · ${formatPaise(live.reduce((n, r) => n + r.amount_paise, 0))} in the period`} />
+    <Workspace name="finance-expenses" title="Finance" summary={`${live.length} expense(s) · ${formatPaise(live.reduce((n, r) => n + r.amount_paise, 0))} in the period`}>
       <FinanceNav current="/finance/expenses" />
       <RangeForm from={range.from} to={range.to} />
       {rows.length === 0 ? <Empty title="No expenses in this period" kind="expenses" /> : (
@@ -53,6 +53,6 @@ export default async function ExpensesPage({ searchParams }: { searchParams: SP 
           </ActionForm>
         </section>
       )}
-    </>
+    </Workspace>
   );
 }

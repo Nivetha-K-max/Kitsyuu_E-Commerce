@@ -7,6 +7,8 @@ import { ActionForm, Field, Hidden } from '@/components/forms';
 import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { deleteRoleAction, updateRoleAction } from '../actions';
+import { Entity, Section } from '@/components/frame';
+import RecordActivity from '@/components/RecordActivity';
 
 export const metadata: Metadata = { title: 'Role' };
 type Params = Promise<{ id: string }>;
@@ -22,7 +24,11 @@ export default async function RolePage({ params, searchParams }: { params: Param
   const perms = await listPermissions(db(), actor);
   const modules = [...new Set(perms.map(p => p.module))];
   const manage = can(actor, 'roles.manage');
-  const created = (await searchParams).notice === 'created';
+  const spv = await searchParams;
+  const created = spv.notice === 'created';
+  const seeAudit = can(actor, 'audit.read');
+  const tab = spv.tab === 'activity' && seeAudit ? 'activity' : 'main';
+  const selfHref = `/roles/${role.id}`;
 
   const matrix = (
     <div className="perm-grid" data-perm-matrix>
@@ -44,8 +50,15 @@ export default async function RolePage({ params, searchParams }: { params: Param
   );
 
   return (
-    <>
-      <PageHead section="System" title={role.name} eyebrow={`${role.code}${role.isSystem ? ' · built-in' : ''} · ${role.members} staff`} crumbs={crumbs} />
+    <Entity module={{ href: '/roles', label: 'Roles & permissions' }} name="role" title={role.name}
+      factsAttr="data-role-facts" facts={[{ label: 'Code', value: <span className="mono">{role.code}</span> }, { label: 'Kind', value: role.isSystem ? 'Built-in' : 'Custom' }, { label: 'Staff', value: String(role.members) }]}
+      tabs={[{ id: 'main', label: 'Permissions' }, ...(seeAudit ? [{ id: 'activity', label: 'Activity' }] : [])]} current={tab} tabHref={x => (x === 'main' ? selfHref : `${selfHref}?tab=${x}`)}>
+      {tab === 'activity' && (
+        <Section id="act-h" title="Activity" name="activity" wide hint="Changes to this role, from the audit log.">
+          <RecordActivity entityType="roles" entityId={role.id} name="role" empty="Changes to this role are listed here as they are made." />
+        </Section>
+      )}
+      {tab === 'main' && <>
       {created && <p className="msg ok" role="status">Role created. Choose its permissions below.</p>}
       {manage ? (
         <ActionForm action={updateRoleAction} submitLabel="Save role" className="grid">
@@ -64,6 +77,7 @@ export default async function RolePage({ params, searchParams }: { params: Param
           )}
         </section>
       )}
-    </>
+      </>}
+    </Entity>
   );
 }

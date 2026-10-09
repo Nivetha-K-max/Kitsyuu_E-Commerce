@@ -6,6 +6,7 @@ import { locationReport } from '@kitsyuu/core';
 import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Location report' };
 type Search = Promise<Record<string, string | undefined>>;
@@ -25,8 +26,7 @@ export default async function LocationReportPage({ searchParams }: { searchParam
   const from = new Date(`${fromDay}T00:00:00+05:30`), to = new Date(new Date(`${toDay}T00:00:00+05:30`).getTime() + 86_400_000);
   const r = await locationReport(db(), actor, { from, to });
   return (
-    <>
-      <PageHead section="Catalogue" title="Location report" crumbs={crumbs} eyebrow={`${fromDay} to ${toDay} (India time)`} />
+    <Workspace name="locations-report" title="Location report" summary={`${fromDay} to ${toDay} (India time)`} crumbs={crumbs}>
       <form className="toolbar" method="get" aria-label="Report period">
         <label className="field-inline">From <input className="input" type="date" name="from" defaultValue={fromDay} /></label>
         <label className="field-inline">To <input className="input" type="date" name="to" defaultValue={toDay} /></label>
@@ -63,6 +63,6 @@ export default async function LocationReportPage({ searchParams }: { searchParam
         </table></div>
         <p className="note">Units in the period. “Sold online” is net of cancelled orders. “Other changes” covers deliveries, returns, damage, counts and corrections.</p>
       </section>
-    </>
+    </Workspace>
   );
 }

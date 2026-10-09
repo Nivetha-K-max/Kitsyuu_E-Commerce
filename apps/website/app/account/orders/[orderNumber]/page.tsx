@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { NotFoundError, orderNumberInput } from '@kitsyuu/contracts';
-import { customerReturnOptions, getCustomerOrder } from '@kitsyuu/core';
+import { customerReturnOptions, customerReviewState, getCustomerOrder } from '@kitsyuu/core';
 import { Crumbs } from '@/components/ui';
 import { OrderItems, OrderSums } from '@/components/OrderSummary';
 import { CancelOrderButton } from '@/components/AccountForms';
@@ -30,6 +30,9 @@ export default async function OrderPage({ params }: { params: Params }) {
   const canPay = o.canPay && !!paymentProvider();
   // ERP module 3: a return can be requested only while the business has returns switched on (off by default).
   const returns = await customerReturnOptions(db(), me, o.orderNumber).catch(() => null);
+  // Reviews: only the pieces of this order that can be reviewed now (the business decides when reviews open).
+  const reviewable = o.status === 'cancelled' || o.status === 'pending_payment' || o.status === 'payment_failed' ? []
+    : await customerReviewState(db(), me).then(r => r.reviewable.filter(i => i.order_number === o.orderNumber)).catch(() => []);
   const sh = o.shipment;
   const reached = o.status === 'delivered' ? 3 : o.status === 'shipped' ? 2 : sh?.packingState === 'packed' ? 1 : o.status === 'processing' || o.status === 'paid' ? 0 : -1;
   return (
@@ -103,8 +106,19 @@ export default async function OrderPage({ params }: { params: Params }) {
           {returns.allowed && <p><Link className="button button-outline" href={`/account/orders/${encodeURIComponent(o.orderNumber)}/return`} data-request-return>Request a return</Link></p>}
         </section>
       )}
-      <p className="st-account-more"><Link className="text-link" href={`/account/support/new?order=${encodeURIComponent(o.orderNumber)}`} data-order-help>Get help with this order</Link></p>
-      <p className="st-account-more"><Link className="text-link" href="/account/orders">Back to orders <span aria-hidden="true">↗</span></Link></p>
+      {reviewable.length > 0 && (
+        <section className="st-form-group" aria-labelledby="st-ord-reviews" data-order-reviews>
+          <h2 id="st-ord-reviews">Review your pieces</h2>
+          <ul className="st-review-todo">{reviewable.map(i => (
+            <li key={i.id}><span><b>{i.name}</b>{i.size ? ` · Size ${i.size}` : ''}</span>
+              <Link className="button button-outline" href={`/account/reviews/new?item=${i.id}`}>Write a review</Link></li>
+          ))}</ul>
+        </section>
+      )}
+      <p className="st-order-foot">
+        <Link className="button button-outline" href={`/account/support/new?order=${encodeURIComponent(o.orderNumber)}`} data-order-help>Get help with this order</Link>
+        <Link className="st-acc-action" href="/account/orders"><span aria-hidden="true">← </span>Back to orders</Link>
+      </p>
     </>
   );
 }

@@ -14,7 +14,7 @@ import type { ActionState } from '@kitsyuu/contracts';
 import { useConfirm } from '@/components/confirm';
 import DataTable, { TableEmpty } from '@/components/DataTable';
 import { Icon } from '@/components/icons';
-import { StatusPill } from '@/components/StatusPill';
+import { ProductStatusPill } from '@/components/StatusPill';
 
 export interface ProductRowView {
   id: string; sku: string; name: string; status: 'active' | 'draft' | 'review' | 'archived'; categoryLabel: string; subcategoryLabel: string | null;
@@ -28,11 +28,13 @@ export interface ProductFilters { q: string; category: string; status: 'all' | '
   collection: string; stock: 'all' | 'in_stock' | 'low' | 'out' }
 
 const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const STATUS_FILTERS = [{ value: 'active', label: 'Active' }, { value: 'draft', label: 'Draft' }, { value: 'review', label: 'Awaiting approval' }, { value: 'archived', label: 'Archived' }, { value: 'inactive', label: 'Not in the store' }] as const;
+const STATUS_FILTERS = [{ value: 'active', label: 'Published' }, { value: 'draft', label: 'Draft' }, { value: 'review', label: 'Pending approval' }, { value: 'archived', label: 'Archived' }, { value: 'inactive', label: 'Not in the store' }] as const;
 const STOCK_FILTERS = [{ value: 'in_stock', label: 'In stock' }, { value: 'low', label: 'Low or out of stock (a size)' }, { value: 'out', label: 'Sold out' }] as const;
 
-export default function ProductsTable({ rows, categories, collections = [], filters, canWrite, bulkAction, statusAction }: {
-  rows: ProductRowView[]; categories: Category[]; collections?: { id: string; label: string }[]; filters: ProductFilters; canWrite: boolean; bulkAction: Action; statusAction: Action;
+export default function ProductsTable({ rows, categories, collections = [], filters, canWrite, canPublish, bulkAction, statusAction }: {
+  rows: ProductRowView[]; categories: Category[]; collections?: { id: string; label: string }[]; filters: ProductFilters; canWrite: boolean;
+  /** May publish (products.publish): the bulk bar offers Published only to those who can approve. */
+  canPublish: boolean; bulkAction: Action; statusAction: Action;
 }) {
   const router = useRouter();
   const path = usePathname();
@@ -88,7 +90,7 @@ export default function ProductsTable({ rows, categories, collections = [], filt
   async function bulkSet(status: 'active' | 'draft' | 'archived') {
     const ids = Object.keys(selected).filter(k => selected[k]);
     if (!ids.length) return;
-    const label = status === 'active' ? 'Active' : status === 'draft' ? 'Draft' : 'Archived';
+    const label = status === 'active' ? 'Published' : status === 'draft' ? 'Draft' : 'Archived';
     if (!(await ask({ title: `Set ${ids.length} product${ids.length === 1 ? '' : 's'} to ${label}?`,
       description: 'Each product is checked as if changed on its own page: one that cannot be shown (no size or image) is reported and left as it is.',
       confirmLabel: `Set to ${label}`, tone: status === 'archived' ? 'danger' : 'default' }))) return;
@@ -147,9 +149,15 @@ export default function ProductsTable({ rows, categories, collections = [], filt
     },
     {
       id: 'status', accessorKey: 'status', header: 'Status', meta: { label: 'Status', csv: r => r.status },
-      cell: ({ row: { original: p } }) => <StatusPill status={p.status} />,
+      cell: ({ row: { original: p } }) => <ProductStatusPill status={p.status} />,
     },
-  ], []);
+    {
+      /* The one useful next step for the row's state, when there is one: a link into the product page, where the step is
+         taken. A published product with stock needs nothing, so its cell stays empty (the row itself opens the product). */
+      id: 'next', header: 'Next step', enableSorting: false, meta: { label: 'Next step' },
+      cell: ({ row: { original: p } }) => { const n = nextStep(p, canWrite, canPublish); return n ? <Link className="btn sm" href={n.href} data-next-step={n.id}>{n.label}<span aria-hidden="true"> →</span></Link> : null; },
+    },
+  ], [canWrite, canPublish]);
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
 
@@ -163,9 +171,6 @@ export default function ProductsTable({ rows, categories, collections = [], filt
         {q && <button type="button" className="icon-btn dt-search-clear" aria-label="Clear search" onClick={() => { setQ(''); setParams({ q: '' }); }}><Icon name="close" size={14} /></button>}
       </div>
       <CategoryFilter categories={categories} value={filters.category} onChange={category => setParams({ category })} label={filters.category ? catLabel(filters.category) : null} />
-      <FilterMenu label="Status" value={filters.status === 'all' ? null : STATUS_FILTERS.find(s => s.value === filters.status)?.label ?? null}
-        options={STATUS_FILTERS.map(s => ({ value: s.value, label: s.label }))} selected={filters.status}
-        onPick={v => setParams({ status: (v ?? 'all') as ProductFilters['status'] })} />
       {collections.length > 0 && <FilterMenu label="Collection" value={filters.collection ? colLabel(filters.collection) : null}
         options={collections.map(c => ({ value: c.id, label: c.label }))} selected={filters.collection || 'all'}
         onPick={v => setParams({ collection: v ?? '' })} />}
@@ -181,7 +186,7 @@ export default function ProductsTable({ rows, categories, collections = [], filt
     <div className="dt-chips" aria-label="Applied filters" data-product-filters>
       {filters.q && <Chip name="Search" value={`“${filters.q}”`} onRemove={() => { setQ(''); setParams({ q: '' }); }} />}
       {filters.category && <Chip name="Category" value={catLabel(filters.category)} onRemove={() => setParams({ category: '' })} />}
-      {filters.status !== 'all' && <Chip name="Status" value={STATUS_FILTERS.find(s => s.value === filters.status)?.label ?? ''} onRemove={() => setParams({ status: 'all' })} />}
+      {filters.status === 'inactive' && <Chip name="Status" value={STATUS_FILTERS.find(s => s.value === filters.status)?.label ?? ''} onRemove={() => setParams({ status: 'all' })} />}
       {filters.collection && <Chip name="Collection" value={colLabel(filters.collection)} onRemove={() => setParams({ collection: '' })} />}
       {filters.stock !== 'all' && <Chip name="Availability" value={STOCK_FILTERS.find(s => s.value === filters.stock)?.label ?? ''} onRemove={() => setParams({ stock: 'all' })} />}
       {(filters.pmin || filters.pmax) && <Chip name="Price" value={`${filters.pmin ? `₹${filters.pmin}` : 'any'} – ${filters.pmax ? `₹${filters.pmax}` : 'any'}`} onRemove={() => setParams({ pmin: '', pmax: '' })} />}
@@ -232,7 +237,7 @@ export default function ProductsTable({ rows, categories, collections = [], filt
             <Dropdown.Trigger className="btn quiet sm" disabled={working}><Icon name="updown" size={14} />Set status</Dropdown.Trigger>
             <Dropdown.Portal>
               <Dropdown.Content className="menu" side="top" sideOffset={8} align="start">
-                <Dropdown.Item className="menu-item" onSelect={() => bulkSet('active')}><span className="badge active" />Active (in the store)</Dropdown.Item>
+                {canPublish && <Dropdown.Item className="menu-item" onSelect={() => bulkSet('active')}><span className="badge active" />Published (in the store)</Dropdown.Item>}
                 <Dropdown.Item className="menu-item" onSelect={() => bulkSet('draft')}><span className="badge draft" />Draft (hidden)</Dropdown.Item>
                 <Dropdown.Item className="menu-item" onSelect={() => bulkSet('archived')}><span className="badge archived" />Archived (hidden)</Dropdown.Item>
               </Dropdown.Content>
@@ -243,6 +248,15 @@ export default function ProductsTable({ rows, categories, collections = [], filt
       )}
     </>
   );
+}
+
+/** What a product row most usefully leads to, from its status and stock (existing states only; the page does the work). */
+function nextStep(p: ProductRowView, canWrite: boolean, canPublish: boolean): { id: string; label: string; href: string } | null {
+  const base = `/products/${p.id}`;
+  if (p.status === 'review' && canPublish) return { id: 'approve', label: 'Review & publish', href: base };
+  if (p.status === 'draft' && canWrite) return { id: 'finish', label: 'Finish draft', href: base };
+  if (p.status === 'active' && p.attentionVariants > 0) return { id: 'stock', label: 'Check stock', href: `${base}?tab=variants` };
+  return null;
 }
 
 function Chip({ name, value, onRemove }: { name: string; value: string; onRemove: () => void }) {

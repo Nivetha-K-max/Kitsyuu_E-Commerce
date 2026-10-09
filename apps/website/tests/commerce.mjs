@@ -10,7 +10,7 @@ import {launch} from './cdp.mjs';
 import {createDb} from '@kitsyuu/db';
 import {cancelCodOrder, cancelOrderByCustomer, createInvoiceForOrder} from '@kitsyuu/core';
 
-const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG} = process.env;
+const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG, RZP_OFF_BASE, RZP_LIVE_BASE, RZP_OFF_LOG, RZP_LIVE_LOG} = process.env;
 const RETURNS_POLICY = 'All sales are final. We do not accept returns or offer refunds.';
 const mailsAbout = (log, orderNumber) => fs.readFileSync(log, 'utf8').split(`subject="Your KITSYUU order ${orderNumber} is confirmed"`).length - 1;
 if (!/@localhost[:/]/.test(KITSYUU_DB_URL || '')) throw new Error('commerce tests only run against a local database');
@@ -197,9 +197,10 @@ try {
     ok(`[${tag}] account order history shows the order, without pay or cancel actions`, (await ev(`document.querySelector('[data-order-status]').dataset.orderStatus`)) === 'paid'
       && !(await exists('[data-pay-order]')) && !(await exists('#st-cancel-order')));
     // Layout: items and progress sit under their headings at full width; nothing is pushed past the screen edge.
+    // (On phones the account navigation is one row that scrolls sideways: its items are inside that scroller, not off-screen.)
     const layout = await ev(`(()=>{const item=document.querySelector('.st-order-item').getBoundingClientRect();
       const xs=[...document.querySelectorAll('.st-order-timeline li')].map(l=>Math.round(l.getBoundingClientRect().left));
-      const past=[...document.querySelectorAll('main *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1}).length;
+      const past=[...document.querySelectorAll('main *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&!e.closest('.st-account-nav')}).length + (document.documentElement.scrollWidth>innerWidth+1?1:0);
       return {itemWidth:Math.round(item.width),itemTop:Math.round(item.top),heading:Math.round(document.getElementById('st-ord-items').getBoundingClientRect().bottom),timelineX:[...new Set(xs)],past}})()`);
     ok(`[${tag}] order detail layout: items under the heading at full width, one timeline column, nothing off-screen`, layout.itemTop >= layout.heading && layout.itemWidth >= (W > 500 ? 500 : 300)
       && layout.timelineX.length === 1 && layout.past === 0, JSON.stringify(layout));
@@ -322,6 +323,20 @@ try {
     ok(`[config] ${label}: checkout says payment is not set up and offers no order button`, (await exists('[data-no-payments]')) && !(await exists('#st-checkout-form')),
       JSON.stringify({added, status: await text('#st-buy-status'), main: (await text('main')).slice(0, 200)}));
   }
+  // Razorpay is the chosen gateway but cannot start: :3017 has no credentials; :3018 has a live-format key without RAZORPAY_LIVE_MODE=on.
+  for (const [base, label] of [[RZP_OFF_BASE, 'Razorpay selected without credentials'], [RZP_LIVE_BASE, 'a live Razorpay key without the live switch']]) {
+    await addToCart(base, P3, 1);
+    await go(`${base}/checkout`, '!!document.querySelector("main h1")');
+    ok(`[razorpay off] ${label}: checkout says online payments are temporarily unavailable and offers no order button`,
+      (await exists('[data-no-payments][data-online-payments=unavailable]')) && /temporarily unavailable/.test(await text('[data-no-payments]')) && !(await exists('#st-checkout-form')), (await text('main')).slice(0, 200));
+    const forged = await fetch(`${base}/api/payments/webhook/razorpay`, {method: 'POST', headers: {'content-type': 'application/json', 'x-razorpay-signature': 'a'.repeat(64), 'x-razorpay-event-id': 'evt_forged000001'},
+      body: JSON.stringify({event: 'payment.captured', payload: {payment: {entity: {id: 'pay_Forged00000001', order_id: 'order_Forged0000001', amount: 100, currency: 'INR', status: 'captured'}}}})});
+    ok(`[razorpay off] ${label}: the payment notification address is closed (404)`, forged.status === 404, String(forged.status));
+  }
+  ok('[razorpay off] missing credentials are logged as an error, online payment off', /payment provider "razorpay" could not start: .*Online payment is OFF/.test(fs.readFileSync(RZP_OFF_LOG, 'utf8')));
+  ok('[razorpay off] the live key is refused in the log, and neither the key nor a secret is printed',
+    /could not start: Refusing a live Razorpay key/.test(fs.readFileSync(RZP_LIVE_LOG, 'utf8')) && !/rzp_live_/.test(fs.readFileSync(RZP_LIVE_LOG, 'utf8')));
+  ok('[razorpay off] no order was marked paid by any of it', (await q(`select count(*)::int n from payment_events where id like '%evt_forged%'`))[0].n === 0);
   ok('[config] the refused test provider is logged as an error on that server', /PAYMENT_PROVIDER=test is refused in production/.test(fs.readFileSync(TEST_REFUSED_LOG, 'utf8')));
   ok('[config] a production build with the explicit test flag logs a loud warning', /WARNING: the TEST payment provider is enabled in a production build/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
   ok('[config] the example environment leaves the payment provider unset', /^PAYMENT_PROVIDER=s*$/m.test(fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8')));
@@ -382,6 +397,12 @@ try {
     await setKey('payments.cod_enabled', 'on');
     await go('/checkout', '!!document.querySelector("#st-checkout-form")');
     ok('[cod] switched on: offered where the delivery rate allows it', await exists('[data-payment-methods] input[value=cod]:not([disabled])'), (await text('main')).slice(0, 300));
+    // Cash on delivery does not depend on the online gateway: with Razorpay selected but unable to start, COD is still offered.
+    await go(`${RZP_OFF_BASE}/checkout`, '!!document.querySelector("#st-checkout-form")');
+    ok('[cod] offered and selectable while Razorpay cannot start; paying online is shown as temporarily unavailable',
+      (await exists('[data-payment-methods] input[value=cod]:not([disabled])')) && (await exists('[data-payment-methods] input[value=online][disabled]'))
+      && /temporarily unavailable/.test(await text('[data-online-unavailable]')), (await text('main')).slice(0, 300));
+    await go('/checkout', '!!document.querySelector("#st-checkout-form")');
     await click('[data-payment-methods] input[value=cod]');
     ok('[cod] choosing it adds the delivery rate’s COD fee to the total', await until(`location.search.includes('pay=cod') && !!document.querySelector('[data-cod-fee]')`) && /40/.test(await text('[data-cod-fee]')));
     const start = await ev('location.href');
@@ -392,6 +413,23 @@ try {
     const [co] = await q(`select status, payment_method, cod_status, cod_fee_paise from orders where order_number = $1`, [codNumber]);
     ok('[cod] stored as a COD order going straight to packing, cash to collect', co?.status === 'processing' && co.payment_method === 'cod' && co.cod_status === 'to_collect' && co.cod_fee_paise === 4000, JSON.stringify(co));
     ok('[cod] one confirmation email, saying to pay in cash on delivery', mailsAbout(SERVER_LOG, codNumber) === 1 && /in cash when it is delivered/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
+    // Phase 6 (2026-10-08): the whole flow, checkout → COD order → email event → the generated email (console mailer: nothing is sent).
+    const logText = fs.readFileSync(SERVER_LOG, 'utf8');
+    const begin = logText.indexOf(`subject="Your KITSYUU order ${codNumber} is confirmed"`);
+    const codMail = begin < 0 ? '' : logText.slice(begin, logText.indexOf('[mail:end]', begin)).split('\n').filter(l => l.includes('[mail] ')).map(l => l.slice(l.indexOf('[mail] ') + 7)).join('\n');
+    const [codOrder] = await q(`select o.total_paise, o.contact->>'email' email, o.shipping_address->>'line1' line1, (select string_agg(i.name || '|' || i.qty, ',') from order_items i where i.order_id = o.id) items from orders o where o.order_number = $1`, [codNumber]);
+    const codTotal = `₹${(codOrder.total_paise / 100).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    ok('[cod] the email is addressed to the customer who placed the order', logText.slice(Math.max(0, begin - 200), begin).includes(`to=${codOrder.email}`), codOrder.email);
+    ok('[cod] the email says Payment method: Cash on Delivery and the amount payable on delivery', codMail.includes('Payment method: Cash on Delivery') && codMail.includes(`Amount payable on delivery: ${codTotal}`), codMail.split('\n').filter(l => /Payment|payable/.test(l)).join(' | '));
+    ok('[cod] the email shows the order number, items with quantities, total, delivery address, status and the order link',
+      codMail.includes(codNumber) && codOrder.items.split(',').every(i => codMail.includes(i.split('|')[0]) && codMail.includes(`× ${i.split('|')[1]}`)) && codMail.includes(`Order total: ${codTotal}`)
+      && codMail.includes(codOrder.line1) && codMail.includes('Order status: Being prepared') && codMail.includes(`/account/orders/${encodeURIComponent(codNumber)}`), codMail.slice(0, 200));
+    ok('[cod] the email never says the order is paid', !!codMail && !/payment (was |is )?successful|payment received|total paid|paid online|is paid/i.test(codMail));
+    const [codLog] = await q(`select count(*)::int n, min(n.status) status, min(n.event) event from notification_log n join orders o on o.id = n.order_id where o.order_number = $1`, [codNumber]);
+    ok('[cod] the email event is recorded once for the order (order.placed, sent)', codLog.n === 1 && codLog.status === 'sent' && codLog.event === 'order.placed', JSON.stringify(codLog));
+    await go(`/checkout/complete/${encodeURIComponent(codNumber)}`, '!!document.querySelector("[data-payment-status]")');
+    await go(`/checkout/complete/${encodeURIComponent(codNumber)}`, '!!document.querySelector("[data-payment-status]")');
+    ok('[cod] refreshing the confirmation page sends nothing more', mailsAbout(SERVER_LOG, codNumber) === 1);
     await go(`/account/orders/${encodeURIComponent(codNumber)}`, '!!document.querySelector("main h1")');
     ok('[cod] the order page says what to pay on delivery', /Cash on delivery · pay ₹/.test(await text('[data-payment-method=cod]')));
     // Client report (2026-10-03): "a cancelled COD order still shows as placed / active and may still show Cancel order".

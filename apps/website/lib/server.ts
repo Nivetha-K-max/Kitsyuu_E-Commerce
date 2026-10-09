@@ -7,6 +7,7 @@ import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createDb, type Db } from '@kitsyuu/db';
+import { guardedDatabaseUrl } from './db-guard';
 import { createMailer, validateCustomerSession, type CustomerPrincipal, type Mailer, type RequestContext } from '@kitsyuu/auth';
 
 function required(name: string): string {
@@ -18,7 +19,7 @@ function required(name: string): string {
 // One pool per server instance (reused across requests and hot reloads).
 const g = globalThis as unknown as { __kitsyuuWebDb?: Db; __kitsyuuWebMailer?: Mailer };
 export function db(): Db {
-  return (g.__kitsyuuWebDb ??= createDb({ connectionString: required('WEBSITE_DATABASE_URL'), max: 5 }));
+  return (g.__kitsyuuWebDb ??= createDb({ connectionString: guardedDatabaseUrl('WEBSITE_DATABASE_URL', required('WEBSITE_DATABASE_URL')), max: 5 }));
 }
 export function mailer(): Mailer {
   return (g.__kitsyuuWebMailer ??= createMailer(process.env.MAILER || 'console'));

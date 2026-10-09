@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { ActionForm, Field, Hidden } from '@/components/forms';
 import { currentActor, safeNext } from '@/lib/server';
 import { loginAction } from '../actions';
+import CodeField from './CodeField';
 
 export const metadata: Metadata = { title: 'Sign in' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -29,7 +30,7 @@ export default async function LoginPage({ searchParams }: { searchParams: SP }) 
         <Hidden name="next" value={next} />
         <Field name="email" label="Email" type="email" autoComplete="username" required />
         <Field name="password" label="Password" type="password" autoComplete="current-password" required />
-        <Field name="code" label="Authentication code" autoComplete="one-time-code" hint="Only if two-factor sign-in is on for your account." />
+        <CodeField />
       </ActionForm>
       <p className="auth-links"><Link href="/forgot-password">Forgot your password?</Link></p>
     </>

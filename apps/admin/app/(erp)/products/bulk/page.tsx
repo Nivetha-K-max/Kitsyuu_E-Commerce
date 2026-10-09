@@ -7,11 +7,13 @@ import { ActionForm, Field, Select, TextArea } from '@/components/forms';
 import FilterForm from '@/components/FilterForm';
 import SelectAll from '@/components/SelectAll';
 import TagPicker from '@/components/TagPicker';
+import { ProductStatusPill } from '@/components/StatusPill';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise } from '@/lib/format';
 import { one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { bulkEditAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Bulk edit products' };
 
@@ -43,8 +45,7 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
   ];
   const pending = drafts.filter(d => d.status === 'draft');
   return (
-    <>
-      <PageHead title="Bulk edit products" crumbs={crumbs} eyebrow={`Select up to ${BULK_MAX_PRODUCTS} products and choose a change. It is saved as a draft for review (old → new for each product); nothing changes until it is applied.`} />
+    <Workspace name="products-bulk" title="Bulk edit products" summary={`Select up to ${BULK_MAX_PRODUCTS} products and choose a change. It is saved as a draft for review (old → new for each product); nothing changes until it is applied.`} crumbs={crumbs}>
       {drafts.length > 0 && (
         <section className="card" aria-labelledby="bd-h" data-bulk-drafts>
           <h2 id="bd-h">Bulk edits{pending.length ? ` · ${pending.length} waiting to be applied` : ''}</h2>
@@ -67,7 +68,7 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
         <input id="bk-q" name="q" className="input" placeholder="Name or SKU" defaultValue={query.q ?? ''} />
         <label className="sr-only" htmlFor="bk-s">Status</label>
         <select id="bk-s" name="status" className="input" defaultValue={query.status}>
-          <option value="all">All statuses</option><option value="active">Active</option><option value="draft">Draft</option><option value="review">Awaiting approval</option><option value="archived">Archived</option>
+          <option value="all">All statuses</option><option value="active">Active</option><option value="draft">Draft</option><option value="review">Pending approval</option><option value="archived">Archived</option>
         </select>
         <label className="sr-only" htmlFor="bk-c">Category</label>
         <select id="bk-c" name="category" className="input" defaultValue={query.category ?? ''}>
@@ -87,7 +88,7 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
                 <td><b>{p.name}</b><div className="note mono">{p.sku}</div></td>
                 <td>{p.categoryLabel}{p.subcategoryLabel && ` → ${p.subcategoryLabel}`}</td>
                 <td className="num money">{formatPaise(p.pricePaise)}</td>
-                <td><StatusBadge status={p.status} /></td>
+                <td><ProductStatusPill status={p.status} /></td>
               </tr>
             ))}</tbody>
           </table></div>
@@ -118,6 +119,6 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
         </ActionForm>
       )}
       <p className="note"><Link href="/products">Back to products</Link></p>
-    </>
+    </Workspace>
   );
 }

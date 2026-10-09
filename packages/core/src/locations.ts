@@ -114,6 +114,10 @@ export async function adjustLocationStock(db: Db, actor: StaffPrincipal,
       const loc = await tx.selectFrom('locations').select(['id', 'name', 'is_online', 'kind']).where('id', '=', input.locationId).executeTakeFirst();
       if (!loc) throw new NotFoundError('Location not found.');
       if (input.reason === 'retail_sale' && loc.is_online) throw new DomainError('invalid', 'Retail sales are recorded at a retail location, not the online location.');
+      // 2026-10-08: one adjustment of a size at a time, as adjustStock does for the online stock. Without this lock two
+      // identical submissions sent at the same moment (a double click, two tabs) both passed the "has it changed?" check
+      // below and were both applied. The location's row may not exist yet (first stock), so the size's own row is locked.
+      if (!(await tx.selectFrom('product_variants').select('id').where('id', '=', input.variantId).forUpdate().executeTakeFirst())) throw new NotFoundError('Size not found.');
       const cur = await tx.selectFrom('location_stock').select('qty').where('location_id', '=', loc.id).where('variant_id', '=', input.variantId).executeTakeFirst();
       if ((cur?.qty ?? 0) !== input.expectedQty) throw new ConflictError('The stock of this size changed since you opened the page. Reload and try again.');
       const r = await sql<{ movement_id: number; balance_after: number }>`select * from public.adjust_location_stock(${input.variantId}::uuid, ${loc.id}::uuid, ${input.delta}::int,

@@ -8,6 +8,7 @@ import { formatNumber, formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import FinanceNav from './FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Finance' };
 const EXPORT_LABEL: Record<string, string> = { summary: 'Summary', expenses: 'Expenses', vendor_payments: 'Vendor payments', invoices: 'Invoices (GST)', reconciliation: 'Reconciliation' };
@@ -22,8 +23,7 @@ export default async function FinancePage({ searchParams }: { searchParams: SP }
   let s: Awaited<ReturnType<typeof financeSummary>> | null = null; let error: string | null = null;
   try { s = await financeSummary(db(), actor, range); } catch (e) { if (e instanceof DomainError) error = e.message; else throw e; }
   return (
-    <>
-      <PageHead title="Finance" eyebrow="Orders are counted by the day they were placed (paid, processing, shipped, delivered). Amounts come from the orders as charged." />
+    <Workspace name="finance" title="Finance" summary="Orders are counted by the day they were placed (paid, processing, shipped, delivered). Amounts come from the orders as charged.">
       <FinanceNav current="/finance" />
       <RangeForm from={range.from} to={range.to} />
       {error && <p className="msg error" role="alert">{error}</p>}
@@ -64,6 +64,6 @@ export default async function FinancePage({ searchParams }: { searchParams: SP }
           <div className="actions">{FINANCE_EXPORTS.map(k => <a key={k} className="btn ghost sm" href={`/finance/export?kind=${k}&from=${range.from}&to=${range.to}`} download>{EXPORT_LABEL[k]}</a>)}</div>
         </section>
       </>}
-    </>
+    </Workspace>
   );
 }

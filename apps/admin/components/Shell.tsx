@@ -12,14 +12,15 @@ import CommandPalette, { type QuickAction } from './CommandPalette';
 import { ConfirmProvider } from './confirm';
 import { Icon } from './icons';
 import NavLinks from './NavLinks';
+import { inModule, type NavItem } from '@/lib/nav';
 import { GO_KEYS, typingInField, useSidebarCollapsed } from './shortcuts';
 import ThemeToggle, { useThemePref } from './ThemeToggle';
 import UserMenu from './UserMenu';
 
-type Item = { href: string; label: string; group: string };
+type Page = { href: string; label: string; group: string; icon: string };
 
-export default function Shell({ items, user, logout, actions, children }: {
-  items: Item[]; user: { name: string; email: string }; logout: () => Promise<void>; actions: QuickAction[]; children: ReactNode;
+export default function Shell({ items, pages, user, logout, actions, children }: {
+  items: NavItem[]; pages: Page[]; user: { name: string; email: string }; logout: () => Promise<void>; actions: QuickAction[]; children: ReactNode;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -71,8 +72,9 @@ export default function Shell({ items, user, logout, actions, children }: {
     return () => document.removeEventListener('click', onClick);
   }, [router]);
 
-  const current = items.find(i => path === i.href || path.startsWith(i.href + '/'));
-  const deeper = !!current && path !== current.href;
+  // Where am I: the module this address belongs to (any of its views or record pages).
+  const current = items.find(i => inModule(path, i.match));
+  const deeper = !!current && !current.match.includes(path);
   const context = current ? (current.group === 'Overview' ? [] : [current.group]) : path.startsWith('/account') ? [] : [];
 
   return (
@@ -126,7 +128,7 @@ export default function Shell({ items, user, logout, actions, children }: {
             <main id="main" className="main" tabIndex={-1}>{children}</main>
           </div>
         </div>
-        <CommandPalette open={palette} onOpenChange={setPalette} items={items} actions={actions} onToggleSidebar={toggleSidebar} />
+        <CommandPalette open={palette} onOpenChange={setPalette} items={pages} actions={actions} onToggleSidebar={toggleSidebar} />
         <Toaster theme={theme} position="bottom-right" closeButton richColors={false} />
       </ConfirmProvider>
     </Tooltip.Provider>

@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { after } from 'next/server';
 import type { ReactNode } from 'react';
 import { can } from '@kitsyuu/auth';
 import { ORDER_TRANSITIONS, orderListQuery, paiseToRupees, type OrderListQuery, type OrderStatusCode } from '@kitsyuu/contracts';
-import { listDraftOrders, listOrders, ORDER_PAGE_SIZE } from '@kitsyuu/core';
+import { listDraftOrders, listOrders, ORDER_PAGE_SIZE, retryOrderEmailsThrottled } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Icon } from '@/components/icons';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime, formatNumber } from '@/lib/format';
-import { db, requireActor } from '@/lib/server';
+import { db, mailer, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
 import { FilterLink, NavFrame, NavLink } from '@/components/NavFrame';
 import { createDraftAction } from '../drafts/actions';
@@ -54,8 +55,8 @@ type Next = { label: string; href: string; primary?: boolean } | { wait: string 
     still to collect on a COD order. It is a pointer: the action itself is taken, and checked, on the page it opens. */
 function nextStep(o: Row, p: { status: boolean; cod: boolean; billing: boolean }): Next {
   const order = (hash: string) => `/orders/${o.id}#${hash}`;
-  // Recording the cash is a payment action: it opens the payment (or the order's payment panel without billing.read).
-  const collect = { label: 'Record cash collected', href: p.billing ? `/payments/${o.id}#collect` : order('pay-h') };
+  // Recording the cash is a payment action: it opens the order on its Payment tab.
+  const collect = { label: 'Record cash collected', href: `/orders/${o.id}?tab=payment#collect` };
   const codDue = o.payment_method === 'cod' && o.cod_status === 'to_collect';
   if (codDue && p.cod && o.status === 'delivered') return { ...collect, primary: true };
   const to = ORDER_TRANSITIONS[o.status as OrderStatusCode] ?? [];
@@ -69,6 +70,10 @@ function nextStep(o: Row, p: { status: boolean; cod: boolean; billing: boolean }
 export default async function OrdersPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'orders.read')) return <><PageHead section="Commerce" title="Orders" /><Forbidden permission="orders.read" /></>;
+  /* 2026-10-08: after this page has been sent, order emails that failed are sent again (at most once every 5 minutes per
+     server; nothing happens without a real email provider). The scheduled job /api/jobs/retry-emails does the same on a
+     timer; this keeps retries going where no scheduler is set up. It never delays or changes the page. */
+  after(() => retryOrderEmailsThrottled(db(), mailer(), { storeUrl: process.env.STORE_URL || null }));
   const sp = await searchParams;
   const alias = STATUS_ALIAS[one(sp.status) ?? ''];
   const parsed = orderListQuery.safeParse({ q: one(sp.q), status: alias?.status ?? one(sp.status), packing: alias?.packing ?? one(sp.packing), payment: one(sp.payment),

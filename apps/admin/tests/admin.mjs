@@ -6,13 +6,14 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, SERVER_LOG, INVITE_FILE, KITSYUU_DB_URL} = process.env;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'e2e passphrase for the admin';
-const q = async sql => { const c = new pg.Client({connectionString: KITSYUU_DB_URL}); await c.connect(); try { return (await c.query(sql)).rows; } finally { await c.end(); } };
+const q = async sql => { const c = new pg.Client({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL)}); await c.connect(); try { return (await c.query(sql)).rows; } finally { await c.end(); } };
 
 const b = await launch(9371);
 const ev = e => b.eval(e);
@@ -102,11 +103,11 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Reports|Notifications|Products|Categories|Collections|Attributes|Size charts|Inventory|Stock counts|Locations|Transfers|Stock value|POS billing|Orders|Customers|Payments|Reviews|Store content|Pricing & discounts|Shipping|Returns & refunds|Carts & wishlists|Marketing|Support|Loyalty points|Finance|Vendors|Materials|Purchase orders|Production|Staff|Roles|Audit|Configuration|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Orders|POS billing|Customers|Products|Inventory|Payments|Returns|Shipping|Reviews|Support|Purchasing|Production|Pricing & discounts|Marketing|Store content|Finance|Reports|Catalogue setup|Team & access|Configuration|System', nav);
   // Client change request (2026-10-03): no quick-action buttons and no Recent activity on the dashboard; the audit log itself stays.
   ok('dashboard: no "New product" / "Open reports" quick actions, no Recent activity', !(await ev('!!document.querySelector(\'.page-head a[href="/products/new"], .page-head a[href="/reports"]\')'))
     && !/Recent activity/i.test(await text('main')) && !(await ev('!!document.querySelector("#act-h")')));
-  ok('dashboard: Products, Reports and Audit are still in the menu', /\|Products\|/.test(nav) && /\|Reports\|/.test(nav) && /\|Audit\|/.test(nav));
+  ok('dashboard: Products, Reports and Team & access (staff, roles, audit) are in the menu', /\|Products\|/.test(nav) && /\|Reports\|/.test(nav) && /\|Team & access\|/.test(nav));
 
   // ---------- M9: System page, sign-in history, health check ----------
   await visit('/system', '!!document.querySelector("[data-system-db]")');
@@ -119,21 +120,33 @@ try {
   await visit('/collections', '!!document.querySelector("[data-group-tabs]")');
   ok('M11 collections: New Arrivals listed and in the store', /New Arrivals/.test(await text('[data-collection="new-arrivals"]')) && /in store/i.test(await text('[data-collection="new-arrivals"]')));
   ok('collections are grouped Men / Women / Sale (client change request)', /Men[\s\S]*Women[\s\S]*Sale/.test(await text('[data-group-tabs]')) && await exists('[data-collection="men"]'));
+  // Catalogue setup (Phase 7): creating is in a drawer opened from the page header.
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=new-collection]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=new-collection]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=new-collection] form')`);
   await fill('#create-collection-form input[name=label]', 'E2E Edit'); await fill('#create-collection-form input[name=id]', 'e2e-edit');
   await submit('#create-collection-form');
   await until(`location.pathname === '/collections/e2e-edit'`, 15000);
   ok('M11 collections: a new collection opens hidden', /Hidden/.test(await text('[data-collection-status]')), await text('[data-collection-status]'));
   await visit('/products', '!!document.querySelector("[data-products-table]")');
   ok('M11 products: bulk status form and one checkbox per product', (await exists('#bulk-status-form')) && (await ev(`document.querySelectorAll('input[name="productIds[]"]').length`)) === (await ev(`document.querySelectorAll('[data-product-row]').length`)));
-  await visit(`/products/${(await q(`select id from products order by id limit 1`))[0].id}`, '!!document.querySelector("[data-section=related]")');
-  ok('M11 product page: Complete the look and SEO fields', (await exists('[data-section=related]')) && (await exists('input[name=seoTitle]')) && (await exists('textarea[name=seoDescription]')));
+  const m11 = (await q(`select id from products order by id limit 1`))[0].id;
+  await visit(`/products/${m11}?tab=merchandising`, '!!document.querySelector("[data-section=related]")');
+  const m11Look = await exists('[data-section=related]');
+  await visit(`/products/${m11}`, '!!document.querySelector("[data-drawer-open=details]")');
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=details]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=details]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=details] form')`);
+  ok('M11 product page: Complete the look and SEO fields', m11Look && (await exists('input[name=seoTitle]')) && (await exists('textarea[name=seoDescription]')));
   // ---------- M12: review moderation queue ----------
   await visit('/reviews', '!!document.querySelector("[data-review-tabs]")');
   ok('M12 reviews: moderation queue opens with its tabs (empty)', (await exists('[data-review-tabs]')) && (await exists('[data-empty=reviews]')));
   // ---------- M13: vendor → material → purchase order → delivery ----------
-  await visit('/vendors', '!!document.querySelector("#create-vendor-form")');
+  await visit('/vendors', '!!document.querySelector("[data-drawer-open=new-vendor]")');
+  await until(`(()=>{if(document.querySelector('#create-vendor-form'))return true;const t=document.querySelector('[data-drawer-open=new-vendor]');if(t&&Object.keys(t).some(k=>k.startsWith('__reactProps')))t.click();return false})()`, 20000);
   await fill('#create-vendor-form input[name=name]', 'E2E Mills'); await submit('#create-vendor-form');
-  await visit('/materials', '!!document.querySelector("#create-material-form")');
+  await visit('/materials', '!!document.querySelector("[data-drawer-open=new-material]")');
+  await until(`(()=>{if(document.querySelector('#create-material-form'))return true;const t=document.querySelector('[data-drawer-open=new-material]');if(t&&Object.keys(t).some(k=>k.startsWith('__reactProps')))t.click();return false})()`, 20000);
   for (const [code, name, unit] of [['E2E-TWILL', 'Twill', 'm'], ['E2E-THREAD', 'Thread', 'cone']]) {
     await fill('#create-material-form input[name=code]', code); await fill('#create-material-form input[name=name]', name);
     await fill('#create-material-form input[name=unit]', unit); await submit('#create-material-form');
@@ -141,7 +154,7 @@ try {
   }
   ok('M13 vendor and materials created', /E2E-TWILL[\s\S]*E2E-THREAD|E2E-THREAD[\s\S]*E2E-TWILL/.test(await text('[data-materials-table]')));
   // One purchase order with several lines in one form (purchase workflow): vendor, quantity and unit price per material.
-  await visit('/purchase-orders', '!!document.querySelector("#create-po-form [data-po-material=E2E-THREAD]")');
+  await visit('/purchase-orders/new', '!!document.querySelector("#create-po-form [data-po-material=E2E-THREAD]")');
   await choose('#create-po-form select[name=vendorId]', 'E2E Mills');
   const line = code => `#create-po-form [data-po-material="${code}"] input`;
   await fill(`${line('E2E-TWILL')}[name="qtys[]"]`, '25'); await fill(`${line('E2E-TWILL')}[name="costs[]"]`, '120.50');
@@ -152,6 +165,7 @@ try {
   const poId = (await ev('location.pathname')).split('/').pop();
   const poLines = await q(`select m.code, l.qty_ordered::float qty, l.unit_cost_paise cost from purchase_order_lines l join materials m on m.id = l.material_id where l.purchase_order_id = '${poId}' order by m.code`);
   ok('M13 both lines are on the same purchase order, with their quantities and prices', JSON.stringify(poLines) === JSON.stringify([{code: 'E2E-THREAD', qty: 10, cost: 3500}, {code: 'E2E-TWILL', qty: 25, cost: 12050}]), JSON.stringify(poLines));
+  await visit(`/purchase-orders/${poId}?tab=items`, '!!document.querySelector("[data-po-lines]")');
   ok('M13 PO page: both lines and the total', (await ev(`document.querySelectorAll('[data-po-lines] tbody tr').length`)) === 2 && /3,362\.50/.test(await text('[data-po-total]')), await text('[data-po-total]'));
   await visit(`/purchase-orders/${poId}/print`, '!!document.querySelector("[data-po-print-items]")');
   ok('M13 printed PO: vendor, both items, grand total', /E2E Mills/.test(await text('[data-po-print]')) && (await ev(`document.querySelectorAll('[data-po-print-items] tbody tr').length`)) === 2
@@ -159,28 +173,31 @@ try {
   await visit(`/purchase-orders/${poId}`, '!!document.querySelector("#po-place-form")');
   await autoConfirm();
   await submit('#po-place-form');
-  await visit(`/purchase-orders/${poId}`, '!!document.querySelector("#receive-form")');
+  await visit(`/purchase-orders/${poId}?tab=receiving`, '!!document.querySelector("#receive-form")');
   await ev(`(()=>{const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;for(const i of document.querySelectorAll('#receive-form input[name^="received:"]')){const label=i.closest('.field')?.querySelector('label')?.textContent||'';set.call(i,label.startsWith('Twill')?'25':'10');i.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
-  await submit('#receive-form');
+  await autoConfirm(); await submit('#receive-form');
   // Once fully received the delivery form is no longer offered, so the result is checked in the database and on the page.
   await until(`!document.querySelector('#receive-form')`, 10000);
   ok('M13 order placed and fully received; stock follows', (await q(`select status from purchase_orders where id = '${poId}'`))[0].status === 'received'
     && JSON.stringify(await q(`select code, stock_qty::float n from materials where code like 'E2E-%' order by code`)) === JSON.stringify([{code: 'E2E-THREAD', n: 10}, {code: 'E2E-TWILL', n: 25}]));
   // ---------- M14: plan and start a production order ----------
-  await visit('/production', '!!document.querySelector("#create-production-form")');
+  await visit('/production/new', '!!document.querySelector("#create-production-form")');
   await fill('#create-production-form input[name=qty]', '3'); await submit('#create-production-form');
   await until(atDetail('production'), 15000);
   await submit('#production-start-form');
-  await visit(await ev('location.pathname'), '!!document.querySelector("#qc-form")');
+  await visit((await ev('location.pathname')) + '?tab=output', '!!document.querySelector("#qc-form")');
   ok('M14 production order planned and started; the quality check form is offered', (await exists('#qc-form')) && /in progress/i.test(await text('main')));
   // ---------- M15: open a stock count; stock value page ----------
-  await visit('/stock-counts', '!!document.querySelector("#open-count-form")');
+  await visit('/stock-counts', '!!document.querySelector("[data-drawer-open=new-count]")');
+  await until(`(()=>{if(document.querySelector('#open-count-form'))return true;const t=document.querySelector('[data-drawer-open=new-count]');if(t&&Object.keys(t).some(k=>k.startsWith('__reactProps')))t.click();return false})()`, 20000);
   await submit('#open-count-form');
   await until(atDetail('stock-counts'), 15000);
   ok('M15 stock count opened with every size to count', (await ev(`document.querySelectorAll('[data-count-lines] input[name^="counted:"]').length`)) > 100);
   await autoConfirm(); await submit('#cancel-count-form');
   await visit('/stock-value', '!!document.querySelector("[data-value-garments]")');
-  ok('M15 stock value page: pieces and materials, costs "not set" until entered', /not set/.test(await text('[data-value-garments]')) && (await exists('[data-value-materials]')));
+  const piecesNotSet = /not set/.test(await text('[data-value-garments]'));
+  await visit('/stock-value?view=materials', '!!document.querySelector("[data-value-materials]")');
+  ok('M15 stock value page: pieces and materials, costs "not set" until entered', piecesNotSet && (await exists('[data-value-materials]')));
   // ---------- third pass: locations, a transfer sent and cancelled (stock back where it was), the location report ----------
   await visit('/locations', '!!document.querySelector("#new-location-form")');
   ok('third pass: the online location (Chennai Warehouse) is listed', /Chennai Warehouse/.test(await text('[data-locations-table]')) && /Online store stock/.test(await text('[data-locations-table]')));
@@ -246,6 +263,30 @@ try {
   ok('M18 system: needs-attention list with the two-factor count', /use two-factor sign-in/.test(await text('[data-alerts]')));
   ok('M9 /api/health: 200 with up/down only', health.s === 200 && JSON.stringify(Object.keys(health.j).sort()) === '["app","database","latencyMs","ok"]', JSON.stringify(health));
 
+  // ---------- Phase 6: the scheduled email-retry job is closed to everyone but the scheduler ----------
+  // Called from here (no cookies, like any request from the internet), with the secret the test server was started with.
+  const JOB = BASE + '/api/jobs/retry-emails', secret = process.env.JOBS_SECRET ?? '';
+  const call = async (init = {}, url = JOB) => { const r = await fetch(url, {redirect: 'manual', ...init}); return {s: r.status, body: await r.text()}; };
+  const bearer = v => ({headers: {authorization: `Bearer ${v}`}});
+  const closed = r => r.s === 404 && r.body === '{"ok":false}';
+  const swapped = secret.slice(0, -1) + (secret.endsWith('a') ? 'b' : 'a');   // same length, one character wrong
+  const refused = [await call(), await call({method: 'POST'}), await call(bearer(swapped)), await call(bearer(secret.slice(0, 20))), await call(bearer(secret + 'x')),
+    await call({headers: {authorization: secret}}), await call({headers: {'x-cron-secret': secret}}), await call({}, `${JOB}?secret=${secret}`), await call({}, `${JOB}?token=${secret}`),
+    await call({method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({secret})})];
+  ok('retry-emails job: no secret, a wrong one, or one sent any other way → 404 with nothing in the answer', secret.length >= 32 && refused.every(closed), refused.map(r => r.s).join());
+  const staffOnly = await ev(`fetch('/api/jobs/retry-emails').then(async r=>({s:r.status,body:await r.text()}))`);
+  ok('retry-emails job: a signed-in super admin without the secret is refused too (it is not a staff screen)', closed(staffOnly), JSON.stringify(staffOnly));
+  const allowedGet = await call(bearer(secret)), allowedPost = await call({method: 'POST', ...bearer(secret)});
+  const shape = r => { try { return Object.keys(JSON.parse(r.body)).sort().join(); } catch { return 'not json'; } };
+  ok('retry-emails job: the scheduler (Bearer secret, GET or POST) is let in; the answer is counts only', allowedGet.s === 200 && allowedPost.s === 200
+    && shape(allowedGet) === 'checked,failed,gaveUp,missing,noProvider,ok,sent,skipped,waiting' && JSON.parse(allowedGet.body).ok === true, `${allowedGet.s} ${allowedGet.body}`);
+  ok('retry-emails job: no answer contains the secret or an email address', [...refused, staffOnly, allowedGet, allowedPost].every(r => !r.body.includes(secret) && !/@/.test(r.body)));
+  const twice = await Promise.all([call(bearer(secret)), call(bearer(secret)), call(bearer(secret))]);
+  const [mailRows] = await q(`select count(*)::int n from notification_log`);
+  ok('retry-emails job: safe to call again and at the same time (nothing is sent twice; without a provider nothing is sent at all)', twice.every(r => r.s === 200 && JSON.parse(r.body).sent === 0)
+    && (await q(`select count(*)::int n from notification_log`))[0].n === mailRows.n, twice.map(r => r.body).join(' '));
+  ok('retry-emails job: the server log never shows the secret', !fs.readFileSync(SERVER_LOG, 'utf8').includes(secret));
+
   // ---------- invite a support user through the UI ----------
   await visit('/staff/invite', '!!document.querySelector("input[name=email]")');
   let before = mails().length;
@@ -267,7 +308,7 @@ try {
   const supNav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
   // support holds dashboard.read, orders.read, products.read and inventory.read (seeded roles), nothing for staff/roles/audit;
   // ERP modules add read access to shipping, returns, carts and support (and the notification centre everyone has).
-  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Notifications|Products|Size charts|Inventory|Stock counts|Locations|Transfers|Orders|Customers|Reviews|Shipping|Returns & refunds|Carts & wishlists|Support', supNav);
+  ok('support sees only what its role permits in the menu', supNav === 'Dashboard|Orders|Customers|Products|Inventory|Returns|Shipping|Reviews|Support|Catalogue setup', supNav);
   for (const p of ['/staff', '/staff/invite', '/roles', '/roles/new', '/audit']) {
     await visit(p, '!!document.querySelector("main")');
     ok(`support gets "not permitted" on ${p} (server-side)`, !!(await ev('!!document.querySelector("[data-gate=forbidden]")')) && !(await ev('!!document.querySelector("table,[data-perm-matrix],input[name=email]")')));

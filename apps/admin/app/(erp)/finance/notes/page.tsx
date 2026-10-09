@@ -8,6 +8,7 @@ import { formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { noteStatusAction } from '../actions';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Credit and debit notes' };
 
@@ -17,8 +18,7 @@ export default async function NotesPage() {
   const rows = await listFinanceNotes(db(), actor);
   const manage = can(actor, 'finance.manage');
   return (
-    <>
-      <PageHead title="Finance" eyebrow="Notes are raised from an invoice. A draft gets its number when it is issued." />
+    <Workspace name="finance-notes" title="Finance" summary="Notes are raised from an invoice. A draft gets its number when it is issued.">
       <FinanceNav current="/finance/notes" />
       {rows.length === 0 ? <Empty title="No credit or debit notes" kind="finance-notes">Open an invoice to raise one.</Empty> : (
         <div className="table-wrap"><table data-notes-table>
@@ -38,6 +38,6 @@ export default async function NotesPage() {
           ))}</tbody>
         </table></div>
       )}
-    </>
+    </Workspace>
   );
 }

@@ -8,14 +8,15 @@ import { couponInput, DomainError, orderNumberInput, paymentResultInput, placeOr
 import { cancelOrderByCustomer, checkoutRateLimit, currentPaymentSession, placeOrder, setCartCoupon, submitPaymentResult, type PaymentOutcome } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { sendOrderConfirmation } from '@/lib/order-mail';
-import { commerceConfig, paymentProvider, testProvider } from '@/lib/commerce';
+import { commerceConfig, onlinePaymentNotice, onlinePaymentState, paymentProvider, testProvider } from '@/lib/commerce';
 import { db, requestContext, requireCustomer } from '@/lib/server';
 
 export async function placeOrderAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireCustomer('/checkout');
   // Cash on delivery needs no online payment (second pass); the server decides whether it is available for this order.
   const cod = form.get('paymentMethod') === 'cod';
-  if (!paymentProvider() && !cod) return { ok: false, message: 'Online payment is not set up yet, so orders cannot be placed.' };
+  if (!paymentProvider() && !cod) return { ok: false, message: onlinePaymentState() === 'unavailable'
+    ? 'Online payments are temporarily unavailable. Your cart is saved; please try again later.' : 'Online payment is not set up yet, so orders cannot be placed.' };
   // M9: abuse limit in front of checkout (the M7 checkout itself is unchanged).
   if (!(await checkoutRateLimit(db(), me.customerId)).allowed) return { ok: false, message: 'Too many orders were started from this account in the last hour. Please try again later.' };
   let orderNumber = '', placedCod = false;
@@ -51,7 +52,7 @@ export async function submitPaymentResultAction(raw: unknown): Promise<PaymentRe
   if (!input.success) return { ok: false, message: 'We could not verify this payment.' };
   const me = await requireCustomer(`/account/orders/${encodeURIComponent(input.data.orderNumber)}`);
   const provider = paymentProvider();
-  if (!provider) return { ok: false, message: 'Online payment is not set up yet.' };
+  if (!provider) return { ok: false, message: onlinePaymentNotice() };
   return paymentReply(input.data.orderNumber, async () => submitPaymentResult(db(), provider, me, input.data, await requestContext()));
 }
 

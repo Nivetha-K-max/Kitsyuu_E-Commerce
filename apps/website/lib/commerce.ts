@@ -5,7 +5,10 @@ import 'server-only';
    - PAYMENT_PROVIDER=test → the development test provider, explicitly opted into. In a production build it is refused
      (logged as an error, payment off) unless PAYMENTS_ALLOW_TEST_PROVIDER=on, which only automated tests of a production
      build may set; that case logs a loud warning.
-   - PAYMENT_PROVIDER=razorpay → the Razorpay adapter (needs its credentials; a provider that cannot start is logged and off).
+   - PAYMENT_PROVIDER=razorpay → the Razorpay adapter (needs its credentials; a provider that cannot start is logged and off,
+     and checkout says online payments are temporarily unavailable). Test keys work as they are. A LIVE key is refused
+     unless RAZORPAY_LIVE_MODE=on is also set, and then RAZORPAY_WEBHOOK_SECRET is required too. Cash on delivery never
+     depends on any of this.
    - Shipping: the delivery charge chosen in admin Settings (M10; "Not set up yet" and no charge until then).
    - Discounts (ERP module 1): the discounts set up in the admin, applied only while the admin switch discounts.enabled
      is on (off at launch, so nothing changes until the business decides).
@@ -15,6 +18,9 @@ import { db } from './server';
 import { databaseDiscounts, defaultCommerceConfig, razorpayProvider, settingsShipping, testPaymentProvider, type CommerceConfig, type PaymentProvider, type PricedCart, type TestPaymentProvider } from '@kitsyuu/core';
 
 const g = globalThis as unknown as { __kitsyuuPayment?: PaymentProvider | null };
+
+/** Live Razorpay payments are switched on only by this explicit server-side setting (never by the key alone). */
+const razorpayLive = () => process.env.RAZORPAY_LIVE_MODE === 'on';
 
 function selectPaymentProvider(): PaymentProvider | null {
   const code = (process.env.PAYMENT_PROVIDER || '').trim();
@@ -32,8 +38,10 @@ function selectPaymentProvider(): PaymentProvider | null {
       return testPaymentProvider({ secret: process.env.PAYMENTS_TEST_SECRET, production, allowInProduction: process.env.PAYMENTS_ALLOW_TEST_PROVIDER === 'on' });
     }
     if (code === 'razorpay') {
-      return razorpayProvider({ keyId: process.env.RAZORPAY_KEY_ID ?? '', keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
-        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET, apiBase: process.env.RAZORPAY_API_BASE || undefined,
+      const keyId = (process.env.RAZORPAY_KEY_ID ?? '').trim();
+      return razorpayProvider({ keyId, keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
+        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || undefined, apiBase: process.env.RAZORPAY_API_BASE || undefined,
+        allowLive: razorpayLive(), requireWebhookSecret: keyId.startsWith('rzp_live_'),
         checkoutScriptUrl: process.env.RAZORPAY_CHECKOUT_URL || undefined });
     }
     console.error(`[payments] ERROR: PAYMENT_PROVIDER "${code}" is not supported. Online payment is OFF. See apps/website/.env.example.`);
@@ -48,6 +56,15 @@ export function paymentProvider(): PaymentProvider | null {
   if (g.__kitsyuuPayment === undefined) g.__kitsyuuPayment = selectPaymentProvider();
   return g.__kitsyuuPayment;
 }
+/** Online payment as the customer should hear about it: 'ready'; 'off' (none chosen); or 'unavailable' (one is chosen but
+    cannot start, e.g. its credentials are missing: nothing can be paid online until that is put right). */
+export function onlinePaymentState(): 'ready' | 'off' | 'unavailable' {
+  if (paymentProvider()) return 'ready';
+  return (process.env.PAYMENT_PROVIDER || '').trim() ? 'unavailable' : 'off';
+}
+/** What checkout says when online payment cannot be used. */
+export const onlinePaymentNotice = (): string => onlinePaymentState() === 'unavailable'
+  ? 'Online payments are temporarily unavailable.' : 'Online payment is not set up yet.';
 export const testProvider = (): TestPaymentProvider | null => {
   const p = paymentProvider();
   return p?.code === 'test' ? (p as TestPaymentProvider) : null;

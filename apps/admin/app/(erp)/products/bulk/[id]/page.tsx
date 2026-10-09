@@ -8,6 +8,7 @@ import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { applyBulkDraftAction, cancelBulkDraftAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Bulk edit' };
 type Params = Promise<{ id: string }>;
@@ -26,10 +27,8 @@ export default async function BulkDraftPage({ params }: { params: Params }) {
   const failed = new Map((d.result?.failed ?? []).map(f => [f.productId, f.reason]));
   const outcome = (pid: string) => !d.result ? null : failed.has(pid) ? 'Not changed' : d.result.applied.includes(pid) ? 'Changed' : 'Already so';
   return (
-    <>
-      <PageHead title={x.number} crumbs={crumbs} eyebrow={`${d.labels.join(', ')} · ${x.product_ids.length} product${x.product_ids.length === 1 ? '' : 's'}`}>
-        <StatusBadge status={x.status} />
-      </PageHead>
+    <Workspace name="products-bulk-run" title={x.number} summary={`${d.labels.join(', ')} · ${x.product_ids.length} product${x.product_ids.length === 1 ? '' : 's'}`} crumbs={crumbs}
+      actions={<div className="ord-head-actions"><StatusBadge status={x.status} /></div>}>
       <dl className="facts" data-bulk-draft-meta>
         <dt>Created</dt><dd>{formatDateTime(x.created_at as Date)}{x.created_by_email ? ` · ${x.created_by_email}` : ''}</dd>
         {x.applied_at && <><dt>Applied</dt><dd>{formatDateTime(x.applied_at as Date)}{x.applied_by_email ? ` · ${x.applied_by_email}` : ''}</dd></>}
@@ -64,6 +63,6 @@ export default async function BulkDraftPage({ params }: { params: Params }) {
         )))}</tbody>
       </table></div>
       <p className="note">Before / after are as they were when this bulk edit was saved.</p>
-    </>
+    </Workspace>
   );
 }

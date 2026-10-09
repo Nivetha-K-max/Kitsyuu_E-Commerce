@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { Fragment } from 'react';
 import { randomBytes } from 'node:crypto';
 import { discountSettings, getCustomerCart, lineProblemText, listCustomerAddresses, returnSettings } from '@kitsyuu/core';
+import CheckoutCartSync from '@/components/CheckoutCartSync';
 import CheckoutForm from '@/components/CheckoutForm';
 import CouponForm from '@/components/CouponForm';
 import { returnsPolicy } from '@/lib/store-policy';
 import { Crumbs, EmptyState } from '@/components/ui';
-import { commerceConfig, paymentProvider } from '@/lib/commerce';
+import { commerceConfig, onlinePaymentState, paymentProvider } from '@/lib/commerce';
 import { currentCustomer, db } from '@/lib/server';
 import { productImageUrl, rupees } from '@/lib/account-format';
 
@@ -34,7 +35,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
           <p>Your cart stays as it is and comes with you when you log in.</p>
           <p className="st-empty-actions">
             <Link className="button" href="/login?next=%2Fcheckout">Log in</Link>{' '}
-            <Link className="button button-outline" href="/signup">Create an account</Link>
+            <Link className="button button-outline" href="/signup?next=%2Fcheckout">Create an account</Link>
           </p>
         </section>
       </div>
@@ -54,7 +55,8 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
     discountSettings(db()), returnSettings(db()).catch(() => ({ enabled: false, windowDays: null })),
   ]);
   if (!cart.lines.length) {
-    return <div className="st-wrap">{head()}<EmptyState title="Your cart is empty." text="Add a product to your cart before checking out." /></div>;
+    // A guest cart is merged into the account just after login, on the client: wait for it before saying "empty".
+    return <div className="st-wrap">{head()}<CheckoutCartSync><EmptyState title="Your cart is empty." text="Add a product to your cart before checking out." /></CheckoutCartSync></div>;
   }
   const t = cart.totals;
   const problems = cart.lines.filter(l => l.problem);
@@ -64,7 +66,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   // another address); only when neither online payment nor COD is switched on does the checkout say payment is not set up.
   const codBlocked = !provider && cod?.offered && !cod.available ? (cod.reason ?? 'Cash on delivery is not available for this address.') : null;
   const payment = t.payment && {
-    method: t.payment.method, onlineAvailable: !!provider,
+    method: t.payment.method, onlineAvailable: !!provider, onlineNote: onlinePaymentState() === 'unavailable' ? 'temporarily unavailable' : 'not available yet',
     cod: { offered: !!cod?.offered, available: !!cod?.available, reason: cod?.offered ? cod.reason : null,
       note: cod?.available ? [cod.feePaise > 0 && `fee ${rupees(cod.feePaise)}`, cod.discountPaise > 0 && `${rupees(cod.discountPaise)} off`].filter(Boolean).join(', ') || null : null },
     points: points ? { redeemable: points.redeemable, balance: points.balance, usable: points.usablePoints, valueLabel: points.usableValuePaise ? rupees(points.usableValuePaise) : null,
@@ -87,7 +89,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               <p><Link className="button" href="/account/addresses/new?next=/checkout">Add an address</Link></p>
             </section>
           ) : !canPlace && !codBlocked ? (
-            <p className="st-form-alert" role="alert" data-no-payments>Online payment is not set up yet, so orders cannot be placed. Your cart is saved.</p>
+            <p className="st-form-alert" role="alert" data-no-payments data-online-payments={onlinePaymentState()}>{onlinePaymentState() === 'unavailable' ? 'Online payments are temporarily unavailable, so orders cannot be placed right now. Your cart is saved.' : 'Online payment is not set up yet, so orders cannot be placed. Your cart is saved.'}</p>
           ) : (
             <CheckoutForm idempotencyKey={randomBytes(16).toString('hex')} expectedTotalPaise={t.totalPaise} totalLabel={rupees(t.totalPaise)}
               selectedAddressId={chosen?.id} policy={returnsPolicy(returns)} blocked={t.shipping.unavailable ?? codBlocked}

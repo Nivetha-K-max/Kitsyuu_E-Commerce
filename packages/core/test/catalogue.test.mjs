@@ -132,6 +132,22 @@ test('status: deactivate hides from active list, audited, reactivated', async ()
   assert.equal((await listProducts(db, root, {status: 'inactive'})).length, 0);
 });
 
+test('status filter: Pending approval lists only the products awaiting approval', async () => {
+  const ids = async status => (await listProducts(db, root, {status})).map(p => p.id);
+  assert.deepEqual(await ids('review'), [], 'nothing is awaiting approval in the baseline');
+  await setProductStatus(db, root, {productId: PID, status: 'review'}, ctx);
+  try {
+    assert.deepEqual(await ids('review'), [PID], 'only the submitted product');
+    assert.deepEqual(await ids('draft'), [], 'a submitted product is not a draft');
+    assert.deepEqual(await ids('archived'), []);
+    assert.equal((await ids('active')).includes(PID), false, 'and it is not published');
+    assert.deepEqual(await ids('inactive'), [PID], 'it is still "not in the store"');
+    assert.equal((await ids('all')).length, 22, 'All is unchanged');
+  } finally { await setProductStatus(db, root, {productId: PID, status: 'active'}, ctx); }
+  assert.deepEqual(await ids('review'), []);
+  assert.equal((await ids('active')).length, 22);
+});
+
 const firstVariant = async () => owner.selectFrom('product_variants').select(['id', 'sku', 'stock_qty']).where('product_id', '=', PID).orderBy('sort_order').executeTakeFirstOrThrow();
 const adj = (v, over) => adjustStockInput.parse({variantId: v.id, direction: 'increase', quantity: '5', reason: 'restock', note: '', expectedQty: String(v.stock_qty), ...over});
 

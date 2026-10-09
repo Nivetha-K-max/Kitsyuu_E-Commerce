@@ -6,6 +6,7 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { formatPaise } from '@/lib/format';
 import { istDate, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'POS report' };
 
@@ -21,8 +22,7 @@ export default async function PosReportPage({ searchParams }: { searchParams: SP
   const [r, c] = await Promise.all([posReport(db(), actor, { from, to, locationId }), posContext(db(), actor)]);
   const card = (label: string, value: string, attr: string) => <div className="kpi" data-kpi={attr}><span className="kpi-label">{label}</span><b>{value}</b></div>;
   return (
-    <>
-      <PageHead title="POS report" crumbs={crumbs} eyebrow={from === to ? from : `${from} to ${to}`} />
+    <Workspace name="pos-report" title="POS report" summary={from === to ? from : `${from} to ${to}`} crumbs={crumbs}>
       <RangeForm from={from} to={to}>
         <select name="location" className="input" defaultValue={locationId ?? ''} aria-label="Branch">
           <option value="">All branches</option>
@@ -57,6 +57,6 @@ export default async function PosReportPage({ searchParams }: { searchParams: SP
           </section>
         ))}
       </div>
-    </>
+    </Workspace>
   );
 }

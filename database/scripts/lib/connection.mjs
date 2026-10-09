@@ -3,8 +3,11 @@
    SUPABASE_DB_POOLER_HOST (e.g. aws-0-<region>.pooler.supabase.com, shown under Supabase → Connect → Session pooler):
    the same credentials are then sent to the session pooler (port 5432, user postgres.<project-ref>).
    KITSYUU_DB_URL, when set, is used as-is instead (local test databases only: it must point at localhost).
+   2026-10-08: a host that is not this machine is reached only with --target=production and a typed confirmation
+   (lib/target.mjs). The credentials of the hosted project are no longer kept in the repository's env files.
    No host, user or password is hard-coded here. */
 import pg from 'pg';
+import {requireProductionIntent} from './target.mjs';
 
 export function connectionConfig() {
   if (process.env.KITSYUU_DB_URL) {
@@ -14,7 +17,8 @@ export function connectionConfig() {
       database: decodeURIComponent(u.pathname.slice(1)), connectionTimeoutMillis: 15000, via: 'local test database'};
   }
   const raw = process.env.SUPABASE_DB_URL;
-  if (!raw || /REPLACE_WITH|\[YOUR-PASSWORD\]/.test(raw)) throw new Error('SUPABASE_DB_URL is not set in apps/website/.env.local');
+  if (!raw || /REPLACE_WITH|\[YOUR-PASSWORD\]/.test(raw)) throw new Error('No database is configured. Local: KITSYUU_DB_URL (the npm db:* scripts load the local test database). '
+    + 'Hosted project: load SUPABASE_DB_URL from a file outside the repository and add --target=production.');
   const url = new URL(raw);
   const base = {database: decodeURIComponent(url.pathname.slice(1)) || 'postgres', password: decodeURIComponent(url.password),
     ssl: {rejectUnauthorized: false}, connectionTimeoutMillis: 15000};
@@ -26,8 +30,16 @@ export function connectionConfig() {
   return {...base, host: pooler, port: Number(process.env.SUPABASE_DB_POOLER_PORT) || 5432, user, via: 'session pooler'};
 }
 
+/** For scripts that open their own client from connectionConfig(): the same production check connect() makes. */
+export async function confirmTarget() {
+  const cfg = connectionConfig();
+  await requireProductionIntent(cfg.host, 'the database');
+  return cfg;
+}
+
 export async function connect() {
   const {via, ...cfg} = connectionConfig();
+  await requireProductionIntent(cfg.host, 'the database');
   const client = new pg.Client(cfg);
   try { await client.connect(); }
   catch (e) {

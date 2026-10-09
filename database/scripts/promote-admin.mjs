@@ -5,12 +5,14 @@
    Usage (repo root): npm run db:promote-admin
    Belongs to the current Supabase Auth setup; it is retired when staff auth replaces it (M6). */
 import {createClient} from '@supabase/supabase-js';
+import {requireProductionIntentForUrl} from './lib/target.mjs';
 
 const {NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key, ADMIN_EMAIL: raw} = process.env;
 if (!url || !key || /REPLACE_WITH/.test(key)) { console.error('Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local'); process.exit(1); }
 const email = (raw || '').trim().toLowerCase();
 if (!email || /replace_with/.test(email) || !email.includes('@')) { console.error('Set ADMIN_EMAIL in .env.local'); process.exit(1); }
 
+await requireProductionIntentForUrl(url, 'the Supabase project');
 const sb = createClient(url, key, {auth: {persistSession: false, autoRefreshToken: false}});
 let user = null;
 for (let page = 1; !user; page++) {

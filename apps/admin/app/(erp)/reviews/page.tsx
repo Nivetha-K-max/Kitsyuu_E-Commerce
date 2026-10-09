@@ -7,6 +7,7 @@ import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { moderateReviewAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Reviews' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -25,8 +26,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
   const moderate = can(actor, 'reviews.moderate');
   const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
   return (
-    <>
-      <PageHead section="Commerce" title="Reviews" eyebrow={`${counts.pending} waiting for approval · ${counts.approved} in the store`} />
+    <Workspace name="reviews" title="Reviews" summary={`${counts.pending} waiting for approval · ${counts.approved} in the store`}>
       <nav className="tabs actions" aria-label="Review status" data-review-tabs>
         {TABS.map(t => <Link key={t.key} className={`btn ${t.key === status ? '' : 'ghost'} sm`} href={`/reviews?status=${t.key}`} aria-current={t.key === status ? 'page' : undefined}>
           {t.label} ({counts[t.key]})</Link>)}
@@ -40,7 +40,7 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
                 <div>
                   <div className="review-stars" aria-label={`${r.rating} out of 5`}>{stars(r.rating)}</div>
                   {r.title && <h2 className="review-title">{r.title}</h2>}
-                  <div className="note"><Link href={`/products/${r.product_id}`}>{r.product_name}</Link> · <span className="mono">{r.sku}</span></div>
+                  <div className="note"><Link href={`/products/${r.product_id}?tab=reviews`}>{r.product_name}</Link> · <span className="mono">{r.sku}</span></div>
                 </div>
                 <StatusBadge status={r.status} />
               </header>
@@ -77,6 +77,6 @@ export default async function ReviewsPage({ searchParams }: { searchParams: SP }
         {page > 1 && <Link className="btn ghost sm" href={`/reviews?status=${status}&page=${page - 1}`}>Previous</Link>}
         {hasNext && <Link className="btn ghost sm" href={`/reviews?status=${status}&page=${page + 1}`}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

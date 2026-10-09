@@ -10,6 +10,8 @@ import { Icon } from './icons';
 
 type Action = (state: ActionState, form: FormData) => Promise<ActionState>;
 const StateCtx = createContext<ActionState>({});
+/** The last answer of the form this component sits in (for parts that depend on it). */
+export const useFormState = () => useContext(StateCtx);
 
 export function ActionForm({ action, children, submitLabel, pendingLabel, className = 'form', variant, confirmText, confirm, id, resetOnSuccess, label, hideSubmit }: {
   action: Action; children?: ReactNode; submitLabel: string; pendingLabel?: string; className?: string;

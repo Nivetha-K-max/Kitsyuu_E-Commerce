@@ -6,13 +6,14 @@ import path from 'node:path';
 import pg from 'pg';
 import sharp from 'sharp';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL, STORAGE_DIR, OUT_DIR} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'catalogue e2e passphrase';
-const pool = new pg.Pool({connectionString: KITSYUU_DB_URL, max: 1});
+const pool = new pg.Pool({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL), max: 1});
 const q = async (text, params = []) => (await pool.query(text, params)).rows;
 
 // Test upload files: a real PNG and a text file pretending to be a PNG.
@@ -59,6 +60,13 @@ const visit = async (p, ready = '!!document.querySelector("main") && !document.q
 /* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 
+/** Opens a drawer of the page (the product's details and status forms live in drawers on Overview). */
+const openDrawer = async name => {
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=${name}]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=${name}]').click(),true`);
+  return until(`!!document.querySelector('[data-drawer=${name}] form')`);
+};
+
 async function signIn(key, name) {
   await b.send('Network.clearBrowserCookies');
   const link = fs.readFileSync(INVITES[key], 'utf8').match(/accept-invite\?token=[A-Za-z0-9_-]{43}/)[0];
@@ -74,7 +82,7 @@ try {
 
   // ================= super admin =================
   ok('super admin signs in', await signIn('root', 'M4 Root'));
-  ok('menu has Categories under Catalogue', /Products\|Categories\|Collections\|Attributes\|Size charts\|Inventory/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
+  ok('menu has Products, Inventory and Catalogue setup (categories, collections, attributes, size charts)', /Products\|Inventory[\s\S]*Catalogue setup/.test(await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`)));
 
   // ---------- create product ----------
   await visit('/products', '!!document.querySelector("[data-products-table]")');
@@ -98,23 +106,30 @@ try {
   ok('create: generated product ID shown', (await ev(`document.querySelector('[data-fact=id]').innerText`)) === P);
 
   // ---------- activation needs a size and an image ----------
+  await openDrawer('status');
   await fill('#status-form [name=status]', 'active'); await submit('#status-form');
   ok('activation refused without a size', /offered size/.test(await message('#status-form')), await message('#status-form'));
 
   // ---------- sizes ----------
+  await visit(`/products/${P}?tab=variants`, '!!document.querySelector("#add-size-form")');
   await fill('#add-size-form [name=size]', 'm'); await submit('#add-size-form');
   ok('add size: SKU derived, starts at 0', /Size added: KTS-OUT-950-M, 0 in stock/.test(await message('#add-size-form')), await message('#add-size-form'));
   ok('new size appears with 0 in stock', await until(`document.querySelector('[data-variant="KTS-OUT-950-M"] [data-qty]')?.innerText === '0'`));
   await fill('#add-size-form [name=size]', 'M'); await submit('#add-size-form');
   ok('add size: duplicate refused', /already exists/.test(await message('#add-size-form')), await message('#add-size-form'));
   const adj = '[id="adjust-KTS-OUT-950-M"]';
+  await until(`!!document.querySelector('[data-adjust-row="KTS-OUT-950-M"]')`);
+  await ev(`document.querySelector('[data-adjust-row="KTS-OUT-950-M"]').open = true`);
   await fill(`${adj} [name=direction]`, 'increase'); await fill(`${adj} [name=quantity]`, '6'); await fill(`${adj} [name=reason]`, 'restock'); await submit(adj);
   ok('stock arrives through the ledger (0 → 6)', (await message(adj)).endsWith('0 → 6 (+6).'), await message(adj));
 
+  await visit(`/products/${P}`, '!!document.querySelector("[data-drawer-open=status]")');
+  await openDrawer('status');
   await fill('#status-form [name=status]', 'active'); await submit('#status-form');
   ok('activation refused without an image', /Upload an image/.test(await message('#status-form')), await message('#status-form'));
 
   // ---------- images ----------
+  await visit(`/products/${P}?tab=media`, '!!document.querySelector("#upload-image-form")');
   await setFile('#upload-image-form input[type=file]', fakePng); await submit('#upload-image-form');
   ok('upload: a disguised non-image is refused by content', /Only JPEG, PNG or WebP/.test(await message('#upload-image-form')), await message('#upload-image-form'));
   await setFile('#upload-image-form input[type=file]', realPng); await fill('#upload-image-form [name=alt]', 'Front view'); await submit('#upload-image-form');
@@ -124,10 +139,13 @@ try {
   // Thumbnails load lazily and the Media section sits below the fold (M11 added sections above it): scroll to it first.
   await ev(`document.querySelector('[data-section=images]')?.scrollIntoView()`);
   ok('uploaded image displays', await until(`[...document.querySelectorAll('[data-image] img')].some(i=>i.complete && i.naturalWidth>0 && i.src.includes('/media/'))`, 15000));
+  await visit(`/products/${P}`, '!!document.querySelector("[data-drawer-open=status]")');
+  await openDrawer('status');
   await fill('#status-form [name=status]', 'active'); await submit('#status-form');
   ok('activation succeeds with a size and a primary image', /active and visible/.test(await message('#status-form')) && (await q(`select status from products where id=$1`, [P]))[0].status === 'active', await message('#status-form'));
 
   // second image: make primary, reorder, remove the first
+  await visit(`/products/${P}?tab=media`, '!!document.querySelector("#upload-image-form")');
   await setFile('#upload-image-form input[type=file]', secondPng); await submit('#upload-image-form');
   ok('second upload is not primary', /Image uploaded \(900×900, WebP\)\.$/.test(await message('#upload-image-form')), await message('#upload-image-form'));
   await until(`document.querySelectorAll('[data-image-tools]').length === 2`);
@@ -144,17 +162,21 @@ try {
 
   // ---------- size settings, stale protection ----------
   const S = '[id="size-KTS-OUT-950-M"]';
+  await visit(`/products/${P}?tab=variants`, `!!document.querySelector('${S}')`);
+  await ev(`document.querySelector('[data-size="KTS-OUT-950-M"]').open = true`);
   await fill(`${S} [name=price]`, '4,099.50'); await fill(`${S} [name=reorderLevel]`, '3'); await submit(S);
   ok('size settings saved (price override in paise, reorder level)', /KTS-OUT-950-M: saved/.test(await message(S)) && JSON.stringify(await q(`select price_paise, reorder_level from product_variants where sku = 'KTS-OUT-950-M'`)) === '[{"price_paise":409950,"reorder_level":3}]', await message(S));
   await q(`update product_variants set sort_order = sort_order where sku = 'KTS-OUT-950-M'`);           // another session touches the row (LOCAL test DB)
   await fill(`${S} [name=reorderLevel]`, '4'); await submit(S);
   ok('size settings: stale change refused', /changed by someone else/.test(await message(S)), await message(S));
-  await visit(`/products/${P}`, `!!document.querySelector('${S}')`);
+  await visit(`/products/${P}?tab=variants`, `!!document.querySelector('${S}')`);
+  await ev(`document.querySelector('[data-size="KTS-OUT-950-M"]').open = true`);
   await fill(`${S} [name=price]`, 'abc'); await submit(S);
   ok('size settings: invalid price shows a field error', /Enter an amount/.test(await fieldError(S, 'price')));
 
   // ---------- New Arrivals ----------
   const count0 = (await q(`select count(*)::int n from collection_products where collection_id = 'new-arrivals'`))[0].n;
+  await visit(`/products/${P}?tab=merchandising`, '!!document.querySelector("#new-arrival-form")');
   await submit('#new-arrival-form');
   ok('New Arrivals: added at the end', await until(`document.querySelector('[data-new-arrival]')?.dataset.newArrival === 'yes'`) && new RegExp(`position ${count0 + 1} of ${count0 + 1}`).test(await ev(`document.querySelector('[data-new-arrival]').innerText`)));
   await submit('#na-up');
@@ -166,6 +188,7 @@ try {
   await visit('/categories', '!!document.querySelector("[data-categories-table]")');
   ok('categories page lists the 10 existing categories', (await ev(`document.querySelectorAll('[data-category-row]').length`)) === 10);
   const C = '#create-category-form';
+  await openDrawer('new-category');   // Catalogue setup (Phase 7): creating is in a drawer opened from the page header
   await fill(`${C} [name=slug]`, 'accessories'); await fill(`${C} [name=label]`, 'Accessories'); await submit(C);
   ok('create top-level category', /Category accessories created/.test(await message(C)), await message(C));
   await until(`!!document.querySelector('${C} [name=parentId] option[value=accessories]')`);
@@ -191,8 +214,12 @@ try {
   ok('support: no "New product" button', !(await exists('[data-new-product]')));
   await visit('/products/new');
   ok('support: /products/new is not permitted (server-side)', (await exists('[data-gate=forbidden]')) && !(await exists('#create-product-form')));
-  await visit(`/products/${P}`, '!!document.querySelector("[data-section=images]")');
-  ok('support: no image, size or New Arrivals controls', (await exists('[data-readonly=images]')) && !(await exists('#upload-image-form')) && !(await exists('#add-size-form')) && !(await exists('[data-image-tools]')) && !(await exists('[data-section=new-arrivals]')));
+  await visit(`/products/${P}?tab=variants`, '!!document.querySelector("[data-section=stock]")');
+  const supNoSize = !(await exists('#add-size-form'));
+  await visit(`/products/${P}?tab=merchandising`, '!!document.querySelector("[data-section=collections]")');
+  const supNoArrivals = !(await exists('[data-section=new-arrivals]'));
+  await visit(`/products/${P}?tab=media`, '!!document.querySelector("[data-section=images]")');
+  ok('support: no image, size or New Arrivals controls', (await exists('[data-readonly=images]')) && !(await exists('#upload-image-form')) && supNoSize && !(await exists('[data-image-tools]')) && supNoArrivals);
   await visit('/categories');
   ok('support: categories not permitted (no categories.read)', (await exists('[data-gate=forbidden]')) && !(await exists('[data-categories-table]')));
 
@@ -200,9 +227,12 @@ try {
   ok('inventory manager signs in', await signIn('inventory', 'M4 Inventory'));
   await visit('/categories', '!!document.querySelector("[data-categories-table]")');
   ok('inventory manager: categories visible, read-only', (await exists('[data-readonly=categories]')) && !(await exists('#create-category-form')) && !(await exists('[id^=cat-edit-]')));
-  await visit(`/products/${P}`, '!!document.querySelector("[data-section=images]")');
-  ok('inventory manager: can adjust stock but not sizes, images or New Arrivals', (await exists('[id="adjust-KTS-OUT-950-M"]')) && !(await exists('[data-section=sizes]')) && !(await exists('#upload-image-form'))
-    && (await exists('[data-readonly=new-arrivals]')));
+  await visit(`/products/${P}?tab=variants`, '!!document.querySelector("[data-section=stock]")');
+  const invStock = (await exists('[id="adjust-KTS-OUT-950-M"]')) && !(await exists('[data-section=sizes]'));
+  await visit(`/products/${P}?tab=media`, '!!document.querySelector("[data-section=images]")');
+  const invNoUpload = !(await exists('#upload-image-form'));
+  await visit(`/products/${P}?tab=merchandising`, '!!document.querySelector("[data-section=collections]")');
+  ok('inventory manager: can adjust stock but not sizes, images or New Arrivals', invStock && invNoUpload && (await exists('[data-readonly=new-arrivals]')));
 
   // ================= consistency =================
   const [after] = await q(`select (select md5(string_agg(row(id, sku, price_paise, status)::text, '|' order by id)) from products where id <> $1) fp,

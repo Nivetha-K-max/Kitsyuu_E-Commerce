@@ -38,7 +38,7 @@ export async function listProducts(db: Db, actor: StaffPrincipal, query: Product
   if (query.category) q = q.where(eb => eb.or([eb('p.category_id', '=', query.category!), eb('p.subcategory_id', '=', query.category!)]));
   if (query.status === 'active') q = q.where('p.status', '=', 'active');
   if (query.status === 'inactive') q = q.where('p.status', '!=', 'active');
-  if (query.status === 'draft' || query.status === 'archived') q = q.where('p.status', '=', query.status);
+  if (query.status === 'draft' || query.status === 'review' || query.status === 'archived') q = q.where('p.status', '=', query.status);
   // Client change request: filters combine (collection + category + status + availability).
   if (query.collection) q = q.where(eb => eb.exists(eb.selectFrom('collection_products as cp').select('cp.product_id').whereRef('cp.product_id', '=', 'p.id').where('cp.collection_id', '=', query.collection!)));
   if (query.stock === 'in_stock') q = q.where(sql<boolean>`exists (select 1 from public.product_variants v where v.product_id = p.id and v.is_active and v.stock_qty > 0)`);

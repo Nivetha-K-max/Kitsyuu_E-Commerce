@@ -1,9 +1,10 @@
 /* Customer notifications (M7). Builds the messages; the app sends them with its Mailer after the change is committed.
    Messages state facts about the order only: no delivery dates, shipment notifications or refund promises. */
-import { sql, type Db, type Queryable } from '@kitsyuu/db';
+import type { Db, Queryable } from '@kitsyuu/db';
 import { paiseToRupees } from '@kitsyuu/contracts';
 import type { Mailer, MailMessage } from '@kitsyuu/auth';
 import { pricingView } from './customer-account.ts';
+import { sendTransactionalEmail } from './transactional-email.ts';
 
 const money = (paise: number) => `₹${paiseToRupees(paise)}`;
 const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -24,7 +25,7 @@ export async function orderConfirmationEmail(q: Queryable, orderNumber: string, 
   const retail = o.channel === 'retail';
   const branch = retail && o.location_id ? (await q.selectFrom('locations').select('name').where('id', '=', o.location_id).executeTakeFirst())?.name ?? null : null;
   const pv = pricingView(o.pricing);
-  const METHOD: Record<string, string> = { online: 'Paid online', cod: 'Cash on delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
+  const METHOD: Record<string, string> = { online: 'Paid online', cod: 'Cash on Delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
   const STATUS: Record<string, string> = { paid: 'Paid', processing: 'Being prepared', shipped: 'Shipped', delivered: retail ? 'Handed over in the store' : 'Delivered' };
   const lines = [
     `Hello${text(contact.name) ? ' ' + text(contact.name) : ''},`, '',
@@ -37,8 +38,10 @@ export async function orderConfirmationEmail(q: Queryable, orderNumber: string, 
     ...(o.shipping_paise > 0 || pv.delivery ? [`${pv.delivery ? `${pv.delivery.pickup ? 'Store pickup' : 'Delivery'} (${pv.delivery.label}${pv.delivery.estimate ? `, ${pv.delivery.estimate}` : ''})` : 'Shipping'}: ${o.shipping_paise > 0 ? money(o.shipping_paise) : 'free'}`] : []),
     ...(o.cod_fee_paise > 0 ? [`Cash on delivery fee: ${money(o.cod_fee_paise)}`] : []),
     o.prices_include_tax ? 'Taxes: included in the prices' : `Taxes: ${money(o.tax_paise)}`,
-    cod ? `Total to pay on delivery: ${money(o.total_paise)}` : `Total paid: ${money(o.total_paise)}`, '',
-    `Payment: ${METHOD[o.payment_method] ?? o.payment_method}`,
+    ...(cod ? [`Order total: ${money(o.total_paise)}`] : [`Total paid: ${money(o.total_paise)}`]), '',
+    `Payment method: ${METHOD[o.payment_method] ?? o.payment_method}`,
+    // Cash on delivery is never described as paid: the email says what is due at the door.
+    ...(cod ? [`Amount payable on delivery: ${money(o.total_paise)}`] : []),
     `Order status: ${STATUS[o.status] ?? (cod ? 'Being prepared' : o.status)}`, '',
     ...(retail ? [] : ['Deliver to',
       ...[text(ship.name ?? ship.full_name), text(ship.line1), text(ship.line2), [text(ship.city), text(ship.state), text(ship.pin)].filter(Boolean).join(', '),
@@ -52,29 +55,24 @@ export async function orderConfirmationEmail(q: Queryable, orderNumber: string, 
 export type OrderEmailResult = { sent: true } | { sent: false; reason: 'duplicate' | 'not_eligible' | 'failed' | 'error' };
 
 /** Sends the "order confirmed" email once per order (2026-10-01): a per-order lock and the notification log ('order.placed',
-    status sent) stop a second send, whoever calls it (payment callback, provider webhook, staff confirming a draft). Every
-    attempt is logged (sent / failed) so staff can see it on the order. A failed send never undoes the order. */
+    status sent) stop a second send, whoever calls it (checkout, payment callback, provider webhook, staff confirming a
+    draft). Every attempt is logged (sent / failed) so staff can see it on the order. A failed send never undoes the order;
+    it is sent again later (retryOrderEmails). */
 export async function sendOrderPlacedEmail(db: Db, mailer: Mailer, orderNumber: string, opts: { orderUrl: string; policy?: string }): Promise<OrderEmailResult> {
-  try {
-    return await db.transaction().execute(async tx => {
-      const o = await tx.selectFrom('orders').select(['id', 'customer_id']).where('order_number', '=', orderNumber).executeTakeFirst();
-      if (!o) return { sent: false, reason: 'not_eligible' } as const;
-      await sql`select pg_advisory_xact_lock(hashtext(${'order.placed:' + o.id}))`.execute(tx);
-      const done = await tx.selectFrom('notification_log').select('id').where('order_id', '=', o.id).where('event', '=', 'order.placed').where('status', '=', 'sent').executeTakeFirst();
-      if (done) return { sent: false, reason: 'duplicate' } as const;
-      // A walk-in order has no account: no link to an account page.
-      const m = await orderConfirmationEmail(tx, orderNumber, { ...opts, orderUrl: o.customer_id ? opts.orderUrl : '' });
-      if (!m) return { sent: false, reason: 'not_eligible' } as const;
-      if (!o.customer_id) m.text = m.text.replace(/\nYour order: $/, '');
-      let error: string | null = null;
-      try { await mailer.send(m); } catch (e) { error = String((e as Error).message ?? e).slice(0, 500); }
-      await tx.insertInto('notification_log').values({ event: 'order.placed', order_id: o.id, recipient: m.to, subject: m.subject.slice(0, 200), status: error ? 'failed' : 'sent', error }).execute();
-      return error ? { sent: false, reason: 'failed' } as const : { sent: true } as const;
-    });
-  } catch (e) {
-    console.error(`[order mail] confirmation for ${orderNumber} could not be sent:`, (e as Error).message);
-    return { sent: false, reason: 'error' };
-  }
+  // 2026-10-08: sent by the transactional email service (lock, sent-once check, quick second try, log, later retry).
+  const r = await sendTransactionalEmail(db, mailer, 'order.placed', q => orderPlacedMessage(q, orderNumber, opts));
+  return r.sent ? r : { sent: false, reason: r.reason === 'no_recipient' || r.reason === 'off' ? 'not_eligible' : r.reason };
+}
+
+/** The confirmation of one order with the order it belongs to, or null when there is nothing to confirm (see orderConfirmationEmail). */
+export async function orderPlacedMessage(q: Queryable, orderNumber: string, opts: { orderUrl: string; policy?: string }): Promise<(MailMessage & { orderId: string }) | null> {
+  const o = await q.selectFrom('orders').select(['id', 'customer_id']).where('order_number', '=', orderNumber).executeTakeFirst();
+  if (!o) return null;
+  // A walk-in order has no account: no link to an account page.
+  const m = await orderConfirmationEmail(q, orderNumber, { ...opts, orderUrl: o.customer_id ? opts.orderUrl : '' });
+  if (!m) return null;
+  if (!o.customer_id || !opts.orderUrl) m.text = m.text.replace(/\n+Your order: $/, '');
+  return { ...m, orderId: o.id };
 }
 
 /** The customer emails of one order (for staff on the order page): what was sent, when, and whether it failed. */

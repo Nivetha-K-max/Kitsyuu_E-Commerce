@@ -9,6 +9,7 @@ import { Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui'
 import { formatDateTime, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { cancelDraftAction, confirmDraftAction, setDraftAddressesAction, setDraftDiscountAction, setDraftItemAction, setDraftNoteAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Draft order' };
 type Params = Promise<{ id: string }>;
@@ -51,10 +52,8 @@ export default async function DraftPage({ params, searchParams }: { params: Para
   const codRefused = payment === 'cod' && t.payment?.method !== 'cod';
   const staff = t.discounts.find(x => x.code === 'STAFF');
   return (
-    <>
-      <PageHead title={d.number} crumbs={crumbs} eyebrow={d.channel === 'retail' ? `In store · ${location?.name ?? ''}` : 'Online order (delivered)'}>
-        <StatusBadge status={d.status === 'open' ? 'draft' : d.status === 'confirmed' ? 'processed' : 'cancelled'} />
-      </PageHead>
+    <Workspace name="draft" title={d.number} summary={d.channel === 'retail' ? `In store · ${location?.name ?? ''}` : 'Online order (delivered)'} crumbs={crumbs}
+      actions={<div className="ord-head-actions"><StatusBadge status={d.status === 'open' ? 'draft' : d.status === 'confirmed' ? 'processed' : 'cancelled'} /></div>}>
       {d.status === 'confirmed' && d.order_id && <p className="msg ok" role="status" data-draft-confirmed>This draft became an order: <Link href={`/orders/${d.order_id}`}>open the order</Link>.</p>}
       <dl className="facts" data-draft-meta>
         <dt>Customer</dt><dd>{customer ? <><Link href={`/customers/${customer.id}`}>{customer.full_name ?? customer.email}</Link> · {customer.email}</> : `${contact.name ?? 'Walk-in customer'}${contact.phone ? ` · ${contact.phone}` : ''}${contact.email ? ` · ${contact.email}` : ''}`}</dd>
@@ -160,6 +159,6 @@ export default async function DraftPage({ params, searchParams }: { params: Para
         )}
         {edit && !v.canConfirm && <p className="note" data-cannot-confirm>{lines.length === 0 ? 'Add items to confirm.' : d.channel === 'online' && !ship ? 'Enter the delivery address to confirm.' : 'Some items are not available (see above).'}</p>}
       </section>
-    </>
+    </Workspace>
   );
 }

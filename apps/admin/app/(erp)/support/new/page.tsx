@@ -7,6 +7,7 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { openTicketAction } from '../actions';
 import SupportNav from '../SupportNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'New ticket' };
 
@@ -16,8 +17,7 @@ export default async function NewTicketPage() {
   if (!can(actor, 'support.manage')) return <><PageHead title="Support" /><Forbidden permission="support.manage" /></>;
   const categories = await supportCategories(db());
   return (
-    <>
-      <PageHead title="Support" eyebrow="Open a ticket for a customer enquiry that came by phone or email." />
+    <Workspace name="new-ticket" title="Support" summary="Open a ticket for a customer enquiry that came by phone or email.">
       <SupportNav current="/support/new" manage />
       <section className="card form-panel">
         <ActionForm action={openTicketAction} submitLabel="Open ticket" id="new-ticket-form" label="Open ticket">
@@ -32,6 +32,6 @@ export default async function NewTicketPage() {
           <TextArea name="body" label="What the customer said" rows={5} required />
         </ActionForm>
       </section>
-    </>
+    </Workspace>
   );
 }

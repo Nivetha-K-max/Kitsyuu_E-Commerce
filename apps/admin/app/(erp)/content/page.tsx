@@ -6,6 +6,7 @@ import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { saveAnnouncementAction, saveBrandCopyAction, unpublishAnnouncementAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Store content' };
 
@@ -16,8 +17,7 @@ export default async function ContentPage() {
   const [a, brand] = await Promise.all([getAnnouncementAdmin(db(), actor), getBrandCopyAdmin(db(), actor)]);
   const current = a.draft ?? a.published;
   return (
-    <>
-      <PageHead section="Commerce" title="Store content" eyebrow="The announcement bar shown at the top of every store page." />
+    <Workspace name="content" title="Store content" summary="The announcement bar shown at the top of every store page.">
       <div className="grid two">
         <section className="card" aria-labelledby="ann-h" data-section="announcement">
           <SectionTitle id="ann-h">Announcement bar</SectionTitle>
@@ -47,6 +47,6 @@ export default async function ContentPage() {
             : <Field key={f.key} name={f.key} label={f.label} defaultValue={brand.copy[f.key]} hint={`${f.where} · up to ${f.max} characters`} />)}
         </ActionForm>
       </section>
-    </>
+    </Workspace>
   );
 }

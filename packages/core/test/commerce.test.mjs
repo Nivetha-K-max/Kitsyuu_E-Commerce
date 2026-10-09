@@ -327,6 +327,28 @@ test('Razorpay adapter: test mode only; signature + API read-back; unavailable s
   assert.equal(await submitPaymentResult(db, rzp, asha, {orderNumber, result: response}, ctx), 'paid');
 });
 
+test('Razorpay adapter: live keys need the explicit switch and a webhook secret; placeholders and missing secrets never start it', async () => {
+  const LIVE = 'rzp_live_AbCdEf123456', secret = 'x'.repeat(24);
+  assert.throws(() => razorpayProvider({keyId: LIVE, keySecret: secret, webhookSecret: 'w'.repeat(24)}), /live payments are not switched on/);
+  assert.throws(() => razorpayProvider({keyId: LIVE, keySecret: secret, allowLive: false, requireWebhookSecret: true, webhookSecret: 'w'.repeat(24)}), /live/);
+  assert.throws(() => razorpayProvider({keyId: LIVE, keySecret: secret, allowLive: true, requireWebhookSecret: true}), /RAZORPAY_WEBHOOK_SECRET is not set/);
+  assert.equal(razorpayProvider({keyId: LIVE, keySecret: secret, allowLive: true, requireWebhookSecret: true, webhookSecret: 'w'.repeat(24)}).code, 'razorpay');
+  assert.throws(() => razorpayProvider({keyId: '', keySecret: ''}), /key id/);
+  assert.throws(() => razorpayProvider({keyId: TEST_KEY_ID, keySecret: ''}), /RAZORPAY_KEY_SECRET is not set/);
+  assert.throws(() => razorpayProvider({keyId: TEST_KEY_ID, keySecret: 'REPLACE_WITH_SECRET'}), /RAZORPAY_KEY_SECRET is not set/);
+  assert.throws(() => razorpayProvider({keyId: TEST_KEY_ID, keySecret: secret, webhookSecret: 'REPLACE_WITH_WEBHOOK_SECRET'}), /placeholder/);
+  // Without a webhook secret no notification can ever be accepted, however it is signed.
+  const noHook = razorpayProvider({keyId: TEST_KEY_ID, keySecret: KEY_SECRET, apiBase: rzpFake.url, timeoutMs: 3000});
+  const {orderNumber} = await checkout(asha, ashaAddress, [{productId: 'ky-proto-016', size: (await variant('ky-proto-016')).size, qty: 1}]);
+  const start = await preparePayment(db, noHook, asha, orderNumber);
+  const w = rzpFake.webhook('payment.captured', rzpFake.pay(start.client.razorpayOrderId, 'success').payment);
+  const hdr = name => ({'x-razorpay-signature': w.signature, 'x-razorpay-event-id': w.eventId})[name] ?? null;
+  assert.deepEqual(await handlePaymentWebhook(db, noHook, w.rawBody, hdr), {status: 401, outcome: 'not_verified'});
+  assert.deepEqual(await handlePaymentWebhook(db, noHook, w.rawBody, name => name === 'x-razorpay-signature' ? '' : w.eventId), {status: 401, outcome: 'not_verified'});
+  assert.equal((await orderRow(orderNumber)).status, 'pending_payment', 'an unverifiable notification pays nothing');
+  await cancelOrderByCustomer(db, asha, orderNumber, ctx);
+});
+
 test('Razorpay webhooks: signature checked, each event once, late failure never undoes a capture, payment after cancel flagged', async () => {
   const hdr = w => name => ({'x-razorpay-signature': w.signature, 'x-razorpay-event-id': w.eventId})[name] ?? null;
   const {orderNumber} = await checkout(ravi, raviAddress, [{productId: 'ky-proto-017', size: (await variant('ky-proto-017')).size, qty: 1}]);
@@ -386,8 +408,11 @@ test('Resend mailer: sends Resend’s API format with the key only in the header
   try {
     const m = resendMailer({apiKey: key, from: 'KITSYUU <orders@example.com>', apiBase: `http://127.0.0.1:${srv.address().port}`});
     await m.send({to: 'asha@example.com', subject: 'Hello', text: 'Line 1\nLine 2'});
-    assert.deepEqual(seen[0], {method: 'POST', url: '/emails', auth: `Bearer ${key}`,
+    // 2026-10-08: every email also carries an HTML part made from the same text (the KITSYUU layout).
+    const {html, ...body} = seen[0].body;
+    assert.deepEqual({...seen[0], body}, {method: 'POST', url: '/emails', auth: `Bearer ${key}`,
       body: {from: 'KITSYUU <orders@example.com>', to: ['asha@example.com'], subject: 'Hello', text: 'Line 1\nLine 2'}});
+    assert.ok(html.startsWith('<!doctype html>') && html.includes('Line 1<br>Line 2'));
     answer = 422;
     await assert.rejects(m.send({to: 'x@example.com', subject: 's', text: 't'}), e => /Resend answered 422/.test(e.message) && !e.message.includes(key));
   } finally { await new Promise(r => srv.close(r)); }

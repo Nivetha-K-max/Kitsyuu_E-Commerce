@@ -4,6 +4,7 @@ import { ActionForm, Field } from '@/components/forms';
 import { Forbidden, PageHead } from '@/components/ui';
 import { requireActor } from '@/lib/server';
 import { createRoleAction } from '../actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'New role' };
 
@@ -12,14 +13,13 @@ export default async function NewRolePage() {
   const crumbs = [{ href: '/roles', label: 'Roles & permissions' }];
   if (!can(actor, 'roles.manage')) return <><PageHead section="System" title="New role" crumbs={crumbs} /><Forbidden permission="roles.manage" /></>;
   return (
-    <>
-      <PageHead section="System" title="New role" crumbs={crumbs} />
+    <Workspace name="new-role" title="New role" crumbs={crumbs}>
       <ActionForm action={createRoleAction} submitLabel="Create role">
         <Field name="name" label="Name" required />
         <Field name="code" label="Code" hint="Permanent identifier, e.g. warehouse_lead (lower-case letters, digits, underscores)." required />
         <Field name="description" label="Description" />
       </ActionForm>
       <p className="note section-foot">Permissions are chosen on the next screen.</p>
-    </>
+    </Workspace>
   );
 }

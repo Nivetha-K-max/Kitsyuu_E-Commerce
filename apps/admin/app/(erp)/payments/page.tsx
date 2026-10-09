@@ -3,11 +3,9 @@ import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
 import { orderPaymentListQuery, paymentEventListQuery, paymentListQuery, type OrderPaymentListQuery, type PaymentEventListQuery, type PaymentListQuery } from '@kitsyuu/contracts';
 import { getPaymentExceptions, listOrderPayments, listPaymentEvents, listPayments, PAYMENT_PAGE_SIZE } from '@kitsyuu/core';
-import { ActionForm, Hidden, TextArea } from '@/components/forms';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { recordManualRefundAction } from './actions';
 import FilterForm from '@/components/FilterForm';
 import { FilterLink, NavFrame, NavLink } from '@/components/NavFrame';
 import { orderStage } from '../orders/order-ui';
@@ -16,8 +14,9 @@ import { methodLabel, PaymentPill, providerLabel } from './payment-ui';
 export const metadata: Metadata = { title: 'Payments' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-/* Payments answers "what happened to the customer's money?". The first view is one line per order's payment (how it is
-   paid, its state, what was collected or refunded); the others are the records behind it. Orders are managed under Orders. */
+/* Payments is the money queue across orders: which payments failed, which COD cash is still to collect, what was
+   refunded, which payments do not match their order. It finds the work; the work is done on the order's Payment tab
+   (one payment record, one workflow). The first view is one line per order's payment; the others are the records behind it. */
 const VIEWS = [['payments', 'Payments'], ['exceptions', 'Exceptions'], ['attempts', 'Payment attempts'], ['events', 'Provider notifications']] as const;
 const STATES: { value: OrderPaymentListQuery['state']; label: string }[] = [
   { value: 'all', label: 'All' }, { value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Pending' }, { value: 'unpaid', label: 'Unpaid' }, { value: 'failed', label: 'Failed' },
@@ -25,7 +24,7 @@ const STATES: { value: OrderPaymentListQuery['state']; label: string }[] = [
 ];
 type View = (typeof VIEWS)[number][0];
 const EXCEPTION_HELP: Record<string, string> = {
-  captured_after_cancel: 'Money was received for an order that is cancelled. Refund it by hand and record it here.',
+  captured_after_cancel: 'Money was received for an order that is cancelled. It has to be refunded by hand and recorded.',
   amount_mismatch: 'The amount received differs from the order total. Check it with the payment provider.',
   duplicate_capture: 'The order was paid more than once. Check it with the payment provider.',
   paid_without_capture: 'The order is marked paid but there is no captured payment record. Check it with the payment provider.',
@@ -43,7 +42,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: SP 
   );
   return (
     <NavFrame className="ord pay" data-payments-screen>
-      <PageHead section="Commerce" title="Payments" eyebrow={view === 'payments' ? 'What happened to the money of each order: how it is paid, what was received, collected or refunded.'
+      <PageHead section="Commerce" title="Payments" eyebrow={view === 'payments' ? 'The money of each order: how it is paid, what was received, collected or refunded. A row opens the order on its Payment tab.'
+        : view === 'exceptions' ? 'Payments that do not match their order. Each is handled on its order’s Payment tab.'
         : 'Online payments are recorded by the verified checkout flow; these views only read them.'} />
       <nav className="tabs ord-views" aria-label="Payment views" data-payments-tabs>{VIEWS.map(([v, l]) => tab(v, l))}</nav>
       {view === 'payments' ? await Payments({ sp, actor })
@@ -60,6 +60,8 @@ async function Payments({ sp, actor }: { sp: Record<string, string | string[] | 
   const { rows, hasNext, matching, total, codToCollect } = await listOrderPayments(db(), actor, query);
   const filtered = !!(query.q || query.state !== 'all' || query.method !== 'all' || query.from || query.to);
   const canOrders = can(actor, 'orders.read'), canCod = can(actor, 'orders.cod');
+  // A payment is its order's Payment tab (one record, two ways in). Without orders.read the same panel opens on its own.
+  const pay = (orderId: string, hash = '') => `${canOrders ? `/orders/${orderId}?tab=payment` : `/payments/${orderId}`}${hash}`;
   const href = (change: Partial<Record<'q' | 'state' | 'method' | 'from' | 'to' | 'page', string | undefined>>) => {
     const next = { q: query.q, state: query.state, method: query.method, from: query.from, to: query.to, page: undefined as string | undefined, ...change };
     const qs = new URLSearchParams(Object.entries(next).filter(([, v]) => v && v !== 'all') as [string, string][]).toString();
@@ -97,23 +99,30 @@ async function Payments({ sp, actor }: { sp: Record<string, string | string[] | 
       {rows.length === 0 ? <Empty title={filtered ? 'No matching payments' : 'No payments yet'} kind="order-payments" action={filtered ? <Link className="btn ghost" href="/payments">Clear filters</Link> : undefined}>
           {filtered ? 'No payment matches these filters.' : 'A payment appears here for every order placed.'}</Empty> : (
         <div className="table-wrap ord-table" data-fresh key={href({ page: String(query.page) })}><table data-order-payments>
-          <thead><tr><th>Payment for</th><th>Reference</th><th>Method</th><th>Status</th><th className="num">Amount</th><th>Date (IST)</th><th>Action</th></tr></thead>
+          <thead><tr><th>Payment for</th><th>Reference</th><th>Method</th><th>Status</th><th className="num">Amount</th><th>Date (IST)</th><th>Next step</th></tr></thead>
           <tbody>{rows.map(p => {
             const st = orderStage(p.status), cod = p.payment_method === 'cod';
-            const collect = cod && p.cod_status === 'to_collect' && canCod && (p.status === 'shipped' || p.status === 'delivered');
+            const codDue = cod && p.cod_status === 'to_collect' && p.status !== 'cancelled';
+            const collect = codDue && canCod && (p.status === 'shipped' || p.status === 'delivered');
+            // Why this payment needs attention, from its recorded state only.
+            const why = p.refunds_open > 0 ? 'refund in progress' : p.payment_status === 'failed' ? `last attempt failed${p.attempts > 1 ? ` (${p.attempts} attempts)` : ''}`
+              : codDue ? (p.status === 'delivered' ? 'delivered, cash not recorded' : p.status === 'shipped' ? 'collect on delivery' : 'collect after dispatch')
+              : p.payment_status === 'pending' || p.payment_status === 'authorized' ? 'waiting for the customer to pay' : null;
             return (
               <tr key={p.id} data-payment-of={p.order_number}>
-                <td className="ord-who"><NavLink prefetch className="row-link" href={`/payments/${p.id}`} aria-label={`Payment for order ${p.order_number}`}>{p.contact_name ?? p.contact_email ?? 'No customer details'}</NavLink>
-                  <div className="ord-no">{canOrders ? <NavLink href={`/orders/${p.id}`} data-order-link>{p.order_number}</NavLink> : p.order_number}<span> · order {st.label.toLowerCase()}</span></div></td>
+                <td className="ord-who"><NavLink prefetch className="row-link" href={pay(p.id)} aria-label={`Payment for order ${p.order_number}`}>{p.contact_name ?? p.contact_email ?? 'No customer details'}</NavLink>
+                  <div className="ord-no"><span className="mono">{p.order_number}</span><span> · order {st.label.toLowerCase()}</span></div></td>
                 <td className="ord-extra pay-ref" data-label="Reference">{p.reference ? <span className="mono">{p.reference}</span> : <span className="note">{cod ? 'no cash recorded yet' : 'no payment yet'}</span>}
                   {p.attempts > 1 && <div className="note">{p.attempts} attempts</div>}</td>
                 <td className="ord-items pay-method">{methodLabel(p.payment_method)}{!cod && p.provider && p.provider !== 'pos' ? <div className="note">{providerLabel(p.provider)}</div> : p.provider === 'pos' ? <div className="note">in store</div> : null}</td>
                 <td className="ord-stage"><PaymentPill method={p.payment_method} paymentStatus={p.payment_status} codStatus={p.cod_status} orderStatus={p.status} note={false} />
-                  {p.refunded_paise > 0 && <div className="note">{formatPaise(p.refunded_paise)} refunded</div>}{p.refunds_open > 0 && <div className="note">refund in progress</div>}</td>
+                  {p.refunded_paise > 0 && <div className="note">{formatPaise(p.refunded_paise)} refunded</div>}{why && <div className="note" data-payment-why>{why}</div>}</td>
                 <td className="num money ord-amount" data-payment-amount>{formatPaise(p.total_paise)}</td>
                 <td className="nowrap ord-placed">{formatDateTime(p.captured_at ?? p.created_at)}<div className="note">{p.captured_at ? (cod ? 'collected' : 'received') : 'order placed'}</div></td>
-                <td className="ord-next">{collect ? <NavLink className="btn sm" href={`/payments/${p.id}#collect`} aria-label={`Record cash collected: order ${p.order_number}`}>Record cash collected<span aria-hidden="true"> →</span></NavLink>
-                  : <NavLink className="btn ghost sm" href={`/payments/${p.id}`} aria-label={`View payment for order ${p.order_number}`}>View</NavLink>}</td>
+                <td className="ord-next" data-next-step>{collect ? <NavLink className="btn sm" href={pay(p.id, '#collect')} aria-label={`Record COD cash: order ${p.order_number}`}>Record COD cash<span aria-hidden="true"> →</span></NavLink>
+                  : p.refunds_open > 0 ? <NavLink className="btn ghost sm" href={pay(p.id, '#refunds')} aria-label={`View refund for order ${p.order_number}`}>View refund</NavLink>
+                  : p.payment_status === 'failed' ? <NavLink className="btn ghost sm" href={pay(p.id, '#att-h')} aria-label={`View payment attempts for order ${p.order_number}`}>View attempts</NavLink>
+                  : <NavLink className="btn ghost sm" href={pay(p.id)} aria-label={`View payment for order ${p.order_number}`}>View</NavLink>}</td>
               </tr>);
           })}
           </tbody></table></div>
@@ -131,35 +140,32 @@ async function Payments({ sp, actor }: { sp: Record<string, string | string[] | 
 
 function Exceptions({ rows, canRefund, canOrders }: { rows: Awaited<ReturnType<typeof getPaymentExceptions>>['rows']; canRefund: boolean; canOrders: boolean }) {
   if (rows.length === 0) return <Empty title="No payment exceptions" kind="payment-exceptions">Every payment matches its order.</Empty>;
+  const open = (orderId: string) => (canOrders ? `/orders/${orderId}?tab=payment#exc-h` : `/payments/${orderId}`);
   return (
-    <section className="card" aria-labelledby="ex-h" data-section="exceptions">
-      <h2 id="ex-h">Exceptions queue</h2>
-      <p className="note">The only action here is recording that money received for a cancelled order was refunded by hand. Refunds for returned items are handled under Returns &amp; refunds.</p>
-      <div className="table-wrap"><table data-exceptions-table>
-        <thead><tr><th>Exception</th><th>Order</th><th>Payment</th><th className="num">Received</th><th className="num">Order total</th><th>Handling</th></tr></thead>
-        <tbody>{rows.map((e, i) => (
-          <tr key={`${e.orderId}-${e.paymentId ?? 'order'}-${i}`} data-exception={e.kind} data-exception-order={e.orderNumber}>
-            <td><StatusBadge status={e.kind} /><div className="note">{EXCEPTION_HELP[e.kind]}</div></td>
-            <td className="mono nowrap">{canOrders ? <Link className="row-link" href={`/orders/${e.orderId}`}>{e.orderNumber}</Link> : e.orderNumber}
+    <div className="table-wrap ord-table" data-section="exceptions"><table data-exceptions-table>
+      <thead><tr><th>Exception</th><th>Order</th><th>Payment</th><th className="num">Received</th><th className="num">Order total</th><th>Handling</th><th>Next step</th></tr></thead>
+      <tbody>{rows.map((e, i) => {
+        const record = !e.manualRefund && e.kind === 'captured_after_cancel' && !!e.paymentId && canRefund;
+        return (
+          <tr key={`${e.orderId}-${e.paymentId ?? 'order'}-${i}`} data-exception={e.kind} data-exception-order={e.orderNumber} data-exception-state={e.manualRefund ? 'recorded' : 'open'}>
+            <td className="ord-who"><StatusBadge status={e.kind} /><div className="note">{EXCEPTION_HELP[e.kind]}</div></td>
+            <td className="mono nowrap ord-extra" data-label="Order"><NavLink prefetch className="row-link" href={open(e.orderId)} aria-label={`Payment exception of order ${e.orderNumber}`}>{e.orderNumber}</NavLink>
               <div><StatusBadge status={e.orderStatus} /></div></td>
-            <td className="mono">{e.providerPaymentId ?? '—'}{e.provider && <div className="note">{e.provider}</div>}</td>
-            <td className="num money">{e.amountPaise === null ? '—' : formatPaise(e.amountPaise)}</td>
-            <td className="num money">{formatPaise(e.orderTotalPaise)}</td>
-            <td data-exception-handling>
+            <td className="mono ord-extra" data-label="Payment">{e.providerPaymentId ?? '—'}{e.provider && <div className="note">{e.provider}</div>}</td>
+            <td className="num money ord-extra" data-label="Received">{e.amountPaise === null ? '—' : formatPaise(e.amountPaise)}</td>
+            <td className="num money ord-amount">{formatPaise(e.orderTotalPaise)}</td>
+            <td className="ord-stage" data-exception-handling>
               {e.manualRefund ? <><StatusBadge status={e.manualRefund.status} /> <span className="note">Manual refund recorded {formatDateTime(e.manualRefund.createdAt)}
                 {e.manualRefund.requestedBy ? ` by ${e.manualRefund.requestedBy}` : ''}. “{e.manualRefund.reason}”</span></>
-                : e.kind === 'captured_after_cancel' && e.paymentId && canRefund ? (
-                  <ActionForm action={recordManualRefundAction} submitLabel="Record manual refund" pendingLabel="Recording…" label={`Record manual refund for ${e.orderNumber}`}
-                    confirmText={`Record that ${e.amountPaise === null ? 'this payment' : formatPaise(e.amountPaise)} for ${e.orderNumber} is refunded by hand? Nothing is sent to the payment provider.`}>
-                    <Hidden name="paymentId" value={e.paymentId} />
-                    <TextArea name="note" label="How it is refunded" rows={2} required hint="E.g. bank transfer reference. Kept in the audit log." />
-                  </ActionForm>)
-                : e.kind === 'captured_after_cancel' ? <span className="note">Needs the refunds.create permission.</span>
-                : <span className="note">Open — check with the provider.</span>}
+                : e.kind === 'captured_after_cancel' ? <span className="note">Open: refund by hand, then record it{canRefund ? '' : ' (needs refunds.create)'}.</span>
+                : <span className="note">Open: check with the provider.</span>}
             </td>
-          </tr>))}
-        </tbody></table></div>
-    </section>
+            <td className="ord-next" data-next-step>{record
+              ? <NavLink className="btn sm" href={open(e.orderId)} aria-label={`Record manual refund: order ${e.orderNumber}`}>Record manual refund<span aria-hidden="true"> →</span></NavLink>
+              : <NavLink className="btn ghost sm" href={open(e.orderId)} aria-label={`View payment of order ${e.orderNumber}`}>View</NavLink>}</td>
+          </tr>);
+      })}
+      </tbody></table></div>
   );
 }
 
@@ -200,8 +206,8 @@ async function Attempts({ sp, actor }: { sp: Record<string, string | string[] | 
           <thead><tr><th>Created</th><th>Order</th><th>Provider</th><th>Reference</th><th className="num">Amount</th><th>Status</th><th>Exception</th></tr></thead>
           <tbody>{rows.map(p => (
             <tr key={p.id} data-payment-row={p.provider_payment_id ?? p.id}>
-              <td className="nowrap"><Link href={`/payments/${p.order_id}`} data-attempt-payment>{formatDateTime(p.created_at)}</Link></td>
-              <td className="mono nowrap">{can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${p.order_id}`}>{p.order_number}</Link> : p.order_number}
+              <td className="nowrap"><Link href={can(actor, 'orders.read') ? `/orders/${p.order_id}?tab=payment` : `/payments/${p.order_id}`} data-attempt-payment>{formatDateTime(p.created_at)}</Link></td>
+              <td className="mono nowrap">{can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${p.order_id}?tab=payment`}>{p.order_number}</Link> : p.order_number}
                 <div><StatusBadge status={p.order_status} /></div></td>
               <td>{p.provider}{p.method && <div className="note">{p.method}</div>}</td>
               <td className="mono">{p.provider_payment_id ?? '—'}{p.provider_order_id && <div className="note">{p.provider_order_id}</div>}</td>
@@ -248,7 +254,7 @@ async function Events({ sp, actor }: { sp: Record<string, string | string[] | un
             <tr key={e.id} data-event-row={e.id}>
               <td className="nowrap">{formatDateTime(e.received_at)}</td><td>{e.provider}</td>
               <td><span className="mono">{e.type}</span><div className="note mono">{e.id}</div></td>
-              <td className="mono">{e.order_id ? (can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${e.order_id}`}>{e.order_number}</Link> : e.order_number) : '—'}</td>
+              <td className="mono">{e.order_id ? (can(actor, 'orders.read') ? <Link className="row-link" href={`/orders/${e.order_id}?tab=payment`}>{e.order_number}</Link> : e.order_number) : '—'}</td>
               <td>{e.outcome ? <StatusBadge status={e.outcome} /> : <span className="note">—</span>}</td>
               <td className="nowrap">{formatDateTime(e.processed_at)}</td>
             </tr>))}

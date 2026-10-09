@@ -271,7 +271,7 @@ test('production ↔ purchasing: shortfall, a draft PO raised for it and linked,
   // The normal vendor workflow: order it, receive part of it.
   await setPurchaseOrderStatus(admin, root, {purchaseOrderId: raised.id, status: 'ordered', expectedStatus: 'draft', note: null}, ctx);
   const po = await getPurchaseOrder(admin, root, raised.id);
-  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: po.lines[0].id, qty: 5}], note: null}, ctx);
+  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: po.lines[0].id, qty: 5, expectedReceived: po.lines[0].received}], note: null}, ctx);
   assert.equal((await getPurchaseOrder(admin, root, raised.id)).order.status, 'partially_received');
   needs = await productionMaterialNeeds(admin, root, po0.id);
   assert.deepEqual(needs.needs.map(x => [x.stock, x.onOrder, x.shortfall]), [[7, 3, 0]], 'received stock moved through the ledger');

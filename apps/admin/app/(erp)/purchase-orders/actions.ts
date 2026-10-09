@@ -50,8 +50,12 @@ export async function receiveGoodsAction(_: ActionState, form: FormData): Promis
   // One quantity field per line, named received:<lineId>; empty fields mean "nothing arrived".
   const lines = [...form.entries()].filter(([k]) => k.startsWith('received:')).map(([k, v]) => ({ lineId: k.slice(9), qty: String(v).trim() }))
     .filter(l => l.qty !== '');
+  // What the page showed as already received on each line (seen:<lineId>). Core compares it with the line under its lock,
+  // so a delivery entered on an out-of-date page (a second tab, a colleague, a repeated submission) is refused, not received again.
+  const seen = (lineId: string) => { const v = form.get(`seen:${lineId}`); return typeof v === 'string' && /^\d{1,10}(\.\d{1,3})?$/.test(v) ? Number(v) : null; };
   const r = await handle(receiveGoodsInput, form, async input => {
-    const res = await receiveGoods(db(), actor, input, await requestContext());
+    if (input.lines.some(l => seen(l.lineId) === null)) return { ok: false, message: 'This page is out of date. Reload it and enter the delivery again.' };
+    const res = await receiveGoods(db(), actor, { ...input, lines: input.lines.map(l => ({ ...l, expectedReceived: seen(l.lineId)! })) }, await requestContext());
     return { ok: true, message: `${res.receiptNumber} recorded. ${res.status === 'received' ? 'The order is fully received.' : 'Some items are still to come.'}` };
   }, { lines });
   if (r.ok) refresh(String(form.get('purchaseOrderId')));

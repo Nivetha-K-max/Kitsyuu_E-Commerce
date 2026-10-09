@@ -1,7 +1,9 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { codCancelInput, codCollectInput, orderEditInput, orderEditRefundInput, packingStateInput, paiseToRupees, shipmentTrackingInput, updateOrderStatusInput, type ActionState } from '@kitsyuu/contracts';
-import { cancelCodOrder, editOrder, notifyOrderDelivered, notifyOrderPacked, notifyOrderStatus, recordCodCollected, refundOrderEdit, setPackingState, settingsShipping, updateOrderStatus, updateShipmentTracking } from '@kitsyuu/core';
+import { redirect } from 'next/navigation';
+import { z } from 'zod';
+import { codCancelInput, codCollectInput, orderEditInput, orderEditRefundInput, packingStateInput, paiseToRupees, shipmentTrackingInput, updateOrderStatusInput, uuid, type ActionState } from '@kitsyuu/contracts';
+import { cancelCodOrder, createStaffReturn, editOrder, notifyOrderDelivered, notifyOrderPacked, notifyOrderStatus, notifyOrderTracking, recordCodCollected, refundOrderEdit, setPackingState, settingsShipping, updateOrderStatus, updateShipmentTracking } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { refundProvider } from '@/lib/payments';
 import { STATUS_LABEL } from '@/lib/format';
@@ -41,7 +43,9 @@ export async function updateShipmentTrackingAction(_: ActionState, form: FormDat
   const actor = await requireActor();
   const r = await handle(shipmentTrackingInput, form, async input => {
     const res = await updateShipmentTracking(db(), actor, input, await requestContext());
-    return { ok: true, message: `${res.orderNumber}: tracking details saved.` };
+    // 2026-10-08: the tracking email (Configuration → Customer emails; off by default). One per tracking number; never blocks the change.
+    const mail = await notifyOrderTracking(db(), mailer(), input.orderId, process.env.STORE_URL || null);
+    return { ok: true, message: `${res.orderNumber}: tracking details saved.${mail.sent ? ' The customer was emailed.' : ''}` };
   });
   if (r.ok) { revalidatePath('/orders', 'layout'); revalidatePath('/dashboard'); }
   return r;
@@ -96,5 +100,22 @@ export async function codCancelAction(_: ActionState, form: FormData): Promise<A
     return { ok: true, message: `${res.orderNumber} cancelled.${res.unitsReturned ? ` Returned ${res.unitsReturned} unit(s) to stock.` : ''}${note}` };
   });
   if (r.ok) refresh();
+  return r;
+}
+
+// ---------------------------------------------------------------- order control centre (2026-10-07)
+const startReturnInput = z.object({ orderId: uuid, reasonCode: z.string().trim().min(1, 'Choose a reason.'), description: z.string().trim().max(2000).optional() });
+/** Opens a return or exchange for this order on the customer's behalf, from the order's Returns tab. The rules are the
+    return workflow's own (createStaffReturn: returns switched on, a delivered order inside the window, units still returnable). */
+export async function startReturnAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  let id = '', orderId = '';
+  const r = await handle(startReturnInput, form, async input => {
+    const items = [...form.keys()].filter(k => k.startsWith('qty_')).map(k => ({ orderItemId: k.slice(4), qty: parseInt(String(form.get(k) ?? '0'), 10) || 0 })).filter(i => i.qty > 0);
+    if (!items.length) return { ok: false, message: 'Enter the quantity being returned for at least one item.' };
+    orderId = input.orderId;
+    id = (await createStaffReturn(db(), actor, { orderId: input.orderId, reasonCode: input.reasonCode, description: input.description || null, items }, await requestContext())).id;
+  });
+  if (id) { revalidatePath('/orders', 'layout'); revalidatePath('/returns', 'layout'); redirect(`/orders/${orderId}?tab=returns&return=${id}`); }
   return r;
 }

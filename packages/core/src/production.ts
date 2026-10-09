@@ -139,14 +139,23 @@ export async function setProductionInput(db: Db, actor: StaffPrincipal, input: {
   });
 }
 
-/** Records material actually used: drawn from material stock (refused if there is not enough). Started orders only. */
-export async function consumeMaterial(db: Db, actor: StaffPrincipal, input: { productionOrderId: string; materialId: string; qty: number }, ctx: MutationContext) {
+/** Records material actually used: drawn from material stock (refused if there is not enough). Started orders only.
+    2026-10-08: expectedConsumed is what the caller saw as already used of this material on this order (0 when none), as
+    expectedQty is for a stock adjustment. It is compared AFTER the order is locked, in the same transaction, so the same use sent
+    twice (two tabs, two people, an old page) is refused, not recorded again. A refused request writes nothing. */
+export async function consumeMaterial(db: Db, actor: StaffPrincipal, input: { productionOrderId: string; materialId: string; qty: number; expectedConsumed: number }, ctx: MutationContext) {
   requirePermission(actor, 'production.manage');
   if (!(input.qty > 0)) throw new DomainError('invalid', 'Enter a quantity above zero.');
   return db.transaction().execute(async tx => {
     const o = await lockOrder(tx, input.productionOrderId);
     if (o.status !== 'in_progress') throw new ConflictError('Record materials used once production has started.');
-    const exists = await tx.selectFrom('production_inputs').select('id').where('production_order_id', '=', o.id).where('material_id', '=', input.materialId).executeTakeFirst();
+    const exists = await tx.selectFrom('production_inputs').select(['id', 'qty_consumed']).where('production_order_id', '=', o.id).where('material_id', '=', input.materialId).executeTakeFirst();
+    if (!(typeof input.expectedConsumed === 'number' && Math.abs(qty(exists?.qty_consumed ?? 0) - input.expectedConsumed) < 1e-9))
+      throw new ConflictError('Material used on this order was recorded since you opened the page. Reload and check before recording more.');
+    // The material's row is locked before the order's first row for it is written. That row refers to the material (a shared lock),
+    // and the ledger function then locks the material itself: two orders using one material for the first time at the same moment
+    // each held the shared lock and waited for the other (a database deadlock; all but one failed). Locked first, they queue.
+    if (!(await tx.selectFrom('materials').select('id').where('id', '=', input.materialId).forUpdate().executeTakeFirst())) throw new NotFoundError('Material not found.');
     if (!exists) await tx.insertInto('production_inputs').values({ production_order_id: o.id, material_id: input.materialId }).execute();
     const balance = await materialLedger(tx, input.materialId, -input.qty, 'consume', actor.staffId, o.number, null);
     await tx.updateTable('production_inputs').set({ qty_consumed: sql`qty_consumed + ${String(input.qty)}::numeric` })

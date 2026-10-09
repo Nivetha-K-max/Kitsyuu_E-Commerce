@@ -9,6 +9,7 @@ import { bp, istLocal, rupeesField } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { saveDiscountAction, setDiscountActiveAction } from '../actions';
 import PricingNav from '../PricingNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Discounts & coupons' };
 type Discount = Awaited<ReturnType<typeof listDiscounts>>[number];
@@ -60,8 +61,7 @@ export default async function DiscountsPage() {
   const [rows, settings, targets, recent] = await Promise.all([listDiscounts(db(), actor), discountSettings(db()), promotionTargets(db(), actor), discountRedemptions(db(), actor, undefined, 25)]);
   const manage = can(actor, 'pricing.manage');
   return (
-    <>
-      <PageHead title="Pricing & discounts" eyebrow={settings.enabled ? `Discounts are ON · ${settings.stacking === 'all' ? 'all applicable discounts combine' : 'only the largest discount applies'}` : 'Discounts are OFF (Configuration → Discounts): nothing below is applied at checkout.'} />
+    <Workspace name="pricing-discounts" title="Pricing & discounts" summary={settings.enabled ? `Discounts are ON · ${settings.stacking === 'all' ? 'all applicable discounts combine' : 'only the largest discount applies'}` : 'Discounts are OFF (Configuration → Discounts): nothing below is applied at checkout.'}>
       <PricingNav current="/pricing/discounts" />
       {rows.length === 0 ? <Empty title="No discounts yet" kind="discounts">Create a coupon code or an automatic discount below.</Empty> : (
         <div className="table-wrap"><table data-discounts-table>
@@ -104,6 +104,6 @@ export default async function DiscountsPage() {
           </table></div>
         )}
       </section>
-    </>
+    </Workspace>
   );
 }

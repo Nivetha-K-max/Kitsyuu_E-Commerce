@@ -1,6 +1,8 @@
 'use client';
-/* Dashboard charts (Recharts): one palette (the accent for "now", a neutral for "before" and for other slices),
-   soft gridlines, custom tooltips, no default chart chrome. Money arrives in paise. */
+/* Dashboard charts (Recharts): soft gridlines, custom tooltips, no default chart chrome. Money arrives in paise.
+   The Sales line is coloured by what sales did between one day and the next: green where they rose, red where they
+   fell, slate where they stayed about the same. The colours come from the data on every render, never from a fixed
+   rule about the period as a whole. */
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const inr = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -12,38 +14,64 @@ const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateStri
 
 type Point = { day: string; revenue: number; prevRevenue: number; orders: number };
 
+type Direction = 'up' | 'down' | 'flat';
+/* Lines and dots use the soft trend tones; the sentence in the tooltip uses the stronger text tokens so it stays readable. */
+const TONE: Record<Direction, string> = { up: 'var(--trend-up)', down: 'var(--trend-down)', flat: 'var(--trend-flat)' };
+const TEXT_TONE: Record<Direction, string> = { up: 'var(--success)', down: 'var(--danger)', flat: 'var(--muted)' };
+const WORD: Record<Direction, string> = { up: 'Up', down: 'Down', flat: 'No change' };
+/** How sales moved from one value to the next. "About the same" is a move smaller than 2% of the largest day in view
+    (so tiny wobbles, and days with nothing sold either side, read as stable). */
+export function direction(from: number, to: number, scale: number): Direction {
+  const diff = to - from;
+  if (Math.abs(diff) <= Math.max(1, scale * 0.02)) return 'flat';
+  return diff > 0 ? 'up' : 'down';
+}
+
 export function RevenueChart({ data }: { data: Point[] }) {
+  const scale = Math.max(0, ...data.map(d => d.revenue));
+  // Segment i runs from day i to day i + 1. The days are evenly spaced, so segment i covers i/(n-1) â€¦ (i+1)/(n-1) of
+  // the line's width: a left-to-right gradient with a hard stop at each day gives every segment its own colour.
+  const segments = data.slice(1).map((d, i) => direction(data[i]!.revenue, d.revenue, scale));
+  const dirAt = new Map(data.map((d, i) => [d.day, i === 0 ? 'flat' as Direction : segments[i - 1]!]));
+  const n = Math.max(1, segments.length);
+  const stops = segments.flatMap((dir, i) => [{ at: i / n, dir }, { at: (i + 1) / n, dir }]);
+  // A line with no rise or fall at all has no height for a gradient to map onto: it is simply drawn in slate.
+  const varied = segments.some(s => s !== 'flat');
+  const stroke = varied ? 'url(#rev-line)' : TONE.flat;
   return (
-    <div className="chart" style={{ height: 260 }}>
+    <div className="chart" style={{ height: 260 }} data-sales-chart data-segments={segments.join(',')}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <defs>
-            <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+            <linearGradient id="rev-line" x1="0" y1="0" x2="1" y2="0">
+              {stops.map((s, i) => <stop key={i} offset={`${(s.at * 100).toFixed(3)}%`} stopColor={TONE[s.dir]} />)}
             </linearGradient>
           </defs>
           <CartesianGrid vertical={false} stroke="var(--hairline)" />
           <XAxis dataKey="day" tickFormatter={dayLabel} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={28}
             tick={{ fill: 'var(--faint)', fontSize: 12 }} dy={6} />
           <YAxis tickFormatter={compact} tickLine={false} axisLine={false} width={56} tick={{ fill: 'var(--faint)', fontSize: 12 }} />
-          <Tooltip cursor={{ stroke: 'var(--border-strong)', strokeDasharray: '3 3' }} content={<RevenueTip />} />
+          <Tooltip cursor={{ stroke: 'var(--border-strong)', strokeDasharray: '3 3' }} content={<RevenueTip data={data} dirAt={dirAt} />} />
           <Area type="monotone" dataKey="prevRevenue" name="Previous 30 days" stroke="var(--faint)" strokeWidth={1.5} strokeDasharray="4 4" fill="none" dot={false} activeDot={false} />
-          <Area type="monotone" dataKey="revenue" name="Last 30 days" stroke="var(--accent)" strokeWidth={2} fill="url(#rev-fill)" dot={false}
-            activeDot={{ r: 4, stroke: 'var(--surface)', strokeWidth: 2, fill: 'var(--accent)' }} />
+          <Area type="monotone" dataKey="revenue" name="Last 30 days" stroke={stroke} strokeWidth={2} fill={stroke} fillOpacity={0.12} dot={false} isAnimationActive={false}
+            activeDot={(p: { cx?: number; cy?: number; payload?: Point }) => <circle cx={p.cx} cy={p.cy} r={4} stroke="var(--surface)" strokeWidth={2} fill={TONE[dirAt.get(p.payload?.day ?? '') ?? 'flat']} />} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-function RevenueTip({ active, payload }: { active?: boolean; payload?: { payload: Point }[] }) {
+function RevenueTip({ active, payload, data, dirAt }: { active?: boolean; payload?: { payload: Point }[]; data: Point[]; dirAt: Map<string, Direction> }) {
   if (!active || !payload?.length) return null;
   const p = payload[0]!.payload;
+  const i = data.findIndex(d => d.day === p.day);
+  const dir = dirAt.get(p.day) ?? 'flat';
+  const diff = i > 0 ? p.revenue - data[i - 1]!.revenue : 0;
   return (
-    <div className="chart-tip">
+    <div className="chart-tip" data-direction={dir}>
       <b>{dayLabel(p.day)}</b>
-      <span><i style={{ background: 'var(--accent)' }} />Sales {inr(p.revenue)}</span>
+      <span><i style={{ background: TONE[dir] }} />Sales {inr(p.revenue)}</span>
+      {i > 0 && <span style={{ color: TEXT_TONE[dir] }}>{WORD[dir]}{dir === 'flat' ? '' : ` ${inr(Math.abs(diff))}`} from the day before</span>}
       <span><i style={{ background: 'var(--faint)' }} />Same day, previous period {inr(p.prevRevenue)}</span>
       <small>{p.orders} {p.orders === 1 ? 'order' : 'orders'}</small>
     </div>

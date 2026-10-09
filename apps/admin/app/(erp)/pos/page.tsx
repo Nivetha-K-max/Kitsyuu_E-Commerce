@@ -8,6 +8,7 @@ import { formatDateTime, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { openSessionAction } from './actions';
 import PosCounter from './PosCounter';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'POS billing' };
 
@@ -24,8 +25,7 @@ export default async function PosPage() {
   if (!c.session) {
     const recent = await listPosSales(db(), actor, { limit: 10 });
     return (
-      <>
-        <PageHead title="POS billing" eyebrow="Counter sales at a branch">{nav}</PageHead>
+      <Workspace name="pos" title="POS billing" summary="Counter sales at a branch" actions={<div className="ord-head-actions">{nav}</div>}>
         {!c.can.sell ? <p className="msg">You can see POS sales and bills; ringing up sales needs the “POS: sell” permission.</p>
           : c.locations.length === 0 ? <Empty title="No branch yet" action={<Link className="btn" href="/locations">Add a retail location</Link>}>POS sales are made at a retail branch (Locations).</Empty>
           : (
@@ -50,16 +50,14 @@ export default async function PosPage() {
             </table></div>
           </section>
         )}
-      </>
+      </Workspace>
     );
   }
   const s = c.session;
   return (
-    <>
-      <PageHead title="POS billing" eyebrow={`${s.location_name} · session ${s.number} · ${actor.email}`}>
-        {nav}<Link className="btn ghost" href="/pos/sessions#close" data-pos-close-link>Close session</Link>
-      </PageHead>
+    <Workspace name="pos" title="POS billing" summary={`${s.location_name} · session ${s.number} · ${actor.email}`}
+      actions={<div className="ord-head-actions">{nav}<Link className="btn ghost" href="/pos/sessions#close" data-pos-close-link>Close session</Link></div>}>
       <PosCounter session={{ id: s.id, number: s.number, location_id: s.location_id, location_name: s.location_name }} maxDiscountBp={c.maxDiscountBp} canDiscount={c.can.discount} />
-    </>
+    </Workspace>
   );
 }

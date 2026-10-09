@@ -8,6 +8,7 @@ import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { one, pageOf, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Wishlists' };
 
@@ -19,8 +20,7 @@ export default async function WishlistsPage({ searchParams }: { searchParams: SP
   const page = pageOf(sp.page);
   const [top, list] = await Promise.all([wishlistReport(db(), actor, 20), listWishlists(db(), actor, { q, page })]);
   return (
-    <>
-      <PageHead title="Carts & wishlists" eyebrow="What customers want: products in wishlists and active carts right now." />
+    <Workspace name="carts-wishlists" title="Carts & wishlists" summary="What customers want: products in wishlists and active carts right now.">
       <SubNav label="Carts" current="/carts/wishlists" items={[{ href: '/carts', label: 'Carts' }, { href: '/carts/checkouts', label: 'Abandoned checkouts' }, { href: '/carts/wishlists', label: 'Wishlists' }]} />
       <section className="card" aria-labelledby="mw-h"><h2 id="mw-h">Most wanted products</h2>
         {top.length === 0 ? <Empty compact title="No products in wishlists or carts" /> : (
@@ -48,6 +48,6 @@ export default async function WishlistsPage({ searchParams }: { searchParams: SP
           {list.hasNext && <Link className="btn ghost sm" href={`/carts/wishlists?page=${page + 1}`}>Next</Link>}
         </nav>
       </section>
-    </>
+    </Workspace>
   );
 }

@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { courierInput, deleteShippingRateInput, shipmentUpdateInput, shippingRateInput, shippingZoneInput, type ActionState } from '@kitsyuu/contracts';
-import { checkShippingQuote, deleteShippingRate, notifyOrderDelivered, saveCourier, saveShippingRate, saveShippingZone, updateShipmentStatus } from '@kitsyuu/core';
+import { checkShippingQuote, deleteShippingRate, notifyOrderDelivered, notifyOrderTracking, saveCourier, saveShippingRate, saveShippingZone, updateShipmentStatus } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
 
@@ -28,7 +28,9 @@ export async function updateShipmentAction(_: ActionState, form: FormData): Prom
   const actor = await requireActor();
   const r = await handle(shipmentUpdateInput, form, async input => {
     const res = await updateShipmentStatus(db(), actor, input, await requestContext());
-    const mail = res.delivered ? await notifyOrderDelivered(db(), mailer(), res.orderId, { storeUrl: process.env.STORE_URL || null }) : null;
+    // Delivered → the delivery email; in transit → the tracking email (each only when switched on, each sent once).
+    const mail = res.delivered ? await notifyOrderDelivered(db(), mailer(), res.orderId, { storeUrl: process.env.STORE_URL || null })
+      : res.to === 'in_transit' && res.from !== res.to ? await notifyOrderTracking(db(), mailer(), res.orderId, process.env.STORE_URL || null) : null;
     return { ok: true, message: `${res.orderNumber}: ${res.from === res.to ? 'updated' : `${res.from.replace(/_/g, ' ')} → ${res.to.replace(/_/g, ' ')}`}.${mail?.sent ? ' The customer was emailed.' : ''}` };
   });
   if (r.ok) revalidatePath('/orders', 'layout');

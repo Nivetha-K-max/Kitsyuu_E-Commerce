@@ -11,7 +11,7 @@ export async function saveVendorAction(_: ActionState, form: FormData): Promise<
     const v = await saveVendor(db(), actor, input, await requestContext());
     return { ok: true, message: input.vendorId ? (v.changed ? 'Saved.' : 'No changes.') : 'Vendor added.' };
   });
-  if (r.ok) revalidatePath('/vendors');
+  if (r.ok) revalidatePath('/vendors', 'layout');
   return r;
 }
 
@@ -21,7 +21,7 @@ export async function setVendorActiveAction(_: ActionState, form: FormData): Pro
     await setVendorActive(db(), actor, input, await requestContext());
     return { ok: true, message: input.active ? 'Vendor is active.' : 'Vendor is inactive (kept for history).' };
   });
-  if (r.ok) revalidatePath('/vendors');
+  if (r.ok) revalidatePath('/vendors', 'layout');
   return r;
 }
 
@@ -31,6 +31,6 @@ export async function setVendorProductsAction(_: ActionState, form: FormData): P
     const res = await setVendorProducts(db(), actor, input, await requestContext());
     return { ok: true, message: `${res.total} product${res.total === 1 ? '' : 's'} supplied (${res.added} added, ${res.removed} removed).` };
   });
-  if (r.ok) revalidatePath('/vendors');
+  if (r.ok) revalidatePath('/vendors', 'layout');
   return r;
 }

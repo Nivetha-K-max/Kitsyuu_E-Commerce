@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -6,6 +7,7 @@ import { Icon } from '@/components/icons';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Staff' };
 
@@ -15,10 +17,9 @@ export default async function StaffPage() {
   const staff = await listStaff(db(), actor);
   const manage = can(actor, 'staff.manage');
   return (
-    <>
-      <PageHead section="System" title="Staff" eyebrow={`${staff.length} account${staff.length === 1 ? '' : 's'}`}>
-        {manage && <Link className="btn" href="/staff/invite" data-invite-link><Icon name="plus" size={16} />Invite staff</Link>}
-      </PageHead>
+    <Workspace name="staff" title="Staff" summary={`${staff.length} account${staff.length === 1 ? '' : 's'}`}
+      actions={<div className="ord-head-actions">{manage && <Link className="btn" href="/staff/invite" data-invite-link><Icon name="plus" size={16} />Invite staff</Link>}</div>}>
+      <ModuleViews module="team" label="Team & access" current="/staff" />
       {staff.length === 0 ? <Empty title="No staff accounts yet">Invite a staff member to give them access.</Empty> : (
         <div className="table-wrap"><table data-staff-table>
           <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Last sign-in</th><th className="num">Actions</th></tr></thead>
@@ -34,6 +35,6 @@ export default async function StaffPage() {
           </tbody>
         </table></div>
       )}
-    </>
+    </Workspace>
   );
 }

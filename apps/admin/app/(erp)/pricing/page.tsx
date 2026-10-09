@@ -10,6 +10,7 @@ import { one, pageOf, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { bulkPriceAction } from './actions';
 import PricingNav from './PricingNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Pricing' };
 const FILTERS = [['all', 'All products'], ['sale', 'On sale (compare-at set)'], ['scheduled', 'With a scheduled change'], ['overrides', 'With size prices']] as const;
@@ -28,8 +29,7 @@ export default async function PricingPage({ searchParams }: { searchParams: SP }
   const manage = can(actor, 'pricing.manage');
   const qs = (p: number) => `/pricing?filter=${filter}${q ? `&q=${encodeURIComponent(q)}` : ''}&page=${p}`;
   return (
-    <>
-      <PageHead title="Pricing & discounts" eyebrow="Product prices, compare-at (sale) prices, scheduled changes, discounts and coupons." />
+    <Workspace name="pricing" title="Pricing & discounts" summary="Product prices, compare-at (sale) prices, scheduled changes, discounts and coupons.">
       <PricingNav current="/pricing" />
       {applied.applied + applied.failed > 0 && <p className="msg ok" role="status">{applied.applied} scheduled change{applied.applied === 1 ? '' : 's'} applied{applied.failed ? `, ${applied.failed} failed (see Scheduled changes)` : ''}.</p>}
       <dl className="report-kpis" data-pricing-kpis>
@@ -53,7 +53,7 @@ export default async function PricingPage({ searchParams }: { searchParams: SP }
             <tbody>{list.rows.map(p => (
               <tr key={p.id} data-pricing-row={p.sku}>
                 {manage && <td><input type="checkbox" name="productIds[]" value={p.id} aria-label={`Select ${p.name}`} /></td>}
-                <td><Link className="row-link" href={`/pricing/${p.id}`}><b>{p.name}</b></Link><div className="note mono">{p.sku} · {p.status}</div></td>
+                <td><Link className="row-link" href={`/products/${p.id}?tab=pricing`}><b>{p.name}</b></Link><div className="note mono">{p.sku} · {p.status}</div></td>
                 <td className="num money">{formatPaise(p.price_paise)}</td>
                 <td className="num money">{p.compare_at_paise ? <span className="strike">{formatPaise(p.compare_at_paise)}</span> : '—'}</td>
                 <td className="num">{p.sizes}</td>
@@ -78,6 +78,6 @@ export default async function PricingPage({ searchParams }: { searchParams: SP }
         {page > 1 && <Link className="btn ghost sm" href={qs(page - 1)}>Previous</Link>}
         {list.hasNext && <Link className="btn ghost sm" href={qs(page + 1)}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

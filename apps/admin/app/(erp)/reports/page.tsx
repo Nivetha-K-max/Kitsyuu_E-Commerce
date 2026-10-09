@@ -6,6 +6,7 @@ import { CategoryDonut, SalesBars } from '@/components/charts';
 import { Empty, Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import FilterForm from '@/components/FilterForm';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Reports' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -77,10 +78,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
     </> : <Empty title="No production completed in this period" kind="report" />;
   }
   return (
-    <>
-      <PageHead section="Overview" title="Reports" eyebrow={`${r.from} to ${r.to} · business days (IST)`}>
-        <a className="btn ghost sm" href={`/reports/export?${new URLSearchParams({ report: kind, from: r.from, to: r.to })}`} data-export>Download CSV</a>
-      </PageHead>
+    <Workspace name="reports" title="Reports" summary={`${r.from} to ${r.to} · business days (IST)`}
+      actions={<div className="ord-head-actions"><a className="btn ghost sm" href={`/reports/export?${new URLSearchParams({ report: kind, from: r.from, to: r.to })}`} data-export>Download CSV</a></div>}>
       <nav className="tabs actions" aria-label="Reports" data-report-tabs>
         {tabs.filter(t => t.allowed).map(t => <Link key={t.key} className={`btn sm ${t.key === kind ? '' : 'ghost'}`} href={q(t.key)} aria-current={t.key === kind ? 'page' : undefined}>{t.label}</Link>)}
       </nav>
@@ -91,6 +90,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         <button className="btn ghost" type="submit">Show</button>
       </FilterForm>
       <section className="card report-body" data-report-kind={kind}>{body}</section>
-    </>
+    </Workspace>
   );
 }

@@ -242,7 +242,7 @@ test('settings: typed registry, locked business rules, audited edits of safe set
     'payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order', 'loyalty.enabled', 'loyalty.earn_points_per_100',
     'loyalty.earn_when', 'loyalty.point_value_paise', 'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months',
     // commerce workflows (2026-10-01): staff discount limit, order emails, automatic cart reminder and its wording
-    'discounts.staff_max_percent', 'notifications.order_packed', 'notifications.payment_request', 'notifications.abandoned_cart_auto',
+    'discounts.staff_max_percent', 'notifications.order_tracking', 'notifications.order_packed', 'notifications.payment_request', 'notifications.abandoned_cart_auto',   // order_tracking: Phase 6 (2026-10-08)
     'emails.cart_reminder_subject', 'emails.cart_reminder_intro',
     // purchasing / products workflows (2026-10-01): COD % discount with its minimum and stacking rule
     'payments.cod_discount_percent', 'payments.cod_discount_min_order', 'payments.cod_discount_with_other'];

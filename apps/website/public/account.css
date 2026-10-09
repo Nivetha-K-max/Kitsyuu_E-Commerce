@@ -200,3 +200,258 @@
 .st-billing-add{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border:1px solid var(--paper);color:var(--paper);font:12px var(--mono);letter-spacing:1px;text-transform:uppercase;text-decoration:none;transition:background .2s,border-color .2s,color .2s}
 .st-billing-add:hover{background:var(--red);border-color:var(--red);color:#fff}
 .st-billing-add:focus-visible{outline:2px solid var(--red);outline-offset:4px}
+
+/* ================= Account area (2026-10-05): profile header, sidebar, cards. Presentation only. =================
+   Built from the store's own tokens (ink / paper / panel / line / red) so it follows the dark and light themes.
+   Type: the display face for names, page titles and figures; the body face for labels, values and actions; the mono
+   face only for order numbers. */
+.st-account{padding-bottom:96px}
+.st-account-main a:focus-visible,.st-account-main button:focus-visible,.st-account-nav a:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+
+/* ---- profile header ---- */
+.st-acc-hero{position:relative;display:flex;align-items:center;gap:clamp(16px,2.4vw,28px);margin-top:clamp(18px,3vw,40px);padding:clamp(20px,3vw,36px) clamp(20px,3vw,40px);border:1px solid var(--line);border-radius:2px;background:var(--st-panel);overflow:hidden}
+.st-acc-hero:before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red)}
+.st-acc-avatar{flex:none;display:grid;place-items:center;width:clamp(56px,7vw,88px);aspect-ratio:1;border:1px solid var(--st-line-5);border-radius:50%;background:var(--ink);color:var(--paper);font:600 clamp(22px,2.8vw,36px)/1 var(--display);letter-spacing:.04em}
+.st-acc-id{position:relative;z-index:1;min-width:0}
+.st-acc-eyebrow{display:flex;align-items:center;gap:10px;margin:0 0 10px;color:var(--muted);font:600 11px/1 var(--body);letter-spacing:.18em;text-transform:uppercase}
+.st-acc-eyebrow:before{content:'';width:18px;height:2px;background:var(--red)}
+.st-acc-name{margin:0;font:600 clamp(30px,4.2vw,56px)/.95 var(--display);letter-spacing:.01em;text-transform:uppercase;overflow-wrap:anywhere}
+.st-acc-meta{display:flex;flex-wrap:wrap;gap:4px 16px;margin:12px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
+.st-acc-meta span{min-width:0;overflow-wrap:anywhere}
+.st-acc-meta span+span{padding-left:16px;border-left:1px solid var(--st-line-4)}
+.st-acc-mark{position:absolute;right:clamp(8px,3vw,48px);top:50%;width:auto;height:150%;transform:translateY(-50%);opacity:.06;filter:invert(1);pointer-events:none}
+:root[data-theme=light] .st-acc-mark{filter:none;opacity:.07}
+
+/* ---- layout and sidebar ---- */
+.st-account-layout{grid-template-columns:248px minmax(0,1fr);gap:clamp(28px,3.4vw,56px);padding-top:clamp(22px,3vw,40px)}
+.st-account-nav{gap:0;align-content:start}
+.st-account-nav ul{display:grid;gap:2px;border-top:0}
+.st-account-nav li{border-bottom:0}
+.st-account-nav a{position:relative;display:flex;align-items:center;gap:12px;min-height:44px;padding:0 14px;border-radius:2px;color:var(--muted);font:500 14.5px/1.2 var(--body);letter-spacing:0;text-transform:none;transition:color .18s,background-color .18s}
+.st-account-nav a:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;background:var(--red);transform:scaleY(0);transition:transform .18s}
+.st-account-nav a:hover{color:var(--paper);background:var(--st-line-1)}
+.st-account-nav a[aria-current=page]{padding-left:14px;background:var(--st-chip-bg);box-shadow:none;color:var(--paper);font-weight:600}
+.st-account-nav a[aria-current=page]:before{transform:scaleY(1)}
+.st-acc-ico{flex:none;display:grid;width:19px;height:19px}
+.st-acc-ico svg{width:100%;height:100%}
+.st-account-nav form{margin-top:14px;padding-top:16px;border-top:1px solid var(--line)}
+.st-account-logout{width:100%;justify-content:center;min-height:44px;border-color:var(--st-line-5);border-radius:2px;font:500 13px var(--body);letter-spacing:.1em;transition:background-color .18s,border-color .18s,color .18s}
+
+/* ---- page title inside the account ---- */
+.st-account-main .st-plp-head{align-items:flex-end;margin-bottom:22px;padding:0 0 18px;border-bottom:1px solid var(--line)}
+.st-account-main .st-plp-head h1{font-size:clamp(30px,3.2vw,44px)}
+.st-account-main .st-plp-aside{text-align:right}
+.st-account-main .st-result-count{font:600 11px var(--body)!important;letter-spacing:.14em}
+.st-account-main .st-note{font:13.5px/1.6 var(--body);letter-spacing:0}
+.st-account-main .st-empty{padding:40px 0}
+
+/* ---- cards ---- */
+.st-acc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-acc-grid>.is-wide{grid-column:1/-1}
+.st-acc-card,.st-account-main .st-form-group{min-width:0;max-width:none;margin:0 0 16px;padding:clamp(18px,2vw,26px);border:1px solid var(--line);border-radius:2px;background:var(--st-panel)}
+.st-acc-grid>.st-acc-card{margin:0}
+.st-acc-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.st-acc-card-head h2,.st-account-main .st-form-group h2,.st-account-main .st-form-group legend{margin:0;color:var(--paper);font:600 13px/1.3 var(--body);letter-spacing:.14em;text-transform:uppercase}
+.st-account-main .st-form-group h2,.st-account-main .st-form-group legend{margin-bottom:16px}
+.st-acc-action{flex:none;padding-bottom:2px;border-bottom:1px solid var(--st-link-line);color:var(--paper);font:500 13px/1.3 var(--body);text-decoration:none;white-space:nowrap;transition:color .18s,border-color .18s}
+.st-acc-action:hover{color:var(--red);border-color:var(--red)}
+.st-acc-quiet{margin:0;color:var(--muted);font-size:14.5px;line-height:1.7}
+.st-acc-card .st-acc-quiet+form,.st-acc-card dl+.st-acc-quiet{margin-top:16px}
+.st-acc-banner{margin:0 0 16px;padding:14px 18px;border:1px solid var(--line)}
+.st-acc-card .st-auth-form,.st-acc-card form:not(.st-inline-form){max-width:520px;padding-bottom:0}
+.st-account-main .st-order-columns{gap:0 16px}
+
+/* labels and values */
+.st-account-main .st-account-dl{grid-template-columns:minmax(104px,150px) minmax(0,1fr);gap:12px 18px;font-size:15px;line-height:1.5}
+.st-account-main .st-account-dl dt{color:var(--muted);font:500 12px/1.9 var(--body);letter-spacing:.08em;text-transform:uppercase}
+.st-account-main .st-account-dl.is-stacked{grid-template-columns:minmax(0,1fr);gap:2px}
+.st-account-dl.is-stacked dd{margin-bottom:14px}
+.st-account-dl dd .st-pill{margin-left:10px;vertical-align:middle}
+.st-account .st-field label,.st-account .st-field-label{font:500 12px/1.4 var(--body);letter-spacing:.08em}
+.st-account .st-field input,.st-account .st-field select,.st-account .st-field textarea{border-radius:2px;transition:border-color .18s}
+.st-account .st-link-button{font:500 13.5px/1.3 var(--body);letter-spacing:0;text-transform:none}
+
+/* status badge */
+.st-pill{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--st-line-4);border-radius:999px;color:var(--paper);font:500 12px/1.3 var(--body);letter-spacing:0;text-transform:none;white-space:nowrap}
+.st-pill:before{content:'';flex:none;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.st-pill[data-tone=ok]:before{background:var(--st-ok)}
+.st-pill[data-tone=wait]:before{background:var(--st-star)}
+.st-pill[data-tone=bad]:before{background:var(--st-error)}
+.st-erp-list .st-pill{color:var(--paper);font-size:12px}
+
+/* ---- overview ---- */
+.st-account .st-acc-attention{display:grid;gap:8px;margin:0 0 16px;padding:0;list-style:none}
+.st-acc-attention a{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 18px;border:1px solid var(--line);border-left:3px solid var(--st-star);border-radius:2px;background:var(--st-panel);color:var(--paper);font-size:14.5px;line-height:1.5;text-decoration:none;transition:border-color .18s}
+.st-acc-attention a:hover{border-color:var(--st-line-6);border-left-color:var(--st-star)}
+.st-acc-attention a>span:first-child{min-width:0;overflow-wrap:anywhere}
+.st-account .st-acc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:12px;margin:0 0 16px;padding:0;list-style:none}
+.st-acc-tiles a{display:grid;gap:10px;height:100%;padding:18px 20px;border:1px solid var(--line);border-radius:2px;background:var(--st-panel);color:var(--paper);text-decoration:none;transition:border-color .18s}
+.st-acc-tiles a:hover{border-color:var(--st-line-6)}
+.st-acc-tile-n{font:600 clamp(32px,3.4vw,44px)/1 var(--display)}
+.st-acc-tile-l{color:var(--muted);font:500 12px/1.2 var(--body);letter-spacing:.12em;text-transform:uppercase}
+.st-acc-card .st-order-list{border-top:0}
+.st-acc-card .st-order-list a{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,auto) minmax(84px,auto);align-items:center;gap:8px 14px;padding:14px 0;transition:color .18s}
+.st-acc-card .st-order-list li:first-child a{padding-top:0}
+.st-acc-card .st-order-list li:last-child a{padding-bottom:0;border-bottom:0}
+.st-acc-card .st-order-list .st-pill{justify-self:start}
+.st-order-no{font-size:13px;overflow-wrap:anywhere}
+.st-order-when{color:var(--muted)}
+.st-order-total{font-weight:600}
+.st-acc-card .st-address-text b{color:var(--paper);font-weight:600}
+
+/* ---- orders ---- */
+.st-account-main .st-table-wrap{border:1px solid var(--line);border-radius:2px;background:var(--st-panel)}
+.st-account-main .st-order-table th,.st-account-main .st-order-table td{padding:16px 18px}
+.st-account-main .st-order-table thead th{font:500 11.5px/1.3 var(--body);letter-spacing:.1em}
+.st-account-main .st-order-table tbody tr{transition:background-color .18s}
+.st-account-main .st-order-table tbody tr:hover{background:var(--st-line-1)}
+.st-account-main .st-order-table tbody tr:last-child>*{border-bottom:0}
+.st-account-main .st-order-table tbody th a{font-size:13px}
+.st-order-open{text-align:right!important}
+
+/* ---- addresses ---- */
+.st-address-list{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.st-address-card{gap:10px;padding:22px;border-radius:2px;background:var(--st-panel);transition:border-color .18s}
+.st-address-card[data-default]{border-color:var(--st-line-6)}
+.st-address-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.st-address-name{margin:0;min-width:0;font:600 16px/1.3 var(--body);overflow-wrap:anywhere}
+.st-address-tag{border-color:var(--red);font:600 10.5px/1.2 var(--body);letter-spacing:.12em}
+.st-address-head .st-address-tag{flex:none;margin:0}
+.st-address-card .st-address-text{font-size:14.5px;overflow-wrap:anywhere}
+.st-address-phone{margin:0;color:var(--muted);font-size:14px}
+.st-address-card .st-address-actions-row{margin-top:6px;padding-top:14px;border-top:1px solid var(--line)}
+.st-address-add a{display:grid;place-items:center;align-content:center;gap:8px;height:100%;min-height:190px;border:1px dashed var(--st-line-5);border-radius:2px;color:var(--muted);font:500 14px/1.3 var(--body);text-decoration:none;transition:border-color .18s,color .18s}
+.st-address-add a span{color:var(--paper);font:400 30px/1 var(--display)}
+.st-address-add a:hover{border-color:var(--paper);color:var(--paper)}
+
+/* ---- empty states and row lists (returns, support) ---- */
+.st-acc-empty{display:grid;justify-items:start;gap:16px;padding:clamp(26px,4vw,48px) clamp(18px,3vw,36px);border:1px dashed var(--st-line-4);border-radius:2px;color:var(--st-text-2)}
+.st-acc-empty p{margin:0;max-width:540px;font-size:15px;line-height:1.7}
+.st-acc-rows{display:grid;gap:10px;border-top:0}
+.st-acc-rows li{gap:10px;padding:16px 18px;border:1px solid var(--line);border-radius:2px;background:var(--st-panel);font-size:15px;transition:border-color .18s}
+.st-acc-rows li:hover{border-color:var(--st-line-6)}
+.st-acc-rows li>a{overflow-wrap:anywhere}
+.st-acc-rows li>span{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13.5px}
+
+/* ---- reviews ---- */
+.st-account .st-review-todo,.st-account .st-review-mine{gap:0;margin:0;padding:0;list-style:none}
+.st-account .st-review-todo li,.st-account .st-review-mine li{padding:14px 0;border:0;border-bottom:1px solid var(--line)}
+.st-account .st-review-todo li:first-child,.st-account .st-review-mine li:first-child{padding-top:0}
+.st-account .st-review-todo li:last-child,.st-account .st-review-mine li:last-child{padding-bottom:0;border-bottom:0}
+.st-account .st-review-todo small,.st-account .st-review-mine small{margin-top:4px;font:500 12px/1.4 var(--body);letter-spacing:.04em;text-transform:none}
+.st-stars{display:block;margin-top:6px;color:var(--st-star);font-size:14px;letter-spacing:2px}
+.st-stars i{color:var(--st-line-4);font-style:normal}
+.st-review-title{display:block;margin-top:4px;color:var(--st-text-2);font-size:14px}
+
+/* ---- points ---- */
+.st-points-hero{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:20px clamp(24px,4vw,56px);margin:0 0 16px;padding:clamp(20px,2.6vw,32px);border:1px solid var(--line);border-radius:2px;background:var(--st-panel)}
+.st-points-balance{margin:0;color:var(--muted);font:500 12px/1.2 var(--body);letter-spacing:.14em;text-transform:uppercase}
+.st-points-balance b{display:block;margin-bottom:8px;color:var(--paper);font:600 clamp(56px,7vw,92px)/.9 var(--display);letter-spacing:0}
+.st-points-hero .st-points-totals{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));margin:0}
+.st-points-totals div{padding:14px;background:var(--ink)}
+.st-points-totals dt{opacity:1;color:var(--muted);font:500 11.5px/1.2 var(--body);letter-spacing:.08em;text-transform:uppercase}
+.st-points-totals dd{margin-top:8px;font:600 26px/1 var(--display)}
+.st-acc-bullets{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.st-acc-bullets li{position:relative;padding-left:18px;color:var(--st-text-2);font-size:14.5px;line-height:1.6}
+.st-acc-bullets li:before{content:'';position:absolute;left:0;top:.8em;width:8px;height:1px;background:var(--red)}
+.st-points-rows{border-top:0}
+.st-points-rows li{grid-template-columns:72px minmax(0,1fr);align-items:baseline;gap:12px}
+.st-points-rows li:first-child{padding-top:0}
+.st-points-rows li:last-child{padding-bottom:0;border-bottom:0}
+.st-points-rows li>b{font:600 22px/1 var(--display)}
+.st-points-rows li[data-sign=plus]>b{color:var(--st-ok)}
+.st-points-rows p{margin:0;min-width:0;overflow-wrap:anywhere}
+.st-points-rows p span{display:block;margin-top:3px}
+
+/* ---- security ---- */
+.st-acc-card .st-session-list{margin-bottom:18px;border-top:0}
+.st-acc-card .st-session-list li{justify-content:flex-start;padding:14px 0}
+.st-acc-card .st-session-list li:first-child{padding-top:0}
+.st-session-list li>div{flex:1;min-width:0}
+.st-session-ico{flex:none;display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--line);border-radius:2px;color:var(--muted)}
+.st-session-ico svg{width:18px;height:18px}
+.st-session-device{overflow-wrap:anywhere}
+
+/* ---- wishlist inside the account, loading placeholders ---- */
+.st-account-embed .st-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.st-acc-loading{display:grid;gap:22px}
+.st-acc-sk{display:block;min-height:150px;border:1px solid var(--line);border-radius:2px;background:var(--st-panel)}
+.st-acc-sk.is-title{width:min(280px,60%);min-height:0;height:40px;border:0;background:var(--st-chip-bg)}
+.st-acc-sk.is-wide{grid-column:1/-1}
+
+@media(max-width:1100px){
+ .st-account-embed .st-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Small screens: the sidebar becomes one row that scrolls sideways, with Log out at its end. */
+@media(max-width:900px){
+ .st-account-layout{grid-template-columns:minmax(0,1fr);gap:20px;padding-top:14px}
+ .st-account-nav{position:static;display:flex;align-items:stretch;gap:0;margin:0 calc(var(--st-gutter)*-1);padding:0 var(--st-gutter);border-bottom:1px solid var(--line);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+ .st-account-nav::-webkit-scrollbar{display:none}
+ .st-account-nav ul{display:flex;flex-wrap:nowrap;gap:0}
+ .st-account-nav a{min-height:48px;padding:0 13px;background:none;white-space:nowrap}
+ .st-account-nav a:hover{background:none}
+ .st-account-nav a:before{left:13px;right:13px;top:auto;bottom:0;width:auto;height:2px;transform:scaleX(0)}
+ .st-account-nav a[aria-current=page]{padding-left:13px;background:none;box-shadow:none}
+ .st-account-nav a[aria-current=page]:before{transform:scaleX(1)}
+ .st-acc-ico{display:none}
+ .st-account-nav form{flex:none;display:flex;align-items:center;margin:0 0 0 8px;padding:0 0 0 14px;border-top:0;border-left:1px solid var(--line)}
+ .st-account-logout{width:auto;min-height:34px;padding:0 12px;white-space:nowrap}
+}
+@media(max-width:1180px){
+ /* orders: each row becomes a card, each value under its own label */
+ .st-account-main .st-table-wrap{border:0;background:none;overflow:visible}
+ .st-account-main .st-order-table,.st-account-main .st-order-table tbody{display:block}
+ .st-account-main .st-order-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .st-account-main .st-order-table tbody tr{display:grid;grid-template-columns:repeat(auto-fit,minmax(136px,1fr));gap:12px 16px;margin-bottom:12px;padding:16px;border:1px solid var(--line);border-radius:2px;background:var(--st-panel)}
+ .st-account-main .st-order-table tbody th,.st-account-main .st-order-table tbody td{display:block;padding:0;border:0;white-space:normal;text-align:left}
+ .st-account-main .st-order-table tbody th{grid-column:1/-1;padding-bottom:12px;border-bottom:1px solid var(--line)}
+ .st-account-main .st-order-table td[data-label]:before{content:attr(data-label);display:block;margin-bottom:4px;color:var(--muted);font:500 11px/1.2 var(--body);letter-spacing:.08em;text-transform:uppercase}
+ .st-order-open{grid-column:1/-1;text-align:left!important}
+}
+@media(max-width:760px){
+ .st-account-main .st-plp-head{flex-direction:column;align-items:flex-start;gap:12px}
+ .st-account-main .st-plp-aside{max-width:none;text-align:left}
+}
+@media(max-width:640px){
+ .st-acc-grid{grid-template-columns:minmax(0,1fr)}
+ .st-account .st-acc-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .st-points-hero{grid-template-columns:minmax(0,1fr)}
+ .st-account-embed .st-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+ .st-acc-hero{align-items:flex-start}
+ .st-acc-card .st-order-list a{grid-template-columns:minmax(0,1fr) auto;gap:6px 12px}
+ .st-account-main .st-order-table tbody tr{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .st-acc-meta{flex-direction:column;gap:2px}
+ .st-acc-meta span+span{padding-left:0;border-left:0}
+ .st-acc-mark{height:110%;right:0}
+ .st-acc-card .st-session-list li{flex-direction:row;flex-wrap:wrap;align-items:flex-start}
+ .st-account-main .st-account-dl{grid-template-columns:minmax(0,1fr);gap:2px}
+ .st-account-main .st-account-dl dd{margin-bottom:12px}
+}
+.st-account-embed .st-crumbs{display:none}
+
+/* ================= Customer flow (2026-10-05): shared patterns across shop, cart, checkout and account =================
+   One voice for helper text (the body face, not the typewriter face), titled checkout blocks, clear next steps after
+   "Add to cart", and tap targets of a usable size on phones. */
+.st-note,.st-phase-note,.st-field-hint{font:13.5px/1.6 var(--body);letter-spacing:0}
+.st-radio-group legend,.st-group-title{margin:0 0 12px;color:var(--paper);font:600 12px/1.3 var(--body);letter-spacing:.14em;text-transform:uppercase}
+.st-checkout-form .st-form-group h2,.st-summary h2{font-family:var(--body);font-weight:600;letter-spacing:.14em}
+/* after "Add to cart": what happened, then the two ways on */
+.st-buy-status:not(:empty){margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-left:3px solid var(--red);background:var(--st-panel);color:var(--paper);font:14px/1.5 var(--body);letter-spacing:0}
+.st-buy-next{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.st-buy-next .button{flex:1 1 150px;justify-content:center;min-height:46px;text-decoration:none}
+/* account: a cart that is waiting, order page footer */
+.st-acc-cart{margin:0 0 16px}
+.st-acc-cart a{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 16px;padding:14px 18px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:2px;background:var(--st-panel);color:var(--paper);font-size:14.5px;line-height:1.5;text-decoration:none;transition:border-color .18s}
+.st-acc-cart a:hover{border-color:var(--st-line-6);border-left-color:var(--red)}
+.st-acc-cart a>span:last-child{font-weight:600;white-space:nowrap}
+.st-order-foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px;margin:8px 0 0}
+/* tap targets on touch screens */
+@media(max-width:900px){
+ .st-crumbs a,.st-crumbs li{min-height:40px}
+ .st-auth-alt a,.st-note a,.st-acc-action,.st-link-button{display:inline-block;padding-block:9px}
+ .st-account-main .st-order-table tbody th a{display:inline-block;padding-block:10px}
+ .st-acc-rows li>a{padding-block:6px}
+}
+.st-buy-next .button{padding-inline:14px;gap:10px;white-space:nowrap}

@@ -6,6 +6,7 @@ import NewProductFields from '@/components/NewProductFields';
 import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { createProductAction } from '../manage-actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'New product' };
 
@@ -17,8 +18,7 @@ export default async function NewProductPage() {
   const colours = (attributes.find(a => a.id === 'colour')?.values ?? []).filter(v => v.isActive).map(v => v.label);
   const label = (c: { label: string; is_active: boolean }) => c.label + (c.is_active ? '' : ' (inactive)');
   return (
-    <>
-      <PageHead section="Catalogue" title="New product" crumbs={crumbs} eyebrow="Created as a hidden draft — sizes and stock can be added here; the image next" />
+    <Workspace name="new-product" title="New product" summary="Created as a hidden draft — sizes and stock can be added here; the image next" crumbs={crumbs}>
       <section className="card form-panel" aria-label="New product">
       <p className="note">The product is created as a <b>draft</b>, hidden from the store. Add its sizes and opening stock below (or later), an image on the next screen, then send it for approval.
         The product ID is generated automatically and never changes. Fields marked * are required.</p>
@@ -30,6 +30,6 @@ export default async function NewProductPage() {
         <TextArea name="description" label="Description" rows={4} />
       </ActionForm>
       </section>
-    </>
+    </Workspace>
   );
 }

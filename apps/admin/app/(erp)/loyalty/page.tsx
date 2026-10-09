@@ -1,3 +1,4 @@
+import ModuleViews from '@/components/ModuleViews';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { can } from '@kitsyuu/auth';
@@ -9,6 +10,7 @@ import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { one, pageOf, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { importPointsAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Loyalty points' };
 
@@ -26,8 +28,8 @@ export default async function LoyaltyPage({ searchParams }: { searchParams: SP }
   const qs = (p: number) => `/loyalty?${q ? `q=${encodeURIComponent(q)}&` : ''}page=${p}`;
   const rule = (v: string | null) => v ?? <span className="note">Not set</span>;
   return (
-    <>
-      <PageHead section="Growth" title="Loyalty points" eyebrow={`${formatNumber(d.totals.points)} points held by ${formatNumber(d.totals.customers)} customer(s)`} />
+    <Workspace name="loyalty" title="Loyalty points" summary={`${formatNumber(d.totals.points)} points held by ${formatNumber(d.totals.customers)} customer(s)`}>
+      <ModuleViews module="customers" label="Customers" current="/loyalty" />
 
       <section className="card" aria-labelledby="rules-h" data-section="loyalty-rules">
         <h2 id="rules-h">Rules in force</h2>
@@ -52,7 +54,7 @@ export default async function LoyaltyPage({ searchParams }: { searchParams: SP }
           <thead><tr><th>Customer</th><th className="num">Points</th><th>Last change</th></tr></thead>
           <tbody>{d.rows.map(r => (
             <tr key={r.id} data-loyalty-customer={r.email}>
-              <td>{can(actor, 'customers.read') ? <Link href={`/customers/${r.id}#loyalty`}>{r.full_name || r.email}</Link> : r.full_name || r.email}<div className="note">{r.email}</div></td>
+              <td>{can(actor, 'customers.read') ? <Link href={`/customers/${r.id}?tab=loyalty`}>{r.full_name || r.email}</Link> : r.full_name || r.email}<div className="note">{r.email}</div></td>
               <td className="num">{formatNumber(r.balance)}</td><td className="nowrap">{formatDateTime(r.updated_at as Date)}</td>
             </tr>
           ))}</tbody>
@@ -88,6 +90,6 @@ export default async function LoyaltyPage({ searchParams }: { searchParams: SP }
           </section>
         )}
       </div>
-    </>
+    </Workspace>
   );
 }

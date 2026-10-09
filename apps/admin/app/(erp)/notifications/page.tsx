@@ -9,6 +9,7 @@ import { Empty, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { markNotificationsAction } from './actions';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Notifications' };
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -29,12 +30,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const qs = (page: number) => `/notifications?show=${query.show}&severity=${query.severity}&page=${page}`;
   const label = (kind: string) => (ALERT_KINDS as Record<string, { label: string }>)[kind]?.label ?? kind;
   return (
-    <>
-      <PageHead section="Overview" title="Notifications" eyebrow="Alerts for the areas you can access. Choose which kinds are raised in Configuration → Staff alerts.">
-        <ActionForm action={markNotificationsAction} submitLabel="Mark all as read" variant="ghost" className="inline-form" id="mark-all-read" label="Mark all as read">
+    <Workspace name="notifications" title="Notifications" summary="Alerts for the areas you can access. Choose which kinds are raised in Configuration → Staff alerts."
+      actions={<div className="ord-head-actions"><ActionForm action={markNotificationsAction} submitLabel="Mark all as read" variant="ghost" className="inline-form" id="mark-all-read" label="Mark all as read">
           <Hidden name="all" value="true" />
-        </ActionForm>
-      </PageHead>
+        </ActionForm></div>}>
       <FilterForm aria-label="Filter notifications" data-notification-filters>
         <label className="field inline"><span>Show</span>
           <select name="show" className="input" defaultValue={query.show}><option value="all">All</option><option value="unread">Unread</option></select></label>
@@ -90,6 +89,6 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           )}
         </section>
       )}
-    </>
+    </Workspace>
   );
 }

@@ -122,11 +122,11 @@ test('production shortfall: one PO for the short items only (none for what stock
   assert.deepEqual(needs.linked.map(l => [l.po_number, l.ordered, l.received, l.remaining]), [[raised.poNumber, 190, 0, 190]]);
   await setPurchaseOrderStatus(admin, root, {purchaseOrderId: raised.id, status: 'ordered', expectedStatus: 'draft', note: null}, ctx);
   const fab = po.lines.find(l => l.name === 'Fabric'), zip = po.lines.find(l => l.name === 'Zippers');
-  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: fab.id, qty: 40}], note: null}, ctx);
+  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: fab.id, qty: 40, expectedReceived: 0}], note: null}, ctx);
   needs = await productionMaterialNeeds(admin, root, prodOrder.id);
   assert.deepEqual(needs.linked.map(l => [l.status, l.received, l.remaining]), [['partially_received', 40, 150]]);
   assert.equal(needs.procurement, 'ordered', 'still ordered: the rest is on the way');
-  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: zip.id, qty: 150}], note: null}, ctx);
+  await receiveGoods(admin, root, {purchaseOrderId: raised.id, lines: [{lineId: zip.id, qty: 150, expectedReceived: 0}], note: null}, ctx);
   needs = await productionMaterialNeeds(admin, root, prodOrder.id);
   assert.equal(needs.procurement, 'received');
   assert.deepEqual(needs.needs.map(n => [n.name, n.stock, n.shortfall]), [['Buttons', 800, 0], ['Fabric', 100, 0], ['Zippers', 200, 0]]);

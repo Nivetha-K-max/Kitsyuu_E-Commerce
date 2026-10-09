@@ -8,6 +8,7 @@ import { bp } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import { productTaxAction, saveTaxRateAction } from '../actions';
 import FinanceNav from '../FinanceNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Tax' };
 type Rate = Awaited<ReturnType<typeof listTaxRates>>[number];
@@ -39,8 +40,7 @@ export default async function TaxPage() {
   const manage = can(actor, 'finance.manage');
   const rateOptions = [{ value: '', label: 'Default (store rate)' }, ...rates.map(r => ({ value: r.code, label: `${r.label} (${bp(r.rate_bp)})` }))];
   return (
-    <>
-      <PageHead title="Finance" eyebrow="GST rates, product tax mapping and the registered state used on invoices." />
+    <Workspace name="finance-tax" title="Finance" summary="GST rates, product tax mapping and the registered state used on invoices.">
       <FinanceNav current="/finance/tax" />
       <section className="card" aria-labelledby="co-h"><h2 id="co-h">Registered business</h2>
         <p>{company.legalName ?? <span className="muted">Legal name not entered</span>} · GSTIN {company.gstin ?? <span className="muted">not entered</span>} · State {state ?? <span className="muted">not set</span>}</p>
@@ -77,6 +77,6 @@ export default async function TaxPage() {
           ))}</tbody>
         </table></div>
       </section>
-    </>
+    </Workspace>
   );
 }

@@ -9,6 +9,7 @@ import { formatDateTime } from '@/lib/format';
 import { one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
 import SupportNav from './SupportNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Support' };
 
@@ -24,8 +25,7 @@ export default async function SupportPage({ searchParams }: { searchParams: SP }
   const qs = (p: number) => `/support?status=${query.status}&priority=${query.priority}&assignee=${query.assignee}${query.category ? `&category=${query.category}` : ''}${query.q ? `&q=${encodeURIComponent(query.q)}` : ''}&page=${p}`;
   const open = (list.counts.open ?? 0) + (list.counts.assigned ?? 0) + (list.counts.in_progress ?? 0);
   return (
-    <>
-      <PageHead title="Support" eyebrow={`${open} open with staff · ${list.counts.waiting_customer ?? 0} waiting for the customer`} />
+    <Workspace name="support" title="Support" summary={`${open} open with staff · ${list.counts.waiting_customer ?? 0} waiting for the customer`}>
       <SupportNav current="/support" manage={can(actor, 'support.manage')} />
       <FilterForm className="actions" role="search" aria-label="Filter tickets" data-ticket-filters>
         <label className="sr-only" htmlFor="tk-q">Search</label>
@@ -59,6 +59,6 @@ export default async function SupportPage({ searchParams }: { searchParams: SP }
         {query.page > 1 && <Link className="btn ghost sm" href={qs(query.page - 1)}>Previous</Link>}
         {list.hasNext && <Link className="btn ghost sm" href={qs(query.page + 1)}>Next</Link>}
       </nav>
-    </>
+    </Workspace>
   );
 }

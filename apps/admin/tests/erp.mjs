@@ -5,13 +5,14 @@
 import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from '../../website/tests/cdp.mjs';
+import {assertLocalOwnerUrl} from './local-only.mjs';
 
 const {BASE, KITSYUU_DB_URL} = process.env;
 const INVITES = JSON.parse(process.env.INVITES);
 const out = []; const ok = (n, p, x = '') => out.push(`${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`);
 const w = ms => new Promise(r => setTimeout(r, ms));
 const PW = 'erp e2e passphrase';
-const pool = new pg.Pool({connectionString: KITSYUU_DB_URL, max: 1});
+const pool = new pg.Pool({connectionString: assertLocalOwnerUrl(KITSYUU_DB_URL), max: 1});
 const q = async (text, params = []) => (await pool.query(text, params)).rows;
 
 const b = await launch(9395);
@@ -58,13 +59,13 @@ const PAGES = [
   ['/notifications', '[data-notification-filters]'], ['/pricing', '[data-pricing-kpis]'], ['/pricing/discounts', '#create-discount-form'],
   ['/pricing/scheduled', '[data-subnav]'], ['/pricing/history', '[data-subnav]'], ['/shipping', '[data-shipment-filters]'], ['/shipping/zones', '#create-zone-form'],
   ['/shipping/couriers', '[data-couriers-table]'], ['/shipping/report', '[data-shipping-kpis]'], ['/returns', '[data-return-filters]'], ['/returns/report', '.report-kpis'],
-  ['/marketing', '#create-campaign-form'], ['/marketing/banners', '#create-banner-form'], ['/marketing/segments', '#create-segment-form'], ['/marketing/report', '[data-range-form]'],
+  ['/marketing', '[data-drawer-open=new-campaign]'], ['/marketing/banners', '[data-drawer-open=new-banner]'], ['/marketing/segments', '[data-drawer-open=new-segment]'], ['/marketing/report', '[data-range-form]'],
   ['/support', '[data-ticket-filters]'], ['/support/new', '#new-ticket-form'], ['/support/report', '.report-kpis'],
   ['/finance', '[data-finance-kpis]'], ['/finance/invoices', '[data-section=orders-without-invoice]'], ['/finance/notes', '[data-subnav]'], ['/finance/expenses', '#expense-form'],
   ['/finance/vendor-payments', '[data-subnav]'], ['/finance/tax', '[data-tax-rates]'], ['/finance/reconciliation', '[data-reconciliation-state]'],
   ['/carts', '[data-cart-kpis]'], ['/carts/wishlists', '[data-subnav]'],
   // client change request, first pass
-  ['/products/bulk', '#bulk-edit-form'], ['/size-charts', '#create-size-chart-form'], ['/carts/checkouts', '[data-subnav]'], ['/marketing/subscribers', '[data-subscriber-filters]'],
+  ['/products/bulk', '#bulk-edit-form'], ['/size-charts', '[data-workspace=size-charts] [data-drawer-open=new-size-chart]'], ['/carts/checkouts', '[data-subnav]'], ['/marketing/subscribers', '[data-subscriber-filters]'],
   // client change request, second pass
   ['/loyalty', '[data-loyalty-rules]'],
 ];
@@ -74,7 +75,7 @@ try {
   await autoConfirm();
   ok('super admin signs in', await signIn('root', 'Root ERP'));
   const nav = await navText();
-  for (const label of ['Notifications', 'Pricing & discounts', 'Shipping', 'Returns & refunds', 'Carts & wishlists', 'Marketing', 'Support', 'Finance'])
+  for (const label of ['Pricing & discounts', 'Shipping', 'Returns', 'Customers', 'Marketing', 'Support', 'Finance'])
     ok(`menu shows ${label}`, nav.includes(label), nav);
   for (const [p, sel] of PAGES) {
     await visit(p);
@@ -107,6 +108,7 @@ try {
 
   // ---------- marketing: a banner saved as a draft is not public ----------
   await visit('/marketing/banners');
+  await until(`(()=>{if(document.querySelector('#create-banner-form'))return true;const t=document.querySelector('[data-drawer-open=new-banner]');if(t&&Object.keys(t).some(k=>k.startsWith('__reactProps')))t.click();return false})()`, 20000);
   await fill('#create-banner-form input[name=heading]', 'E2E draft banner');
   await submit('#create-banner-form');
   ok('banner saved as draft', /draft/i.test(await message('#create-banner-form')));
@@ -120,7 +122,11 @@ try {
   ok('expense stored in paise', (await q(`select amount_paise from expenses where description = 'E2E packaging'`))[0]?.amount_paise === 125000);
 
   // ---------- client first pass: size chart, bulk editor validation, brand wording ----------
-  await visit('/size-charts');
+  await visit('/size-charts', '!!document.querySelector("[data-workspace=size-charts]")');
+  // Catalogue setup (Phase 7): creating is in a drawer opened from the page header.
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=new-size-chart]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=new-size-chart]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=new-size-chart] form')`);
   await fill('#create-size-chart-form input[name=name]', 'E2E Tops');
   await fill('#create-size-chart-form textarea[name=table]', 'Size, Chest, Length\nS, 96, 68\nM, 102, 70');
   await submit('#create-size-chart-form');
@@ -140,7 +146,7 @@ try {
   await visit('/loyalty');
   ok('loyalty: rules shown as off / not set until the business sets them', /Off: customers do not earn or use points/.test(await ev(`document.querySelector('[data-loyalty-rules]')?.innerText ?? ''`)));
   const [cust] = await q(`insert into customers (email, full_name, email_verified_at) values ('loyal.e2e@test.local', 'Loyal E2E', now()) returning id`);
-  await visit(`/customers/${cust.id}`, '!!document.querySelector("#loyalty-adjust-form")');
+  await visit(`/customers/${cust.id}?tab=loyalty`, '!!document.querySelector("#loyalty-adjust-form")');
   await fill('#loyalty-adjust-form input[name=points]', '0');
   await fill('#loyalty-adjust-form input[name=reason]', 'E2E gift');
   await submit('#loyalty-adjust-form');
@@ -158,8 +164,12 @@ try {
 
   // ---------- collections grouped (Men / Women / Sale) and attributes as tags ----------
   await visit('/collections?group=sale', '!!document.querySelector("[data-group-tabs]")');
-  ok('collections: the Sale tab shows the Sale collection card with its counts', await exists('[data-group="sale"] [data-collection="sale"] [data-collection-counts]') && !(await exists('[data-group="men"]')));
-  await visit('/attributes', '!!document.querySelector("#create-attribute-form")');
+  ok('collections: the Sale view shows the Sale collection with its counts', await exists('[data-group="sale"] [data-collection="sale"] [data-collection-counts]') && !(await exists('[data-group="men"]')));
+  await visit('/attributes', '!!document.querySelector("[data-workspace=attributes]")');
+  // Catalogue setup (Phase 7): creating is in a drawer opened from the page header.
+  await until(`(()=>{const t=document.querySelector('[data-drawer-open=new-attribute]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
+  await ev(`document.querySelector('[data-drawer-open=new-attribute]').click(),true`);
+  await until(`!!document.querySelector('[data-drawer=new-attribute] form')`);
   await fill('#create-attribute-form input[name=label]', 'E2E Fabric');
   await submit('#create-attribute-form');
   ok('attributes: created from its name alone (no id to type)', /E2E Fabric created/.test(await message('#create-attribute-form')), await message('#create-attribute-form'));
@@ -183,7 +193,7 @@ try {
   await visit('/attributes?q=cott&status=inactive', '!!document.querySelector("[data-attribute-filters]")');
   ok('attributes: search and the deactivated filter find the value', await exists('[data-attribute=e2e-fabric] [data-value=cotton]'));
   const [prod] = await q(`select id from products where status = 'active' order by id limit 1`);
-  await visit(`/products/${prod.id}`, '!!document.querySelector("[data-section=collections]")');
+  await visit(`/products/${prod.id}?tab=merchandising`, '!!document.querySelector("[data-section=collections]")');
   ok('product page: collections are picked with tags', await exists('#product-collections-form [data-tag-picker="collectionIds[]"]'));
   await ev(`(document.querySelector('#product-collections-form .tag-add').click(),true)`);
   await until(`!!document.querySelector('#product-collections-form [data-option=men]')`);

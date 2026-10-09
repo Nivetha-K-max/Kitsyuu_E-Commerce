@@ -10,6 +10,8 @@ import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { resendInviteAction, resetTwoFactorAction, revokeSessionsAction, setStaffRolesAction, setStaffStatusAction, updateStaffAction } from '../actions';
+import { Entity, Section } from '@/components/frame';
+import RecordActivity from '@/components/RecordActivity';
 
 export const metadata: Metadata = { title: 'Staff member' };
 type Params = Promise<{ id: string }>;
@@ -25,12 +27,21 @@ export default async function StaffDetailPage({ params, searchParams }: { params
   const manage = can(actor, 'staff.manage');
   const roles = manage && can(actor, 'roles.read') ? await listRoles(db(), actor) : [];
   const self = staff.id === actor.staffId;
-  const invited = (await searchParams).notice === 'invited';
+  const spv = await searchParams;
+  const invited = spv.notice === 'invited';
+  const seeAudit = can(actor, 'audit.read');
+  const tab = spv.tab === 'activity' && seeAudit ? 'activity' : 'main';
+  const selfHref = `/staff/${staff.id}`;
   return (
-    <>
-      <PageHead section="System" title={staff.fullName || staff.email} eyebrow={staff.email} crumbs={crumbs}>
-        <StatusBadge status={staff.status} />
-      </PageHead>
+    <Entity module={{ href: '/staff', label: 'Staff' }} name="staff-member" title={staff.fullName || staff.email} status={<StatusBadge status={staff.status} />}
+      factsAttr="data-staff-facts" facts={[{ label: 'Email', value: staff.email }]}
+      tabs={[{ id: 'main', label: 'Account' }, ...(seeAudit ? [{ id: 'activity', label: 'Activity' }] : [])]} current={tab} tabHref={x => (x === 'main' ? selfHref : `${selfHref}?tab=${x}`)}>
+      {tab === 'activity' && (
+        <Section id="act-h" title="Activity" name="activity" wide hint="Changes to this staff account, from the audit log.">
+          <RecordActivity entityType="staff_users" entityId={staff.id} name="staff-member" empty="Changes to this staff account are listed here as they are made." />
+        </Section>
+      )}
+      {tab === 'main' && <>
       {invited && <p className="msg ok" role="status" data-notice="invited">Invitation sent to {staff.email}. The link expires {formatDateTime(staff.inviteExpiresAt)}.</p>}
       <div className="grid two">
         <section className="card">
@@ -96,6 +107,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
           </section>
         </div>
       )}
-    </>
+      </>}
+    </Entity>
   );
 }

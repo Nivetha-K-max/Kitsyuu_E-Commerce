@@ -6,6 +6,7 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { db, requireActor } from '@/lib/server';
 import { saveCourierAction } from '../actions';
 import ShippingNav from '../ShippingNav';
+import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Couriers' };
 type Courier = Awaited<ReturnType<typeof listCouriers>>[number];
@@ -32,8 +33,7 @@ export default async function CouriersPage() {
   const couriers = await listCouriers(db(), actor);
   const manage = can(actor, 'shipping.manage');
   return (
-    <>
-      <PageHead title="Shipping" eyebrow="Couriers staff can choose when shipping an order. Labels and pickups are booked on the courier’s own site; no courier API is connected." />
+    <Workspace name="shipping-couriers" title="Shipping" summary="Couriers staff can choose when shipping an order. Labels and pickups are booked on the courier’s own site; no courier API is connected.">
       <ShippingNav current="/shipping/couriers" />
       <div className="table-wrap"><table data-couriers-table>
         <thead><tr><th>Courier</th><th>Booking</th><th>Tracking link</th><th className="num">Shipments</th><th>Status</th>{manage && <th />}</tr></thead>
@@ -51,6 +51,6 @@ export default async function CouriersPage() {
         <h2 id="nc-h">New courier</h2>
         <ActionForm action={saveCourierAction} submitLabel="Add courier" id="create-courier-form" label="Add courier" resetOnSuccess><CourierFields /></ActionForm>
       </section>}
-    </>
+    </Workspace>
   );
 }
