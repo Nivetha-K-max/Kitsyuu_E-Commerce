@@ -78,13 +78,25 @@ try {
       // m8-operations.test.mjs (M8): 8 fixture orders, one unpaid order cancelled by staff (+2 back).
       : f === 'm8-operations.test.mjs' ? {orders: 8, customers: 2, units: 1100 - 11 + 2}
       : f === 'm4-catalogue.test.mjs' ? {products: 23, variants: 112, images: 24, units: 1105}
-      // transactional-email.test.mjs (Phase 6): 2 customers, 5 cash-on-delivery orders (6 units held through the ledger); emails move no stock.
-      : f === 'transactional-email.test.mjs' ? {customers: 2, orders: 5, units: 1094, everySizeTen: false}
+      // transactional-email.test.mjs (Phase 6): 2 customers, 6 cash-on-delivery orders (7 units held through the ledger); emails move no stock.
+      : f === 'transactional-email.test.mjs' ? {customers: 2, orders: 6, units: 1093, everySizeTen: false}
       // inventory-integrity.test.mjs (Phase 8): 4 pieces transferred from the online location to a branch and left there; everything else put back.
       : f === 'inventory-integrity.test.mjs' ? {units: 1096, everySizeTen: false}
       // purchasing-production-integrity.test.mjs (Phase 9): product receipts go to a branch; 8 + 10 passed pieces enter the online stock.
       : f === 'purchasing-production-integrity.test.mjs' ? {units: 1118, everySizeTen: false}
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2}
+      // production-calendar.test.mjs (2026-10-12): one customer with two order rows written as fixtures (no stock); milestones move no stock.
+      : f === 'production-calendar.test.mjs' ? {customers: 1, orders: 2}
+      // returns-gaps.test.mjs (2026-10-12): one customer; 11 delivered orders written as fixtures (no stock moves; manual refunds and staff settlements only, no provider).
+      : f === 'returns-gaps.test.mjs' ? {customers: 1, orders: 11}
+      // support-widget.test.mjs (2026-10-12): two customers and three order rows written as fixtures (no stock moves).
+      : f === 'support-widget.test.mjs' ? {customers: 2, orders: 3}
+      // referrals.test.mjs (2026-10-12): 22 customers; 15 orders (history rows written without stock, and one paid checkout holding 1 unit through the ledger).
+      : f === 'referrals.test.mjs' ? {customers: 22, orders: 15, units: 1099, everySizeTen: false}
+      // first-offer.test.mjs (2026-10-12): 11 customers; 14 orders (history rows written without stock, one of them a legacy-owner row added with the legacy-account test, two checkouts holding 1 unit each through the ledger, one counter sale from branch stock).
+      : f === 'first-offer.test.mjs' ? {customers: 12, orders: 15, units: 1098, everySizeTen: false}
+      // billing.test.mjs (2026-10-12): counter sales at one branch (branch stock only, never the online stock); 3 customers, 12 sales (of each pair of simultaneous sales exactly one goes through).
+      : f === 'billing.test.mjs' ? {customers: 3, orders: 12, units: 1100}
       // customer-records.test.mjs (2026-10-10): the 8 fixture orders (11 units taken) plus 60 older orders, one order from before customer accounts and one walk-in sale, all written without stock; 2 customers + 1 unverified account.
       : f === 'customer-records.test.mjs' ? {customers: 3, orders: 70, units: 1100 - 11}
       : f === 'm12-reviews.test.mjs' ? {customers: 2, orders: 4}                   // M12: review fixtures (no stock moved)
@@ -231,6 +243,12 @@ try {
     const mfFiles = Object.fromEntries(Object.entries(mfAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
     const mf = node(['apps/admin/tests/modules-frame.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(mfFiles)});
     if (!step('remaining modules browser tests', mf)) failed = true;
+
+    // ---------- Leads pipeline, content studio, and settling a refund left pending (2026-10-12) ----------
+    const lsAccounts = {root: ['ls.root@test.local', 'super_admin'], manager: ['ls.manager@test.local', 'manager'], sales: ['ls.sales@test.local', 'sales'], support: ['ls.support@test.local', 'support']};
+    const lsFiles = Object.fromEntries(Object.entries(lsAccounts).map(([k, [email, role]]) => { const f = invite(email, role); invites.push(f); return [k, f]; }));
+    const ls = node(['apps/admin/tests/leads-studio.mjs'], {BASE, KITSYUU_DB_URL: env.KITSYUU_DB_URL, INVITES: JSON.stringify(lsFiles)});
+    if (!step('leads and content studio browser tests', ls)) failed = true;
   } finally { for (const f of invites) fs.rmSync(f, {force: true}); }
   // Order browser tests cancel two unpaid orders (+3 units back) on top of the fixtures (11 units taken);
   // M4 browser tests create 1 product with 1 size (+6 restocked) and keep 1 of its 2 uploaded images.
@@ -239,8 +257,10 @@ try {
   // Commerce workflow browser tests: 2 orders (online from a draft: 3 units held from the online stock; offline at a branch:
   // 2 units from the branch's own stock, which is not part of the online total); purchasing: 4 pieces received on a PO (+4).
   // POS browser tests: 3 counter sales at two branches (one voided) and 1 customer; branch stock only, never the online stock.
+  // POS browser tests (2026-10-12): one more counter sale, with a coupon and loyalty points (branch stock only).
   // Purchasing & Production browser tests (Phase 9): receipts go to a branch; 3 passed pieces of one production order enter the online stock (+3).
-  if (!(await dbCheck('after all browser tests', env, {orders: 13, customers: 4, units: 1100 - 11 + 3 + 6 - 3 + 4 + 3, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
+  if (!(await dbCheck('after all browser tests', env, {orders: 15, customers: 5,   // +1 order and +1 customer: the refund fixture of leads-studio.mjs
+     units: 1100 - 11 + 3 + 6 - 3 + 4 + 3, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
   /* 2026-10-12: an offline run (KITSYUU_TEST_OFFLINE=1 with OFFLINE_PROOF=<file>) must PROVE the guard was in every process it
      started, not only that nothing was logged as refused: each guarded process and each test browser writes one line to the
      proof file (apps/website/tests/offline-guard.cjs, cdp.mjs). Every script this run started must be there. */

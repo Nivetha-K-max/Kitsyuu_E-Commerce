@@ -2,6 +2,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import { Icon } from './icons';
 import { inModule, type NavItem } from '@/lib/nav';
 import { GO_KEYS, useSidebarCollapsed } from './shortcuts';
@@ -11,13 +12,17 @@ import { GO_KEYS, useSidebarCollapsed } from './shortcuts';
 export default function NavLinks({ items }: { items: NavItem[] }) {
   const path = usePathname();
   const [collapsed] = useSidebarCollapsed();
+  const nav = useRef<HTMLElement>(null);
+  // 2026-10-12: the sidebar is longer than a short screen. When the page changes, the current module is brought into the
+  // visible part of the list (only if it is outside it; no animation), so "where am I" is always on screen.
+  useEffect(() => { nav.current?.querySelector('a[aria-current=page]')?.scrollIntoView({ block: 'nearest' }); }, [path]);
   const groups = items.reduce<{ name: string; items: typeof items }[]>((acc, item) => {
     const last = acc[acc.length - 1];
     if (last?.name === item.group) last.items.push(item); else acc.push({ name: item.group, items: [item] });
     return acc;
   }, []);
   return (
-    <nav className="nav" aria-label="Admin">
+    <nav className="nav" aria-label="Admin" ref={nav}>
       {groups.map(g => (
         <div className="nav-section" key={g.name}>
           {g.name !== 'Overview' && <div className="nav-group" aria-hidden="true">{g.name}</div>}

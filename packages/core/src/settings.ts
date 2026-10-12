@@ -75,8 +75,15 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('shipping.free_from_paise', 'Free delivery from', 'Shipping', 'Orders at or above this amount ship free. Leave empty for no free delivery.', { kind: 'money', optional: true }),
   // ERP modules 1–8. Every switch starts OFF (no row = off) so the store behaves exactly as before until the business decides.
   def('discounts.enabled', 'Discounts and coupons', 'Discounts', 'Master switch. When off, no discount or coupon is applied at checkout, whatever is set up under Pricing.', ON_OFF),
+  def('discounts.first_customer_code', 'First-order offer coupon', 'Discounts', 'The code of the coupon (Pricing → Discounts) offered to customers for their first order and shown in the store\u2019s welcome popup. That coupon then applies only to a signed-in customer with no earlier paid or confirmed order. Leave empty for no first-order offer.',
+    { kind: 'text', maxLength: 32, pattern: '^[A-Za-z0-9_-]{3,32}$', patternHint: '3 to 32 letters, digits, - or _ (a coupon code)', optional: true }),
   def('discounts.stacking', 'More than one discount', 'Discounts', 'When several discounts apply to one order: only the largest one, or all of them together.',
     { kind: 'choice', options: [{ value: 'best', label: 'Only the largest discount' }, { value: 'all', label: 'All applicable discounts' }] }),
+  // Referrals (2026-10-12): off until the business switches it on. The reward and its coupon's terms are the business's values.
+  def('referrals.enabled', 'Referral rewards', 'Referrals', 'Master switch. When on, customers get a referral code to share; when someone they referred has had their first order delivered and the return period is over, both receive a reward coupon. When off, no code is attached and no reward is given.', ON_OFF),
+  def('referrals.reward_paise', 'Reward for each customer', 'Referrals', 'The amount of the reward coupon each of the two customers receives (the one who referred and the one who was referred). With no value, no reward is given.', { kind: 'money', optional: true }),
+  def('referrals.coupon_valid_days', 'Reward coupon valid for', 'Referrals', 'How many days a reward coupon can be used after it is given. Leave empty for no end date.', { kind: 'integer', min: 1, max: 365, unit: 'days', optional: true }),
+  def('referrals.min_order_paise', 'Reward coupon: minimum order', 'Referrals', 'The smallest order a reward coupon can be used on. Leave empty for no minimum.', { kind: 'money', optional: true }),
   def('returns.enabled', 'Return requests', 'Returns', 'When on, customers can request a return from their order page (within the window below). When off, the store keeps saying all sales are final.', ON_OFF),
   def('returns.window_days', 'Return window', 'Returns', 'Days after delivery during which a return can be requested. With no value, customers cannot request returns.',
     { kind: 'integer', min: 1, max: 365, unit: 'days' }),
@@ -86,6 +93,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     { kind: 'choice', options: [{ value: '', label: 'Not set' }, ...INDIAN_STATES.map(s => ({ value: s, label: s }))] }),
   def('notifications.order_delivered', 'Email when an order is delivered', 'Customer emails', 'Sends the customer an email when the delivery is marked delivered.', ON_OFF),
   def('notifications.return_status', 'Emails about return requests', 'Customer emails', 'Sends the customer an email when their return request is approved, rejected, needs information, or is completed.', ON_OFF),
+  def('notifications.invoice_issued', 'Email the tax invoice when it is issued', 'Customer emails', 'Sends the customer their tax invoice by email as soon as it is issued. Staff can always email an invoice by hand from the invoice or the order, whether this is on or off.', ON_OFF),
   def('notifications.refund_processed', 'Email when a refund is made', 'Customer emails', 'Sends the customer an email when a refund is recorded as processed.', ON_OFF),
   def('notifications.support_reply', 'Email when staff reply to a ticket', 'Customer emails', 'Sends the customer an email when staff reply to their support ticket (internal notes are never sent).', ON_OFF),
   // Client change request, first pass.

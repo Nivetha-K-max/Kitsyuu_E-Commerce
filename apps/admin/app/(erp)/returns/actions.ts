@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { refundInput, returnActionInput, returnItemInput, type ActionState } from '@kitsyuu/contracts';
-import { notifyReturn, refundReturn, returnAction, updateReturnItem } from '@kitsyuu/core';
+import { refundInput, returnActionInput, returnItemInput, settleRefundInput, type ActionState } from '@kitsyuu/contracts';
+import { notifyReturn, refundReturn, returnAction, settlePendingRefund, updateReturnItem } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { refundProvider } from '@/lib/payments';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
@@ -35,5 +35,18 @@ export async function refundAction(_: ActionState, form: FormData): Promise<Acti
     return { ok: true, message: r.status === 'processed'
       ? `Refund recorded as made.${mail?.sent ? ' The customer was emailed.' : ''}`
       : 'The payment provider accepted the refund; it is pending until the provider completes it.' };
+  }));
+}
+
+/** 2026-10-12: a provider refund that stayed pending is settled with what staff found at the provider (core checks the
+    permission, that it is still pending and old enough, and records who said so). No provider is called. */
+export async function settleRefundAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(settleRefundInput, form, async input => {
+    const r = await settlePendingRefund(db(), actor, input, await requestContext());
+    const mail = r.status === 'processed' && r.returnId ? await notifyReturn(db(), mailer(), r.returnId, 'refund', { storeUrl: storeUrl() }) : null;
+    return { ok: true, message: r.status === 'processed'
+      ? `Refund recorded as made by the provider.${mail?.sent ? ' The customer was emailed.' : ''}`
+      : 'Refund recorded as not made. The amount can be refunded again.' };
   }));
 }

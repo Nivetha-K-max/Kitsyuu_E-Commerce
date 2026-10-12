@@ -48,7 +48,7 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const autoConfirm = () => ev(`window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e)).map(e => `${p}: ${e}`)); };
+const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e)).map(e => `${p}: ${e}`)); };
 const overflow = () => ev(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
 /** In the page: is this /<section>/<uuid>? */
 const atDetail = section => `new RegExp('^/${section}/[0-9a-f-]{36}$').test(location.pathname)`;

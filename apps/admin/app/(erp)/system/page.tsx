@@ -4,7 +4,7 @@ import { can } from '@kitsyuu/auth';
 import { getSystemStatus, listNotificationLog, securityAlerts } from '@kitsyuu/core';
 import { Forbidden, PageHead, SectionTitle } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
-import { db, requireActor } from '@/lib/server';
+import { db, mailer, requireActor } from '@/lib/server';
 import pkg from '../../../package.json';
 import { Workspace } from '@/components/frame';
 
@@ -19,7 +19,7 @@ export default async function SystemPage() {
   const s = await getSystemStatus(db(), actor, {
     app: 'admin', version: pkg.version, node: process.version, environment: process.env.NODE_ENV ?? 'unknown',
     config: {
-      'Email (MAILER)': process.env.MAILER || 'console', 'Image storage (STORAGE_DRIVER)': process.env.STORAGE_DRIVER || 'local',
+      'Email (MAILER)': mailer().kind === 'unconfigured' ? 'NOT CONFIGURED: no email is delivered' : process.env.MAILER || 'console', 'Image storage (STORAGE_DRIVER)': process.env.STORAGE_DRIVER || 'local',
       'Admin URL (ADMIN_APP_URL)': set('ADMIN_APP_URL'), 'Database connection': set('ADMIN_DATABASE_URL'),
     },
   });

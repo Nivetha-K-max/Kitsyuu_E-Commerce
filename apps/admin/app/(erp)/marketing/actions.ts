@@ -1,11 +1,27 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import { bannerInput, campaignInput, deleteSegmentInput, segmentInput, setBannerActiveInput, setCampaignActiveInput, subscriberIdInput, type ActionState } from '@kitsyuu/contracts';
-import { deleteSegment, saveBanner, saveCampaign, saveSegment, setBannerActive, setCampaignActive, unsubscribeSubscriber } from '@kitsyuu/core';
+import { rejectReferral, runReferralRewards, deleteSegment, saveBanner, saveCampaign, saveSegment, setBannerActive, setCampaignActive, unsubscribeSubscriber } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
 const done = (r: ActionState) => { if (r.ok) revalidatePath('/marketing', 'layout'); return r; };
+
+// Referrals (2026-10-12): permissions are checked in the core (marketing.manage); both actions are audited there.
+const rejectReferralInput = z.object({ referralId: z.string().regex(/^[0-9a-f-]{36}$/i, 'Not a valid referral.'), reason: z.string().trim().min(3, 'Give a reason.').max(300, 'Keep it under 300 characters.') });
+export async function rejectReferralAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(rejectReferralInput, form, async input => { await rejectReferral(db(), actor, input, await requestContext()); return { ok: true, message: 'Referral rejected. No reward will be given for it.' }; }));
+}
+export async function runReferralRewardsAction(_: ActionState, _form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(z.object({}), _form, async () => {
+    const r = await runReferralRewards(db(), actor, await requestContext());
+    return { ok: true, message: r.off ? 'Referral rewards are switched off or no reward amount is set: nothing was checked.'
+      : `Checked ${r.checked} waiting referral${r.checked === 1 ? '' : 's'}: ${r.rewarded} rewarded, ${r.rejected} rejected, ${r.waiting} still waiting.` };
+  }));
+}
 
 export async function saveCampaignAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();

@@ -39,7 +39,7 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const autoConfirm = () => ev(`window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e)).map(e => `${p}: ${e}`)); };
+const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e)).map(e => `${p}: ${e}`)); };
 const locQty = async (code, sku) => (await q(`select coalesce((select s.qty from location_stock s join locations l on l.id = s.location_id join product_variants v on v.id = s.variant_id where l.code = $1 and v.sku = $2), 0)::int n`, [code, sku]))[0].n;
 
 const accepted = new Set();
@@ -93,11 +93,52 @@ try {
   await visit('/pos', '!!document.querySelector("#pos-open-form") || !!document.querySelector("[data-pos]")');
   ok('no session yet: the open-session form lists the branches', await exists('#pos-open-form') && /POS Store 1/.test(await text('#pos-open-form select')));
   const s1 = (await q(`select id from locations where code = 'POS-S1'`))[0].id;
+  // Open-session screen: choosing a store in the list shows what is available there, before the session is opened.
+  {
+    const stockOf = id => q(`select v.sku, s.qty::int qty from location_stock s join product_variants v on v.id = s.variant_id where s.location_id = $1 and s.qty > 0 and v.is_active`, [id]);
+    const shows = async id => {
+      const want = await stockOf(id);
+      const ready = await until(`document.querySelector('[data-pos-preview]')?.dataset.posPreview === ${JSON.stringify(id)} && !document.querySelector('[data-pos-preview][aria-busy]')`, 15000);
+      const got = await ev(`[...document.querySelectorAll('[data-pos-preview-variant]')].map(e => [e.dataset.posPreviewVariant, e.innerText.replace(/\\s+/g, ' ')])`);
+      return {ok: ready && got.length === want.length && want.every(w => got.some(([sku, label]) => sku === w.sku && label.includes(w.qty + ' in stock'))), want: want.length, got: got.length};
+    };
+    const stores = await q(`select id, name from locations where is_online = false and is_active order by sort_order, name`);
+    const options = await ev(`[...document.querySelectorAll('#pos-open-form select[name=locationId] option')].map(o => o.value)`);
+    ok('open session: the list offers every active retail store, and no other location', options.length === stores.length && stores.every(x => options.includes(x.id)), JSON.stringify({options: options.length, stores: stores.length}));
+    const first = await ev(`document.querySelector('#pos-open-form select[name=locationId]').value`);
+    const r1 = await shows(first);
+    ok('open session: the products available at the selected store are listed with their quantities', r1.ok, JSON.stringify(r1));
+    const other = stores.find(x => x.id !== first);
+    await fill('#pos-open-form select[name=locationId]', other.id);
+    const r2 = await shows(other.id);
+    ok('open session: selecting another store lists that store\'s stock instead', r2.ok && (await text('#pos-preview-h')).includes(other.name), JSON.stringify(r2));
+    ok('open session: looking at stock opens no session', (await q(`select count(*)::int n from pos_sessions`))[0].n === 0);
+  }
   await fill('#pos-open-form select[name=locationId]', s1); await fill('#pos-open-form input[name=openingCash]', '1000');
   await submit('#pos-open-form');
   ok('session opened → the counter screen', await until('!!document.querySelector("[data-pos]")', 15000), await message('#pos-open-form'));
   ok('header shows branch and session', /POS Store 1 · session POSS\//.test(await text('.page-head')));
   ok('cashier: no discount field (no orders.discount)', !(await exists('[data-pos-discount]')));
+
+  // ---------- store selector and the branch's stock (client request, 2026-10-09) ----------
+  ok('the counter shows the store it bills at, chosen in a selector that lists the branches', (await ev(`document.querySelector('[data-pos-store-select]').value`)) === s1
+    && (await ev(`document.querySelectorAll('[data-pos-store-select] option').length`)) >= 2);
+  ok('the stock at this store is listed without searching', await until(`/^In stock at POS Store 1/.test(document.querySelector('[data-pos-stock-head]')?.innerText || '') && document.querySelectorAll('[data-pos-listing=stock] [data-pos-variant]').length > 0`, 15000),
+    await text('[data-pos-stock-head]'));
+  {
+    const shown = await ev(`[...document.querySelectorAll('[data-pos-listing=stock] [data-pos-variant]')].map(b => [b.dataset.posVariant, b.innerText.replace(/\\s+/g, ' '), b.disabled])`);
+    const inDb = await q(`select v.sku, s.qty::int qty from location_stock s join locations l on l.id = s.location_id join product_variants v on v.id = s.variant_id where l.code = 'POS-S1' and s.qty > 0 and v.is_active`);
+    ok('it lists exactly the sizes with stock at this store, each with its quantity, all selectable', shown.length === inDb.length
+      && inDb.every(r => shown.some(([sku, label, disabled]) => sku === r.sku && label.includes(r.qty + ' in stock') && !disabled)), JSON.stringify({shown: shown.length, inDb: inDb.length}));
+    const other = (await q(`select id, name from locations where is_online = false and is_active and id <> $1 order by sort_order, name limit 1`, [s1]))[0];
+    await ev(`(()=>{const el=document.querySelector('[data-pos-store-select]');const set=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set;set.call(el,${JSON.stringify(other.id)});el.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
+    ok('choosing another store explains that this session bills at its own store, with the way to close it', await until(`!!document.querySelector('[data-pos-store-switch] a[href="/pos/sessions#close"]')`, 5000)
+      && (await text('[data-pos-store-switch]')).includes(other.name) && /POS Store 1/.test(await text('[data-pos-store-switch]')));
+    ok('nothing changed: the same session is open at the same store, and the list is still this store\'s', (await q(`select count(*)::int n from pos_sessions s where s.status = 'open' and s.location_id = $1`, [s1]))[0].n === 1
+      && /^In stock at POS Store 1/.test(await text('[data-pos-stock-head]')));
+    await click('[data-pos-store-stay]');
+    ok('"Stay" puts the selector back on this store', await until(`!document.querySelector('[data-pos-store-switch]') && document.querySelector('[data-pos-store-select]').value === ${JSON.stringify(s1)}`, 5000));
+  }
 
   // ---------- search, size, quantity limits, scan ----------
   ok('search by SKU shows the sizes with Store 1 stock', await addBySearch('KTS-TOP-003', 'KTS-TOP-003-M'));
@@ -211,6 +252,53 @@ try {
   await visit('/pos/report', '!!document.querySelector("[data-pos-report]")');
   ok('POS report: transactions, methods, by cashier and branch', /3/.test(await text('[data-kpi=transactions]')) && /UPI/.test(await text('[data-pos-methods]'))
     && /POS Store 1/.test(await text('[data-pos-group=byLocation]')) && /pos\.sales@test\.local/.test(await text('[data-pos-group=byCashier]')), await text('[data-pos-report]'));
+
+  // ---------- 2026-10-12, unified billing: a coupon and the customer's loyalty points on a counter bill ----------
+  // Discounts and loyalty are switched on in this LOCAL test database only, with test values, and switched off again below.
+  await q(`insert into settings (key, value) values ('discounts.enabled', '"on"'), ('loyalty.enabled', '"on"'), ('loyalty.point_value_paise', '100') on conflict (key) do update set value = excluded.value`);
+  await q(`insert into discounts (name, code, kind, value, scope, is_active) values ('POS e2e coupon', 'POSE2E10', 'percent', 1000, 'order', true)`);
+  await q(`insert into loyalty_accounts (customer_id, balance) values ($1, 50) on conflict (customer_id) do update set balance = 50`, [kavya.id]);
+  await q(`insert into loyalty_transactions (customer_id, points, kind, reason, remaining) values ($1, 50, 'adjust', 'POS e2e', 50)`, [kavya.id]);
+  const posTotal = () => ev('Number(document.querySelector("[data-pos-total]")?.dataset.posTotal ?? 0)');
+  const billKinds = () => ev(`[...document.querySelectorAll('[data-pos-totals] [data-pos-bill-line]')].map(e=>e.dataset.posBillLine).join()`);
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
+  await addBySearch('KTS-TOP-003', 'KTS-TOP-003-M');
+  await until('Number(document.querySelector("[data-pos-total]")?.dataset.posTotal) > 0');
+  const full = await posTotal();
+  await click('[data-pos-method="card"]'); await fill('[data-pos-reference]', 'APPR-E2E-9911');
+  await chargeReady();
+  await fill('[data-pos-coupon-code]', 'nope1');
+  ok('coupon that is not valid: the reason is shown, nothing is taken off, payment is blocked until it is removed', await until(`document.querySelector('[data-pos-coupon-state]')?.dataset.posCouponState === 'rejected'`, 8000)
+    && /not valid/.test(await text('[data-pos-coupon-state]')) && (await posTotal()) === full && await ev('document.querySelector("[data-pos-charge]").disabled'), await text('[data-pos-coupon]'));
+  await fill('[data-pos-coupon-code]', 'pose2e10');
+  const couponOff = Math.floor(full / 10);
+  ok('valid coupon: applied by the server, on its own line of the bill', await until(`document.querySelector('[data-pos-coupon-state]')?.dataset.posCouponState === 'applied'`, 8000)
+    && await until(`Number(document.querySelector("[data-pos-total]")?.dataset.posTotal) === ${full - couponOff}`, 8000) && /Coupon POSE2E10/.test(await text('[data-pos-bill-line=coupon]')), await text('[data-pos-totals]'));
+  ok('no customer on the bill: no points are offered', !(await exists('[data-pos-loyalty]')));
+  await fill('[data-pos-customer-search]', '98400998');
+  await until(`!!document.querySelector('[data-pos-customer-pick="pos.kavya@test.local"]')`, 8000);
+  await click('[data-pos-customer-pick="pos.kavya@test.local"]');
+  ok('customer on the bill: the cashier sees their points and what they can take off; nothing is used until ticked', await until(`document.querySelector('[data-pos-points-balance]')?.innerText === '50'`, 8000)
+    && /Use 50 points/.test(await text('[data-pos-loyalty]')) && (await posTotal()) === full - couponOff && !(await exists('[data-pos-bill-line=loyalty]')), await text('[data-pos-loyalty]'));
+  await click('[data-pos-use-points]');
+  ok('points: taken off after the coupon, each on its own line; total = subtotal − coupon − points', await until(`Number(document.querySelector("[data-pos-total]")?.dataset.posTotal) === ${full - couponOff - 5000}`, 8000)
+    && (await billKinds()).startsWith('coupon,loyalty'), `${await billKinds()} ${await posTotal()}`);
+  await chargeReady(); await click('[data-pos-charge]');
+  ok('sale with coupon and points recorded', await until('!!document.querySelector("[data-pos-done]")', 15000), await text('[data-pos-error]'));
+  const [sale4] = await q(`select o.id, o.total_paise, o.discount_paise, o.loyalty_points_used, o.loyalty_discount_paise, o.pricing->>'coupon' coupon, o.customer_id,
+    (select count(*)::int from discount_redemptions r where r.order_id = o.id and r.code = 'POSE2E10') redemptions, (select balance from loyalty_accounts where customer_id = o.customer_id) balance
+    from orders o where o.pos_number is not null order by o.created_at desc limit 1`);
+  ok('stored: the discount, the coupon and its use, the points used and the customer\'s new balance', sale4.total_paise === full - couponOff - 5000 && sale4.discount_paise === couponOff + 5000 && sale4.loyalty_points_used === 50
+    && sale4.loyalty_discount_paise === 5000 && sale4.coupon === 'POSE2E10' && sale4.redemptions === 1 && sale4.balance === 0 && sale4.customer_id === kavya.id, JSON.stringify(sale4));
+  await visit(`/pos/sale/${sale4.id}`, '!!document.querySelector("[data-pos-receipt]")');
+  ok('bill: the same lines (coupon, points) and total as the counter showed', (await ev(`[...document.querySelectorAll('[data-receipt-bill]')].map(e=>e.dataset.receiptBill).join()`)).startsWith('subtotal,coupon,loyalty')
+    && /50/.test(await text('[data-receipt-points]')) && (await text('[data-receipt-total]')).replace(/[^0-9]/g, '') === String(full - couponOff - 5000), await text('[data-pos-receipt]'));
+  await visit(`/orders/${sale4.id}?tab=items`, '!!document.querySelector("[data-order-total]")');
+  ok('order page (Items tab): the same bill breakdown', (await ev(`[...document.querySelectorAll('[data-bill-line]')].map(e=>e.dataset.billLine).join()`)).startsWith('subtotal,coupon,loyalty')
+    && (await text('[data-order-total]')).replace(/[^0-9]/g, '') === String(full - couponOff - 5000),
+    `${await ev(`[...document.querySelectorAll('[data-bill-line]')].map(e=>e.dataset.billLine).join()`)} ${await text('[data-order-total]')} ${await ev('location.pathname + location.search')}`);
+  await q(`delete from settings where key in ('discounts.enabled', 'loyalty.enabled', 'loyalty.point_value_paise')`);
+  await q(`update discounts set is_active = false where code = 'POSE2E10'`);
 
   // ---------- cashier closes the session ----------
   ok('cashier signs in again', await signIn('sales', 'POS Cashier'));

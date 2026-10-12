@@ -4,7 +4,7 @@
    concurrent), provider failure (the order stands, the failure is logged), the quick second try, the later retry with
    its limits, a confirmation that was never attempted, status and tracking emails behind their switches, what a customer
    can and cannot see in an email, and the Resend adapter (HTML part, idempotency key, transient vs. refused).
-   Adds 2 customers and 5 cash-on-delivery orders (6 units held through the ledger; run-e2e.mjs expects them).
+   Adds 2 customers and 6 cash-on-delivery orders (7 units held through the ledger; run-e2e.mjs expects them).
    node --env-file=apps/admin/tests/.output/test.env --test packages/core/test/transactional-email.test.mjs */
 import test, {after, before} from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ import path from 'node:path';
 import {randomBytes} from 'node:crypto';
 import pg from 'pg';
 import {createDb, recordAudit} from '@kitsyuu/db';
-import {MailError, acceptStaffInvite, consoleMailer, createMailer, emailHtml, fileMailer, issueStaffInvite, resendMailer, validateStaffSession} from '@kitsyuu/auth';
+import {MailError, acceptStaffInvite, consoleMailer, createMailer, deliversNothing, emailHtml, fileMailer, issueStaffInvite, resendMailer, validateStaffSession} from '@kitsyuu/auth';
 import {paiseToRupees, placeOrderInput, settingUpdateInput, shippingRateInput, shippingZoneInput} from '@kitsyuu/contracts';
 import {
   EMAIL_EVENTS, EMAIL_RETRY_MINUTES, addCartLine, databaseDiscounts, defaultCommerceConfig, emailIdempotencyKey, getCustomerCart, notifyOrderStatus, notifyOrderTracking,
@@ -389,10 +389,52 @@ test('local verification: MAILER=file writes the text and the HTML to a folder a
   assert.throws(() => createMailer('smtp'), /Unknown MAILER/);
 });
 
-test('totals: the ledger holds exactly the six units of the five orders; no email moved stock', async () => {
+test('production deployment: never the console; without a working provider nothing is delivered and nothing is recorded as sent', async () => {
+  const VERCEL = {VERCEL: '1'}, logged = []; const realError = console.error; console.error = (...a) => logged.push(a.join(' '));
+  let none;
+  try {
+    // console (also the default when MAILER is unset), file and an unknown value are refused in a deployment
+    for (const kind of ['console', 'file', 'smtp']) assert.equal(createMailer(kind, VERCEL).kind, 'unconfigured', kind);
+    assert.equal(createMailer('console', {KITSYUU_DEPLOYMENT: 'production'}).kind, 'unconfigured');
+    // resend that cannot start (no key, a placeholder, no sender) is refused too; the key never appears in the log
+    const KEY = 're_' + 'k'.repeat(24);
+    for (const env of [{}, {RESEND_API_KEY: 'REPLACE_ME', MAIL_FROM: 'KITSYUU <orders@kitsyuu.test>'}, {RESEND_API_KEY: KEY}, {RESEND_API_KEY: KEY, MAIL_FROM: 'not an address'}])
+      assert.equal(createMailer('resend', {...VERCEL, ...env}).kind, 'unconfigured', JSON.stringify(Object.keys(env)));
+    assert.equal(createMailer('resend', {...VERCEL, RESEND_API_KEY: KEY, MAIL_FROM: 'KITSYUU <orders@kitsyuu.test>'}).kind, 'resend', 'a complete set-up is used');
+    assert.ok(logged.length >= 8 && logged.every(l => /\[mail\] ERROR: email delivery is NOT configured/.test(l)) && !logged.join('\n').includes(KEY));
+    // outside a deployment nothing changes
+    assert.equal(createMailer('console', {}).kind, 'console');
+    assert.ok(deliversNothing({kind: 'console'}) && deliversNothing({kind: 'unconfigured'}) && !deliversNothing({kind: 'resend'}));
+    none = createMailer('console', VERCEL);
+  } finally { console.error = realError; }
+
+  // the mailer itself: fails, permanently (no quick retry), and writes the message nowhere
+  const out = []; const realWrite = process.stdout.write; process.stdout.write = (s, ...r) => { out.push(String(s)); return realWrite.call(process.stdout, s, ...r); };
+  try { await assert.rejects(none.send({to: 'someone@example.com', subject: 'Secret subject', text: 'one-time link https://store.test/reset/abc'}), e => e instanceof MailError && e.transient === false && /not configured/.test(e.message)); }
+  finally { process.stdout.write = realWrite; }
+  assert.ok(!out.join('').includes('one-time link') && !out.join('').includes('someone@example.com'), 'no message content is written to the log');
+
+  // a COD order placed while email is not configured: the order stands; the confirmation is logged as FAILED, not sent
+  const {o: placedOrder} = await codOrder(asha, ashaAddr, 1); const number = placedOrder.order_number;
+  assert.deepEqual(await sendOrderPlacedEmail(web, none, number, {orderUrl: orderUrl(number)}), {sent: false, reason: 'failed'});
+  const o = (await q('select id, status, payment_method from orders where order_number = $1', [number]))[0];
+  assert.equal(o.status, 'processing'); assert.equal(o.payment_method, 'cod');
+  const rows = await orderEmails(admin, o.id);
+  assert.equal(rows.length, 1); assert.equal(rows[0].status, 'failed'); assert.match(rows[0].error, /Email delivery is not configured/);
+  // the retry job does nothing while there is no provider, and delivers once there is one
+  assert.equal((await retryOrderEmails(admin, none, {storeUrl: STORE})).noProvider, true);
+  assert.equal((await orderEmails(admin, o.id)).filter(r => r.status === 'sent').length, 0);
+  const real = memory();
+  const run = await retryOrderEmails(admin, real, {storeUrl: STORE, now: new Date(Date.now() + 5 * 60_000), quickTries: FAST});
+  assert.ok(run.sent >= 1, JSON.stringify(run));
+  assert.equal(real.sent.filter(m => m.text.includes(number)).length, 1);
+  assert.equal((await orderEmails(admin, o.id)).filter(r => r.status === 'sent').length, 1);
+});
+
+test('totals: the ledger holds exactly the seven units of the six orders; no email moved stock', async () => {
   const [{orders, customers}] = await q(`select (select count(*)::int from orders) orders, (select count(*)::int from customers) customers`);
-  assert.deepEqual([orders, customers], [5, 2]);
+  assert.deepEqual([orders, customers], [6, 2]);
   const [{units, mismatch}] = await q(`select (select coalesce(sum(stock_qty),0)::int from product_variants) units,
     (select count(*)::int from product_variants v where v.stock_qty <> (select coalesce(sum(m.delta),0) from inventory_movements m where m.variant_id = v.id and (m.location_id is null or m.location_id = (select id from locations where is_online)))) mismatch`);
-  assert.deepEqual([units, mismatch], [1094, 0]);
+  assert.deepEqual([units, mismatch], [1093, 0]);
 });

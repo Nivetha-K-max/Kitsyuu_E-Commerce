@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { cancelReturnInput, customerTicketInput, customerTicketReplyInput, DomainError, returnRequestInput, type ActionState } from '@kitsyuu/contracts';
 import { cancelReturnByCustomer, openCustomerTicket, replyAsCustomer, requestReturn } from '@kitsyuu/core';
 import { GENERIC_ERROR, handle } from '@/lib/actions';
+import { limited } from '@/lib/rate-limit';
 import { db, requestContext, requireCustomer } from '@/lib/server';
 
 export async function requestReturnAction(_: ActionState, form: FormData): Promise<ActionState> {
@@ -41,14 +42,22 @@ export async function cancelReturnAction(_: ActionState, form: FormData): Promis
 export async function openTicketAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireCustomer('/account/support/new');
   let number = '';
-  const r = await handle(customerTicketInput, form, async input => { number = (await openCustomerTicket(db(), me, input, await requestContext())).number; });
+  const r = await handle(customerTicketInput, form, async input => {
+    const wait = await limited('ticket-open', me.customerId);
+    if (wait) return { ok: false, message: wait };
+    number = (await openCustomerTicket(db(), me, input, await requestContext())).number;
+  });
   if (number) { revalidatePath('/account', 'layout'); redirect(`/account/support/${number}?sent=1`); }
   return r;
 }
 
 export async function replyTicketAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireCustomer('/account/support');
-  const r = await handle(customerTicketReplyInput, form, async input => { await replyAsCustomer(db(), me, input, await requestContext()); return { ok: true, message: 'Message sent.' }; });
+  const r = await handle(customerTicketReplyInput, form, async input => {
+    const wait = await limited('ticket-reply', me.customerId);
+    if (wait) return { ok: false, message: wait };
+    await replyAsCustomer(db(), me, input, await requestContext()); return { ok: true, message: 'Message sent.' };
+  });
   if (r.ok) revalidatePath('/account', 'layout');
   return r;
 }

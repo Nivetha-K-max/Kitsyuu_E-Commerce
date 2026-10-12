@@ -4,12 +4,15 @@
 import { randomUUID } from 'node:crypto';
 import { DomainError, fieldErrors, newsletterSignupInput, type ActionState } from '@kitsyuu/contracts';
 import { subscribeNewsletter } from '@kitsyuu/core';
+import { limitedByAddress } from '@/lib/rate-limit';
 import { currentCustomer, db } from '@/lib/server';
 
 export async function subscribeNewsletterAction(_: ActionState, form: FormData): Promise<ActionState> {
   const parsed = newsletterSignupInput.safeParse({ email: form.get('email') ?? '', consent: form.get('consent') ?? undefined, source: form.get('source') ?? undefined });
   if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error), message: parsed.error.issues[0]?.message ?? 'Check the form.' };
   try {
+    const wait = await limitedByAddress('newsletter');
+    if (wait) return { ok: false, message: wait };
     const me = await currentCustomer().catch(() => null);
     await subscribeNewsletter(db(), { email: parsed.data.email, consent: true, source: parsed.data.source, customerId: me?.customerId ?? null });
     return { ok: true, message: 'Thanks, you are on the list. You can unsubscribe at any time from the link in our emails.' };

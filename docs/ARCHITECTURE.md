@@ -200,6 +200,86 @@ Everything below is built and tested locally only (branch `m8-operations`, not c
 
 Left out on purpose: internal order notes and "resend confirmation email" (no approved design or email content yet), reports, a reconciliation screen (no live provider), courier APIs, and any returns or refunds workflow. (This list describes M8 as it was built; reports, returns and refunds, support, finance and the other ERP modules were added later, see `database/README.md` → Migrations.)
 
+## Billing: one bill (2026-10-12)
+
+One description of what an order costs, used by every place that shows a bill: the POS counter while a sale is rung up, the POS receipt, the order page, the tax invoice and the invoice email (`packages/core/src/bill.ts`: `billFromTotals` for a bill being priced, `billFromOrder` for a stored order or invoice). It calculates nothing new: the amounts are the ones `priceOrder` worked out and the order stored (`orders.*`, `orders.pricing`), put in one order with one set of labels, with a flag when stored amounts do not add up.
+
+- **Order of a bill:** items subtotal → staff discount and coupon (combined as `discounts.stacking` says: only the largest, or all) → cash-on-delivery discount → loyalty points on what is left → delivery and COD fee → tax → total. The store checkout and the POS counter use the same `priceOrder`.
+- **Coupons at the POS** (`counterDiscounts` in `discounts.ts`): the store's own coupons by the same rules (dates, minimum order, items, usage limits re-checked under a lock when the sale is saved). A coupon limited per customer needs a customer on the bill; a walk-in sale can use a coupon that has no per-customer limit. Discounts that need no code are the store's promotions and are not applied at the counter. A product's minimum price limits staff discounts only. A coupon or points that the server did not apply refuse the sale instead of changing the total silently. Recording the coupon's use from the Admin/ERP needs migration `20261012004400` (grants only; **local only** until reviewed).
+- **Loyalty points at the POS:** only for a customer on the bill; the cashier sees that customer's balance and what it can take off (no `loyalty.read` needed for the customer being served) and the server applies the configured value, minimum and maximum with the balance row locked. A voided sale gives the points back.
+- **Tax and points (to confirm with the accountant before production use):** points are treated like a discount, so they reduce the taxable amount, exactly as at the store checkout. Whether a points redemption is a discount or a means of payment for GST has not been decided by an accountant; the calculation was kept as it was.
+- **Invoice email** (`finance.ts`: `invoiceEmail`, `sendInvoiceEmail`, `notifyInvoiceIssued`): staff with `finance.manage` can email an issued invoice from the invoice page or the order's Invoice tab, any number of times; issuing an invoice emails it automatically only when `notifications.invoice_issued` is on (off by default). Both go through the transactional email service: every attempt is logged as sent or failed. "Sent" means the mailer accepted the message; nothing claims delivery.
+
+## First-order offer and referrals (2026-10-12)
+
+Both use the existing coupon engine (`packages/core/src/discounts.ts`); neither adds a second way of working out a discount.
+
+- **First-order offer.** One of the business's own coupons is named in Configuration → Discounts (`discounts.first_customer_code`). Everything about the offer is that coupon's row (amount, minimum order, cap, dates, limits). Naming it adds one rule, enforced where discounts are evaluated and again under the discount's lock when an order is saved: the coupon applies only to a signed-in customer with no earlier successful order (paid, processing, shipped or delivered; an unpaid, failed or cancelled order does not count). The store's welcome popup (`components/FirstOfferPopup.tsx`, `/api/offer`) shows the offer after the visitor scrolls into the store; it issues nothing and proves nothing. A signed-in customer who is not eligible is not shown it; a guest is asked to sign up or log in. Closing it is remembered per browser session, which is a courtesy and never a check. No schema change.
+- **Referrals** (`packages/core/src/referrals.ts`, migration `20261012004500`, **local only** until reviewed). Off until `referrals.enabled` is switched on. A customer gets one code; an account created with it is attributed once, at sign-up only (never an existing account, never oneself). A reward is never given for entering a code: `processReferralRewards` (the scheduled job `/api/jobs/referral-rewards`, or staff from Marketing → Report → Referrals) rewards a referral only when the referred customer's first eligible order (placed after the attribution, delivered, nothing returned or refunded) is past the return period, and rejects one whose customer had ordered before or shares a phone number with the referrer. Each party then receives a personal single-use coupon (`discounts.customer_id`) with the configured amount, validity and minimum order (`referrals.reward_paise`, `referrals.coupon_valid_days`, `referrals.min_order_paise`). The referral row is locked while it is decided and `referral_rewards` allows one row per party, so repeated or simultaneous runs give nothing twice. Every decision is audited.
+
+## Packaging materials (2026-10-12)
+
+Packaging (courier bags, cartons, tissue, tags…) is a material of kind `packaging` (migration `20261012004600`, **local only** until reviewed): the same `materials` table, the same ledger (`material_movements`, written only by `adjust_material_stock`), the same purchase orders and goods receipts. There is no second stock table and no second way to change a quantity.
+
+- **Where.** Purchasing → Materials has two lists of one view: Production materials and Packaging (`/materials?kind=packaging`). Purchasing keeps its three views.
+- **Stock changes.** Received on a purchase order; "Record use" on the item's page (`recordPackagingUse`, ledger reason `consume`, audited as `packaging.use`); a count correction or write-off (`adjustMaterialStock`). Stock can never go below zero. "Record use" carries the stock the page showed, so a form sent twice, or after someone else recorded, is refused instead of counted twice.
+- **Not automatic.** Packing or shipping an order does not take packaging from stock: nothing in the business rules says how much packaging an order uses, so no such rule was invented. Staff record what was used.
+- **Reordering.** An item is low at or below its reorder level; "To order" is what is missing to be back at that level, counting what is already on order. The usual supplier and the place it is kept are information on the item; stock is one quantity per item, not per location.
+- **Permissions.** Reading needs `procurement.read`; creating, editing, recording use and correcting need `procurement.manage`; receiving needs `procurement.receive`; the last purchase cost is shown only with `costs.read`. No new permission and no role change.
+
+## Production calendar (2026-10-12)
+
+`packages/core/src/production-calendar.ts`, migration `20261012004700` (**local only** until reviewed). The calendar (Production → Calendar, `/production/calendar`, Month · Week · Day) is a view of dates, not a second record of production.
+
+- **What it shows.** Each production order's own due date (cancelled orders are left out), the milestones "Ready for Trial" and "Ex-Factory", and tasks. Each entry appears once.
+- **Milestones.** They belong to a production order, at most one of each per order: checked under the order's row lock and by a unique index, so adding one again is refused and changing its date moves it. Customer orders have no made-to-order flag in the model, so the two milestones exist only on production orders; the service and a check constraint refuse them on a customer order.
+- **Tasks.** A title and a date, on a production order or a customer order (named by its number). Shown for a customer order only to staff with `orders.read`.
+- **Nothing is automatic.** No order of any kind receives a milestone or a task by itself; stock orders therefore never get one unless a staff member adds a task.
+- **Changes.** Add, change date/note, mark done (records who and when), reopen, remove (only while not done). A page that is out of date is refused instead of undoing someone else's change. Every change is audited; none touches stock, an order's status or a production order's figures.
+- **Permissions.** Reading needs `production.read`; every change needs `production.manage`. No new permission and no role change.
+
+## Returns and refunds: 2026-10-12 audit
+
+Three problems were found, reproduced by a test, and fixed (`packages/core/test/returns-gaps.test.mjs`):
+
+- **Refunds on one order are made one at a time.** `refundReturn` now locks the order row before working out what is left to refund (as `refundOrderEdit` already did). Before, two returns of the same order refunded at the same moment could together refund more than was paid.
+- **An order line listed twice in one return request** is refused with a clear message instead of a database error.
+
+**A refund the provider left pending can be settled.** A refund the provider accepts but reports as *pending*, or a request cut off before its answer was recorded, used to stay `pending` for good and block any new refund for its return. Staff with `refunds.create` now settle it on the order's Payment tab (`settlePendingRefund`): they look it up with the provider and record *refunded* (the provider's refund id is required; payment, order and return then move on as usual) or *not refunded* (a reason is required; the amount can be refunded again). It can be settled once, only when it is at least 10 minutes old, and the record carries the staff member's name in the audit log. No provider is called. Still open for when a provider is switched on: reading the refund's status from the provider automatically (a status call or webhook), to be built and tested against the provider's test mode.
+
+## Store help window (2026-10-12)
+
+`apps/website/components/HelpWidget.tsx`, `apps/website/app/help-actions.ts`, `packages/core/src/support-widget.ts`. No schema change.
+
+- **What it is.** A "Help" button on the store that opens a small window: help topics, "Check an order", "Send a message". The answers are a fixed list in core, matched to a typed question by keywords. Nothing is generated, and the window says it is automated and not a live chat. The returns answer follows `returns.enabled` / `returns.window_days`.
+- **Messages.** A signed-in customer's message is their own support ticket (the existing `openCustomerTicket`). A guest's message is a ticket with the name and email they typed and no account; staff reply by email from Support. An order number is linked only when that order was placed with the same email; otherwise it is kept in the message, marked as not matched.
+- **Guest order status.** Needs the order number and the contact the order was placed with (its email, the account's email, or the last ten digits of its phone). Returns the status and shipping facts only; never the name, address, items or amounts. A wrong number and a wrong contact get the same answer.
+- **Limits** (`apps/website/lib/rate-limit.ts`, starting values to review against real traffic): lookups 8 per address per 10 minutes and 6 per order number per hour; guest messages 3 per address and 3 per email per hour; topic searches 40 per address per 10 minutes. Like every store limit they need the Redis limiter to be configured in production; without it there are no request limits.
+- **Where it shows.** Not on checkout. On the home page only after the visitor scrolls past the landing film. It asks the server for nothing until it is opened.
+
+## Admin sidebar and states (2026-10-12)
+
+The navigation is unchanged: a flat list of modules (22 then; 24 since Leads and Content studio were added the same day) (`apps/admin/lib/nav.ts`), captions that are not collapsible, the same permissions, and module → views → entity → tabs. An inspection found every module icon present and every page under `(erp)` belonging to a module (My account is the intended exception), so nothing was restructured. Three shared refinements, each in one place:
+
+- The current module is brought into the visible part of the sidebar when the page changes (`components/NavLinks.tsx`; only when it is outside the view, no animation). On a short screen the lower modules were below the fold.
+- Keyboard focus on a sidebar link uses the same focus ring as buttons, tabs and menus (`--focus`) instead of a separate outline.
+- Anything marked `aria-disabled` looks and behaves like a disabled button.
+
+New pages (production calendar, referrals, packaging) use the existing frame components and tokens; the calendar adds one small block of styles in ink and paper, with "Overdue" and "Done" written out so colour is never the only signal.
+
+## Leads pipeline and content studio (2026-10-12)
+
+Two staff tools the client already works with on another platform, rebuilt here in the ERP's own frame and style (migration `20261012004800`, **local only** until reviewed). They are two flat sidebar modules under Growth; Marketing keeps its five views. There is no ads / Meta connection and no drip-message feature.
+
+- **Leads** (`packages/core/src/leads.ts`, `/leads`): views Pipeline and Conversion. A lead is entered by staff and sits in one stage: New leads → Engaged → Qualified → Customer visited → Converted, or Disqualified with its reason. One lead per phone number (compared on the last ten digits). A card is dragged to another column or moved with its own control; both send the same action, which carries the stage the page showed, so an out-of-date board changes nothing. Every move is a row in `lead_events`; Conversion counts from those rows. "Excel" downloads a CSV and is audited. A lead is not a customer and touches no order or stock.
+- **Content studio** (`packages/core/src/studio.ts`, `/studio`): views R&D, Planning and Calendar.
+  - *R&D*: ideas in Exploring, Shortlisted or Parked. A shortlisted idea is sent to planning once.
+  - *Planning*: a piece moves one stage at a time, Idea → Script → Shoot → Edit → Scheduled → Posted. Each stage needs some fields first (the card says how many are left). Staff ask for the move; someone with `studio.approve` approves it or sends it back with a note, and moves their own pieces in one step. What was filled in is checked again at approval.
+  - *Calendar*: the same pieces by target date (week or month, plus "No date yet"). Dragging changes the date only, never the stage.
+  - Nothing is published from here: "Posted" is recorded by staff with the link. Links must be https.
+- **Drag and drop** is one small client component (`apps/admin/components/DragMove.tsx`, native browser drag events, no library). It only sends the checked server action; every drag has a non-drag control for keyboards and touch.
+- **Permissions**: `leads.read` / `leads.manage`, `studio.read` / `studio.manage` / `studio.approve` (see database/README.md for which roles hold them). The store's database role has no access to any of these tables.
+
 ## Providers and configuration
 
 | Capability | Interface | What is plugged in now | Later |

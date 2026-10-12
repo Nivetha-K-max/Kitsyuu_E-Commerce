@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { companyDetails, getPosSale, returnSettings } from '@kitsyuu/core';
+import { billFromOrder, companyDetails, getPosSale, returnSettings } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import PrintButton from '@/components/PrintButton';
 import { Forbidden, PageHead } from '@/components/ui';
@@ -29,6 +29,8 @@ export default async function PosSalePage({ params, searchParams }: { params: Pa
   const { sale: s, items, payment, pos } = v;
   const contact = (s.contact ?? {}) as { name?: string | null; phone?: string | null; email?: string | null };
   const voided = s.status === 'cancelled';
+  // 2026-10-12: the one bill breakdown (core bill.ts), from what the sale stored: the same lines as the counter, the order and the invoice.
+  const bill = billFromOrder(s);
   const autoprint = (await searchParams).print === '1';
   const returnable = !voided && s.status === 'delivered' && rs.enabled && !!rs.windowDays && can(actor, 'returns.manage');
   return (
@@ -70,12 +72,10 @@ export default async function PosSalePage({ params, searchParams }: { params: Pa
           ))}</tbody>
         </table>
         <dl className="pos-receipt-totals">
-          <dt>Subtotal</dt><dd>{formatPaise(s.subtotal_paise)}</dd>
-          {s.discount_paise > 0 && <><dt>Discount{s.staff_discount_bp ? ` (${s.staff_discount_bp / 100}%${s.staff_discount_reason ? `: ${s.staff_discount_reason}` : ''})` : ''}</dt><dd>− {formatPaise(s.discount_paise)}</dd></>}
-          {v.tax && v.tax.configured
-            ? <><dt>{v.tax.label}{s.prices_include_tax ? ' (included)' : ''}</dt><dd>{formatPaise(s.tax_paise)}</dd></>
-            : null}
-          <dt className="pos-total">Total</dt><dd className="pos-total" data-receipt-total>{formatPaise(s.total_paise)}</dd>
+          {bill.lines.map((l, n) => l.kind === 'total'
+            ? <span key={n} style={{ display: 'contents' }}><dt className="pos-total">Total</dt><dd className="pos-total" data-receipt-total>{formatPaise(l.amountPaise)}</dd></span>
+            : <span key={n} style={{ display: 'contents' }} data-receipt-bill={l.kind}><dt>{l.kind === 'subtotal' ? 'Subtotal' : l.label}</dt><dd>{l.effect < 0 ? '− ' : ''}{formatPaise(l.amountPaise)}</dd></span>)}
+          {bill.points && <span style={{ display: 'contents' }} data-receipt-points><dt>Points used</dt><dd>{bill.points.used}</dd></span>}
           <dt>Paid by</dt><dd data-receipt-method>{METHOD[payment?.method ?? s.payment_method ?? ''] ?? s.payment_method}{pos?.reference ? ` · Ref ${pos.reference}` : ''}</dd>
           {pos?.tenderedPaise != null && <><dt>Cash received</dt><dd>{formatPaise(pos.tenderedPaise)}</dd><dt>Change</dt><dd>{formatPaise(pos.changePaise ?? 0)}</dd></>}
         </dl>

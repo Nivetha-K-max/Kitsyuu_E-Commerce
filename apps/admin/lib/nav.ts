@@ -57,6 +57,16 @@ export const MODULES: NavModule[] = [
   one('pricing', 'Pricing & discounts', 'pricing', 'Growth', '/pricing', 'pricing.read'),
   one('marketing', 'Marketing', 'marketing', 'Growth', '/marketing', 'marketing.read'),
   one('content', 'Store content', 'content', 'Growth', '/content', 'content.manage'),
+  // 2026-10-12: two staff tools the client asked for, each a flat module with its own views.
+  { id: 'leads', label: 'Leads', icon: 'leads', group: 'Growth', views: [
+    { href: '/leads', label: 'Pipeline', permission: 'leads.read' },
+    { href: '/leads/conversion', label: 'Conversion', permission: 'leads.read' },
+  ] },
+  { id: 'studio', label: 'Content studio', icon: 'studio', group: 'Growth', views: [
+    { href: '/studio', label: 'R&D', permission: 'studio.read' },
+    { href: '/studio/planning', label: 'Planning', permission: 'studio.read' },
+    { href: '/studio/calendar', label: 'Calendar', permission: 'studio.read' },
+  ] },
   // ---- Business
   one('finance', 'Finance', 'finance', 'Business', '/finance', 'finance.read'),
   one('reports', 'Reports', 'reports', 'Business', '/reports', 'reports.read'),

@@ -52,6 +52,26 @@ export { customerPayments, CUSTOMER_PAYMENTS_MAX } from './payments-admin.ts';
 export { customerReturnHistory, CUSTOMER_RETURNS_MAX } from './returns.ts';
 export { customerTickets } from './support.ts';
 export { customerEmailLog, CUSTOMER_EMAILS_MAX } from './engagement.ts';
+// Unified billing (2026-10-12): one bill breakdown for the counter, the receipt, the order, the invoice and its email.
+export { billFromOrder, billFromTotals, buildBill, paymentMethodLabel, PAYMENT_METHOD_LABEL, type Bill, type BillLine, type BillLineKind, type StoredBill } from './bill.ts';
+export { counterDiscounts, couponCodeOf } from './discounts.ts';
+// Packaging materials (2026-10-12): a kind of material, on the existing material ledger.
+export { materialPlaces, recordPackagingUse } from './procurement.ts';
+// Production calendar (2026-10-12): milestones and tasks; a view of dates, nothing is created automatically.
+export { MILESTONE_KINDS, MILESTONE_LABEL, CALENDAR_MAX_DAYS, calendarToday, listMilestones, saveMilestone, setMilestoneDone, deleteMilestone, productionCalendar,
+  type MilestoneKind, type MilestoneInput, type CalendarEvent } from './production-calendar.ts';
+// Storefront help widget (2026-10-12): fixed help topics, a guest's message as a ticket, guest order status by number + contact.
+export { helpTopics, matchHelpTopics, lookupContact, guestOrderStatus, openGuestTicket, type HelpTopic, type GuestOrderStatus } from './support-widget.ts';
+// Leads pipeline and content studio (2026-10-12): staff tools; no ads or social-network connection.
+export { LEAD_STAGES, LEAD_STAGE_LABEL, LEAD_SOURCES, LEADS_MAX, leadPhoneKey, listLeads, getLead, saveLead, moveLead, leadConversion, exportLeads, type LeadStage, type LeadInput } from './leads.ts';
+export { IDEA_STATUSES, IDEA_STATUS_LABEL, PIECE_STAGES, PIECE_STAGE_LABEL, PIECE_PLATFORMS, PIECE_FORMATS, pieceMissing, listIdeas, saveIdea, setIdeaStatus, deleteIdea, planIdea,
+  listPieces, studioOwners, savePiece, setPieceDate, requestPieceMove, decidePieceMove, deletePiece, type IdeaStatus, type IdeaInput, type PieceStage, type PieceInput } from './studio.ts';
+// Referrals (2026-10-12): codes, attribution at sign-up, rewards as personal coupons in the existing coupon engine.
+export { referralSettings, referralCodeOf, getMyReferral, attributeReferral, processReferralRewards, listReferrals, rejectReferral, runReferralRewards, REFERRAL_PAGE_SIZE,
+  type ReferralSettings, type ReferralRun } from './referrals.ts';
+// The first-order offer (2026-10-12): one of the business's coupons, for customers with no earlier successful order.
+export { firstOrderOffer, claimFirstOrderOffer, firstOrderOfferCode, hasSuccessfulOrder, FIRST_ORDER_OFFER_KEY, FIRST_ORDER_SIGN_IN, FIRST_ORDER_USED, type FirstOrderOffer } from './discounts.ts';
+export { invoiceEmail, notifyInvoiceIssued, sendInvoiceEmail, listInvoiceEmails } from './finance.ts';
 export {
   listPayments, listPaymentEvents, listPaymentExceptions, getPaymentExceptions, recordManualRefund, cancelledOrderPaymentState, reconcileOrderPayments,
   listOrderPayments, getOrderPayment,
@@ -61,6 +81,7 @@ export { listSettings, updateSetting, companyDetails, SETTINGS_REGISTRY, POLICY_
 export { getShipment, setPackingState, updateShipmentTracking, type ShipmentView } from './fulfilment.ts';
 export { availableCarriers, carrierFor, manualCarrier, resolveCarrier, listActiveCarriers, trackingFromTemplate, type CarrierProvider } from './fulfilment/carrier.ts';
 // ---------- M9: operations hardening ----------
+export { createRateLimiter, retryAfterText, type RateLimiter, type RateLimiterConfig, type RateLimitRule, type RateLimitResult } from './rate-limit.ts';
 export { pingDatabase, checkoutRateLimit, getSystemStatus, listSignIns, SIGNIN_PAGE_SIZE, CHECKOUT_RATE_KEY, type RuntimeInfo } from './system.ts';
 export { settingsShipping, readShippingSettings, quoteFromSettings, SHIPPING_KEYS, type ShippingSettings } from './shipping.ts';
 // ---------- M11: merchandising ----------
@@ -125,7 +146,7 @@ export {
 // ---------- ERP module 3: returns and refunds ----------
 export {
   returnSettings, customerReturnOptions, requestReturn, listCustomerReturns, getCustomerReturn, cancelReturnByCustomer, listReturns, getReturn, returnAction,
-  updateReturnItem, refundReturn, notifyReturn, returnsReport, createStaffReturn, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
+  updateReturnItem, refundReturn, settlePendingRefund, PENDING_REFUND_SETTLE_AFTER_MINUTES, notifyReturn, returnsReport, createStaffReturn, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
 } from './returns.ts';
 // ---------- ERP module 4: marketing ----------
 export {
@@ -189,5 +210,5 @@ export { syncShipmentTracking, type TrackingSyncRun } from './fulfilment/trackin
 export { adjustPointsForRefunds, loyaltyTotals } from './loyalty.ts';
 
 // POS billing at a branch (2026-10-02): counter sales on the existing order / stock / payment / returns engine.
-export { posContext, openPosSession, closePosSession, posSessionSummary, listPosSessions, searchPosProducts, quotePosSale, completePosSale, getPosSale, listPosSales,
+export { posContext, openPosSession, closePosSession, posSessionSummary, listPosSessions, searchPosProducts, listPosBranchStock, quotePosSale, completePosSale, getPosSale, listPosSales,
   voidPosSale, posReport, findPosCustomers, setVariantBarcode, POS_PAYMENT_METHODS, type PosPaymentMethod, type PosSaleInput, type PosLineInput, type PosProduct, type PosVariant } from './pos.ts';

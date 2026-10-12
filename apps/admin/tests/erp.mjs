@@ -43,7 +43,7 @@ const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerTex
 const navText = () => ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
 const autoConfirm = () => ev(`window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e)).map(e => `${p}: ${e}`)); };
+const visit = async (p, ready = '!!document.querySelector("main .page-head") || !!document.querySelector("[data-gate]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e)).map(e => `${p}: ${e}`)); };
 const overflow = () => ev(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);
 
 async function signIn(key, name) {
@@ -159,7 +159,7 @@ try {
     && (await q(`select count(*)::int n from loyalty_transactions where customer_id = $1 and reason = 'E2E gift'`, [cust.id]))[0].n === 1);
   await visit('/loyalty');
   ok('loyalty: the customer is listed with their points', await exists('[data-loyalty-customer="loyal.e2e@test.local"]'));
-  await visit('/settings');
+  await visit('/settings?group=all');
   ok('settings: cash on delivery and loyalty settings are listed, with no value', await exists('[data-setting="payments.cod_enabled"]') && await exists('[data-setting="loyalty.point_value_paise"]'));
 
   // ---------- collections grouped (Men / Women / Sale) and attributes as tags ----------

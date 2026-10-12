@@ -8,6 +8,8 @@
      :3014  database unreachable       (failure states)
      :3015  PAYMENT_PROVIDER=test WITHOUT PAYMENTS_ALLOW_TEST_PROVIDER (must be refused in production: payment off)
      :3016  PAYMENT_PROVIDER unset     (the default: payment off)
+     :3019  request limits ON, counted in a local stand-in for the Redis REST API
+     :3020  request limits configured but the limiter is unreachable (requests must still be served)
      :3017  PAYMENT_PROVIDER=razorpay with NO credentials            (must stay off: "temporarily unavailable")
      :3018  PAYMENT_PROVIDER=razorpay with a live-format key, RAZORPAY_LIVE_MODE unset (must be refused; the key is made up)
    → tests/account.mjs → tests/commerce.mjs → stop → drop DB. The catalogue is still read from the public Supabase API (read-only).
@@ -18,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {startFakeRazorpay, TEST_KEY_ID} from '../../../packages/core/test/fake-razorpay.mjs';
+import {startFakeRedisRest} from '../../../packages/core/test/fake-redis-rest.mjs';
 import {localStoreEnv} from './local-store-env.mjs';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,7 +44,7 @@ const nodeAsync = (args, env = {}) => new Promise(resolve => {
 const step = (label, r) => { process.stdout.write(`\n== ${label}\n${(r.stdout || '').trim()}\n${(r.stderr || '').trim()}\n`.replace(/\n+$/, '\n')); return r.status === 0; };
 
 const servers = [];
-let rzp, failed = false;
+let rzp, redis, failed = false;
 async function startServer(port, logName, env) {
   const log = path.join(OUT, logName); fs.writeFileSync(log, '');
   const fd = fs.openSync(log, 'a');
@@ -59,7 +62,7 @@ try {
   const base = {...process.env, NODE_ENV: 'production',
     ...localStoreEnv(env),   // catalogue and content from the local test database, pictures from the repository: the hosted project is never contacted
     PAYMENT_PROVIDER: '', PAYMENTS_ALLOW_TEST_PROVIDER: '', PAYMENTS_TEST_SECRET: '',
-    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', RAZORPAY_LIVE_MODE: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: ''};
+    RAZORPAY_KEY_ID: '', RAZORPAY_KEY_SECRET: '', RAZORPAY_WEBHOOK_SECRET: '', RAZORPAY_LIVE_MODE: '', UPSTASH_REDIS_REST_URL: '', UPSTASH_REDIS_REST_TOKEN: '', KV_REST_API_URL: '', KV_REST_API_TOKEN: '', RATE_LIMIT_ON_ERROR: '', JOBS_SECRET: '', CRON_SECRET: '', RESEND_API_KEY: ''};
   const cronSecret = randomBytes(24).toString('hex');
   const log = await startServer(PORT, 'account-server.log', {...base, SITE_URL: BASE, CRON_SECRET: cronSecret,
     PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on', PAYMENTS_TEST_SECRET: randomBytes(32).toString('hex')});
@@ -74,9 +77,17 @@ try {
   const rzpOffLog = await startServer(3017, 'razorpay-no-keys-server.log', {...base, SITE_URL: 'http://localhost:3017', PAYMENT_PROVIDER: 'razorpay'});
   const rzpLiveLog = await startServer(3018, 'razorpay-live-refused-server.log', {...base, SITE_URL: 'http://localhost:3018', PAYMENT_PROVIDER: 'razorpay',
     RAZORPAY_KEY_ID: 'rzp_live_NotARealKey0001', RAZORPAY_KEY_SECRET: randomBytes(12).toString('hex'), RAZORPAY_WEBHOOK_SECRET: randomBytes(12).toString('hex')});
-  const testEnv = {RZP_OFF_BASE: 'http://localhost:3017', RZP_LIVE_BASE: 'http://localhost:3018', RZP_OFF_LOG: rzpOffLog, RZP_LIVE_LOG: rzpLiveLog, CRON_SECRET: cronSecret, TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
+  const redisToken = randomBytes(24).toString('hex');
+  redis = await startFakeRedisRest({token: redisToken});
+  const limitLog = await startServer(3019, 'limits-server.log', {...base, SITE_URL: 'http://localhost:3019', PAYMENT_PROVIDER: 'test', PAYMENTS_ALLOW_TEST_PROVIDER: 'on',
+    PAYMENTS_TEST_SECRET: randomBytes(32).toString('hex'), UPSTASH_REDIS_REST_URL: redis.url, UPSTASH_REDIS_REST_TOKEN: redisToken, HELP_GUEST_REQUIRES_LIMITER: 'on'});
+  // The help window's rule "guest features need a limiter" switched on, with NO limiter configured (2026-10-12).
+  await startServer(3021, 'help-strict-server.log', {...base, SITE_URL: 'http://localhost:3021', HELP_GUEST_REQUIRES_LIMITER: 'on'});
+  const limitDownLog = await startServer(3020, 'limits-down-server.log', {...base, SITE_URL: 'http://localhost:3020', UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:1', UPSTASH_REDIS_REST_TOKEN: redisToken});
+  const testEnv = {HELP_STRICT_BASE: 'http://localhost:3021', LIMIT_BASE: 'http://localhost:3019', LIMIT_DOWN_BASE: 'http://localhost:3020', LIMIT_LOG: limitLog, LIMIT_DOWN_LOG: limitDownLog, LIMIT_REDIS_URL: redis.url, LIMIT_REDIS_TOKEN: redisToken,
+    RZP_OFF_BASE: 'http://localhost:3017', RZP_LIVE_BASE: 'http://localhost:3018', RZP_OFF_LOG: rzpOffLog, RZP_LIVE_LOG: rzpLiveLog, CRON_SECRET: cronSecret, TEST_REFUSED_BASE: 'http://localhost:3015', NO_PROVIDER_BASE: 'http://localhost:3016', TEST_REFUSED_LOG: refusedLog,
     BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL: rzp.url, RZP_WEBHOOK_SECRET: webhookSecret, SERVER_LOG: log, RZP_SERVER_LOG: rzpLog, KITSYUU_DB_URL: env.KITSYUU_DB_URL};
-  for (const f of ['account', 'commerce']) {
+  for (const f of ['account', 'commerce', 'offer', 'referral', 'help']) {   // offer: the first-order offer popup; referral: referral codes and rewards; help: the help window (2026-10-12)
     if (process.env.ONLY && process.env.ONLY !== f) continue;
     if (!step(`${f} browser tests`, await nodeAsync([`apps/website/tests/${f}.mjs`], testEnv))) failed = true;
   }
@@ -85,6 +96,7 @@ try {
 } finally {
   for (const s of servers) s.kill();
   await rzp?.close();
+  await redis?.close();
   await new Promise(r => setTimeout(r, 500));
   step('drop local test database', node(['--env-file=' + ENV_TEST, 'database/scripts/test-db.mjs', '--drop']));
 }

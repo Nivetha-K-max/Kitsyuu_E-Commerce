@@ -44,7 +44,7 @@ export type ReminderRun = { skipped?: 'off' | 'no_provider'; checked: number; se
 /** Sends the reminders that are due. Safe to run often and concurrently. */
 export async function sendAbandonedCheckoutReminders(db: Db, mailer: Mailer, opts: { storeUrl?: string | null; limit?: number } = {}): Promise<ReminderRun> {
   if (!(await customerEmailEnabled(db, 'checkout.reminder'))) return { skipped: 'off', checked: 0, sent: 0, failed: 0 };
-  if (mailer.kind === 'console') return { skipped: 'no_provider', checked: 0, sent: 0, failed: 0 };
+  if (mailer.kind === 'console' || mailer.kind === 'unconfigured') return { skipped: 'no_provider', checked: 0, sent: 0, failed: 0 };
   const hours = await abandonedCheckoutHours(db);
   const due = await abandonedQuery(db, hours).select(['o.id']).where('r.order_id', 'is', null)
     .where(sql<boolean>`coalesce(o.contact->>'email', '') <> ''`)

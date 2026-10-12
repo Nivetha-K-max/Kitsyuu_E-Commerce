@@ -6,7 +6,7 @@ export { can, requirePermission, loadPermissions, type StaffPrincipal } from './
 export { createStaffSession, validateStaffSession, revokeStaffSession, revokeAllStaffSessions, type RequestContext } from './sessions.ts';
 export { loginThrottle, recordLoginAttempt } from './throttle.ts';
 export { authSettings, type AuthSettings } from './settings.ts';
-export { consoleMailer, createMailer, fileMailer, resendMailer, MailError, type Mailer, type MailMessage, type ResendConfig } from './mailer.ts';
+export { consoleMailer, createMailer, deliversNothing, fileMailer, resendMailer, unconfiguredMailer, MailError, type Mailer, type MailMessage, type ResendConfig } from './mailer.ts';
 export { emailHtml } from './mail-html.ts';
 export {
   loginStaff, logoutStaff, issueStaffInvite, acceptStaffInvite, requestStaffPasswordReset, resetStaffPassword, changeStaffPassword,

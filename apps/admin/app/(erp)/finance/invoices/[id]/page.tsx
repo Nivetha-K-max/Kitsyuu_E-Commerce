@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { getInvoice, pricingView } from '@kitsyuu/core';
+import { billFromOrder, getInvoice, listInvoiceEmails, paymentMethodLabel } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import PrintButton from '@/components/PrintButton';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise } from '@/lib/format';
 import { bp } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
-import { createNoteAction, voidInvoiceAction } from '../../actions';
+import { createNoteAction, emailInvoiceAction, voidInvoiceAction } from '../../actions';
 
 export const metadata: Metadata = { title: 'Invoice' };
 type Json = Record<string, string | null | undefined>;
@@ -27,11 +27,12 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const seller = (i.seller_details ?? {}) as Json;
   const bill = (i.billing_address ?? {}) as Json;
   const ship = (i.shipping_address ?? {}) as Json;
-  const pv = pricingView(i.pricing);
   const split = (i.tax_split ?? {}) as { type?: string; cgst?: number; sgst?: number; igst?: number; note?: string | null };
-  // Second pass: the invoice total is the order total, which includes a cash-on-delivery fee when there is one.
-  const codFee = i.total_paise - (i.subtotal_paise - i.discount_paise + i.shipping_paise + (i.prices_include_tax ? 0 : i.tax_paise));
+  // 2026-10-12: the one bill breakdown (core bill.ts): the invoice's own amounts, the discount lines kept with the order, the
+  // GST split of the invoice. The same lines as the order page, the POS receipt and the invoice email.
+  const billing = billFromOrder({ ...i, loyalty_points_used: i.loyalty_points_used ?? 0 }, { taxSplit: split });
   const manage = can(actor, 'finance.manage');
+  const emails = i.status === 'issued' ? await listInvoiceEmails(db(), actor, i.id) : [];
   return (
     <>
       <div className="no-print">
@@ -64,27 +65,37 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           ))}</tbody>
         </table></div>
         <table className="totals"><tbody>
-          <tr><td>Subtotal</td><td className="num money">{formatPaise(i.subtotal_paise)}</td></tr>
-          {i.discount_paise > 0 && (pv.discounts.length > 0
-            ? pv.discounts.map((d, n) => <tr key={n} data-invoice-discount={d.code}><td>{d.label}</td><td className="num money">−{formatPaise(d.amountPaise)}</td></tr>)
-            : <tr><td>Discount</td><td className="num money">−{formatPaise(i.discount_paise)}</td></tr>)}
-          <tr><td>{pv.delivery ? `${pv.delivery.pickup ? 'Store pickup' : 'Delivery'}: ${pv.delivery.label}` : 'Delivery'}</td><td className="num money">{formatPaise(i.shipping_paise)}</td></tr>
-          {codFee > 0 && <tr><td>Cash on delivery fee</td><td className="num money">{formatPaise(codFee)}</td></tr>}
-          {split.type === 'intra' && <><tr><td>CGST</td><td className="num money">{formatPaise(split.cgst ?? 0)}</td></tr><tr><td>SGST</td><td className="num money">{formatPaise(split.sgst ?? 0)}</td></tr></>}
-          {split.type === 'inter' && <tr><td>IGST</td><td className="num money">{formatPaise(split.igst ?? 0)}</td></tr>}
-          {split.type === 'unknown' && <tr><td>Tax{i.prices_include_tax ? ' (included in the prices)' : ''}</td><td className="num money">{formatPaise(i.tax_paise)}</td></tr>}
-          <tr><td><b>Total</b></td><td className="num money"><b>{formatPaise(i.total_paise)}</b></td></tr>
+          {billing.lines.map((l, n) => l.kind === 'total'
+            ? <tr key={n} data-invoice-line="total"><td><b>Total</b></td><td className="num money"><b>{formatPaise(l.amountPaise)}</b></td></tr>
+            : <tr key={n} data-invoice-line={l.kind} {...(l.effect < 0 ? { 'data-invoice-discount': l.code ?? '' } : {})}><td>{l.kind === 'subtotal' ? 'Subtotal' : l.label}</td><td className="num money">{l.effect < 0 ? '−' : ''}{formatPaise(l.amountPaise)}</td></tr>)}
         </tbody></table>
         {split.type === 'unknown' && <p className="note">{split.note}</p>}
         {i.prices_include_tax && <p className="note">Prices include tax.</p>}
         <dl className="facts" data-invoice-payment>
-          <dt>Payment method</dt><dd>{i.payment_method === 'cod' ? 'Cash on delivery' : i.payment_method ? 'Online' : '—'}</dd>
+          <dt>Payment method</dt><dd>{i.payment_method ? paymentMethodLabel(i.payment_method) : '—'}</dd>
           <dt>Payment status</dt><dd>{i.payment_status ? i.payment_status.replace(/_/g, ' ') : '—'}</dd>
           <dt>Order status</dt><dd>{i.order_status ? i.order_status.replace(/_/g, ' ') : '—'}</dd>
-          {(i.loyalty_points_used ?? 0) > 0 && <><dt>Loyalty points used</dt><dd>{i.loyalty_points_used} (−{formatPaise(i.loyalty_discount_paise ?? 0)}, included in the discount)</dd></>}
+          {(i.loyalty_points_used ?? 0) > 0 && <><dt>Loyalty points used</dt><dd>{i.loyalty_points_used} (−{formatPaise(i.loyalty_discount_paise ?? 0)}, shown above)</dd></>}
         </dl>
       </article>
       <div className="no-print">
+        {i.status === 'issued' && (
+          <section className="card" aria-labelledby="em-h" data-section="invoice-email">
+            <h2 id="em-h">Email to the customer</h2>
+            {emails.length === 0 ? <p className="note" data-invoice-emails="none">This invoice has not been emailed.</p> : (
+              <ul className="plain" data-invoice-emails>{emails.map(e => (
+                <li key={e.id} data-invoice-email={e.status}><span className={`badge ${e.status === 'sent' ? 'active' : 'failed'}`}>{e.status === 'sent' ? 'Sent' : 'Failed'}</span> to {e.recipient} <span className="note">· {formatDateTime(e.created_at as Date)}</span></li>))}
+              </ul>
+            )}
+            <p className="note">“Sent” means the email service accepted the message, not that it was delivered or read. The automatic email on issuing is a switch in Configuration → Customer emails (off unless turned on).</p>
+            {manage && (
+              <ActionForm action={emailInvoiceAction} submitLabel={emails.length ? 'Email invoice again' : 'Email invoice'} variant="ghost" id="email-invoice-form" label="Email this invoice to the customer"
+                confirmText={`Email invoice ${i.invoice_number} to the customer${emails.length ? ' again' : ''}?`}>
+                <Hidden name="invoiceId" value={i.id} />
+              </ActionForm>
+            )}
+          </section>
+        )}
         <section className="card" aria-labelledby="nt-h" data-section="invoice-notes">
           <h2 id="nt-h">Credit and debit notes</h2>
           {notes.length === 0 ? <p className="note">None.</p> : (

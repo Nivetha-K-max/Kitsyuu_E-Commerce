@@ -664,3 +664,47 @@ export interface OrdersTable {
   pos_session_id: ColumnType<string | null, string | null | undefined, never>; pos_number: ColumnType<string | null, string | null | undefined, never>;
 }
 export interface Database { pos_sessions: PosSessionsTable }
+
+// ============================== referrals (migration 20261012004500, local only until reviewed) ==============================
+export interface DiscountsTable { /** a reward coupon that belongs to one customer; null for every ordinary coupon */ customer_id: Generated<string | null> }
+export interface ReferralCodesTable { customer_id: string; code: string; created_at: Generated<Timestamp> }
+export type ReferralStatus = 'pending' | 'rewarded' | 'rejected';
+export interface ReferralsTable {
+  id: Generated<string>; referrer_id: string; referred_id: string; code: string; status: Generated<ReferralStatus>; reject_reason: string | null;
+  qualifying_order_id: string | null; rejected_by: string | null; attributed_at: Generated<Timestamp>; rewarded_at: Timestamp | null; rejected_at: Timestamp | null;
+}
+export interface ReferralRewardsTable { id: Generated<string>; referral_id: string; customer_id: string; role: 'referrer' | 'referred'; discount_id: string; created_at: Generated<Timestamp> }
+export interface Database { referral_codes: ReferralCodesTable; referrals: ReferralsTable; referral_rewards: ReferralRewardsTable }
+
+// ============================== packaging materials (migration 20261012004600, local only until reviewed) ==============================
+export interface MaterialsTable { kind: Generated<'material' | 'packaging'>; vendor_id: string | null; location_id: string | null }
+
+// ============================== production calendar: milestones and tasks (migration 20261012004700, local only until reviewed) ==============================
+export interface ProductionMilestonesTable {
+  id: Generated<string>; production_order_id: string | null; order_id: string | null; kind: 'ready_for_trial' | 'ex_factory' | 'task'; title: string | null;
+  due_on: ColumnType<Date, string, string>; note: string | null; done_at: Timestamp | null; done_by: string | null; created_by: string | null;
+  created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface Database { production_milestones: ProductionMilestonesTable }
+
+// ============================== leads pipeline + content studio (migration 20261012004800, local only until reviewed) ==============================
+export type LeadStage = 'new' | 'engaged' | 'qualified' | 'visited' | 'converted' | 'disqualified';
+export interface LeadsTable {
+  id: Generated<string>; name: string; phone: string; phone_key: string; email: string | null; interest: string | null; timeline: string | null; source: Generated<string>;
+  stage: Generated<LeadStage>; notes: string | null; disqualify_reason: string | null; assigned_to: string | null; customer_id: string | null; created_by: string | null;
+  stage_changed_at: Generated<Timestamp>; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface LeadEventsTable { id: Generated<string>; lead_id: string; from_stage: string | null; to_stage: string; note: string | null; staff_id: string | null; created_at: Generated<Timestamp> }
+export type ContentPieceStage = 'idea' | 'script' | 'shoot' | 'edit' | 'scheduled' | 'posted';
+export interface ContentPiecesTable {
+  id: Generated<string>; title: string; platform: 'instagram' | 'facebook' | 'youtube' | 'whatsapp' | 'other' | null; format: 'reel' | 'post' | 'story' | 'video' | 'other' | null;
+  stage: Generated<ContentPieceStage>; target_on: ColumnType<Date | null, string | null | undefined, string | null>; owner_id: string | null; hook: string | null; script: string | null;
+  footage_link: string | null; final_link: string | null; posted_link: string | null; notes: string | null;
+  requested_stage: ContentPieceStage | null; requested_by: string | null; requested_at: Timestamp | null; sent_back_note: string | null; posted_at: Timestamp | null;
+  created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface ContentIdeasTable {
+  id: Generated<string>; title: string; description: string | null; link: string | null; status: Generated<'exploring' | 'shortlisted' | 'parked'>; piece_id: string | null;
+  created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
+}
+export interface Database { leads: LeadsTable; lead_events: LeadEventsTable; content_pieces: ContentPiecesTable; content_ideas: ContentIdeasTable }

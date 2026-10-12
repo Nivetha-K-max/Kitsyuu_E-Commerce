@@ -45,7 +45,7 @@ const fieldError = (formSel, name) => ev(`document.querySelector(${JSON.stringif
 const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const allErrors = [];
 // Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
-const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e))); };
 /** Opens a drawer of the page (the product's details and status forms live in drawers on Overview). */
 const openDrawer = async name => {
   await until(`(()=>{const t=document.querySelector('[data-drawer-open=${name}]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);

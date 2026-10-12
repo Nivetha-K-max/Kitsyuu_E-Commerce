@@ -14,6 +14,7 @@ const ITEMS: { href: string; label: string; icon: keyof typeof AccountIcons }[] 
   { href: '/account/reviews', label: 'Reviews', icon: 'reviews' },
   { href: '/account/returns', label: 'Returns', icon: 'returns' },
   { href: '/account/points', label: 'Points', icon: 'points' },
+  { href: '/account/referrals', label: 'Refer a friend', icon: 'points' },
   { href: '/account/support', label: 'Help & support', icon: 'support' },
   { href: '/account/security', label: 'Security', icon: 'security' },
 ];

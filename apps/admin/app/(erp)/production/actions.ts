@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { consumeMaterialInput, createProductionBatchInput, createProductionOrderInput, linkProductionPoInput, productionInputInput, productionStatusInput, qualityCheckInput, raiseProductionPoInput, type ActionState } from '@kitsyuu/contracts';
-import { consumeMaterial, createProductionOrder, createProductionOrders, linkProductionToPurchaseOrder, raisePurchaseOrderForProduction, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
+import { consumeMaterialInput, createProductionBatchInput, createProductionOrderInput, linkProductionPoInput, milestoneDeleteInput, milestoneDoneInput, milestoneInput, productionInputInput, productionStatusInput, qualityCheckInput, raiseProductionPoInput, type ActionState } from '@kitsyuu/contracts';
+import { consumeMaterial, createProductionOrder, createProductionOrders, deleteMilestone, linkProductionToPurchaseOrder, saveMilestone, setMilestoneDone, raisePurchaseOrderForProduction, recordQualityCheck, setProductionInput, setProductionStatus } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, requestContext, requireActor } from '@/lib/server';
 
@@ -83,5 +83,35 @@ export async function raiseProductionPoAction(_: ActionState, form: FormData): P
   let poId = '';
   const r = await handle(raiseProductionPoInput, form, async input => { poId = (await raisePurchaseOrderForProduction(db(), actor, input, await requestContext())).id; });
   if (poId) { refresh(String(form.get('productionOrderId') ?? '')); revalidatePath('/purchase-orders'); redirect(`/purchase-orders/${poId}`); }
+  return r;
+}
+
+/* Production calendar (2026-10-12): milestones and tasks. Permission, the one-of-each rule and the audit are the core's. */
+const refreshCalendar = () => revalidatePath('/production', 'layout');
+export async function saveMilestoneAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(milestoneInput, form, async input => {
+    const m = await saveMilestone(db(), actor, input, await requestContext());
+    return { ok: true, message: input.milestoneId ? (m.changed ? 'Saved.' : 'No changes.') : 'Added to the calendar.' };
+  });
+  if (r.ok) refreshCalendar();
+  return r;
+}
+export async function milestoneDoneAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(milestoneDoneInput, form, async input => {
+    await setMilestoneDone(db(), actor, input, await requestContext());
+    return { ok: true, message: input.done ? 'Marked done.' : 'Marked not done.' };
+  });
+  if (r.ok) refreshCalendar();
+  return r;
+}
+export async function deleteMilestoneAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(milestoneDeleteInput, form, async input => {
+    await deleteMilestone(db(), actor, input, await requestContext());
+    return { ok: true, message: 'Removed.' };
+  });
+  if (r.ok) refreshCalendar();
   return r;
 }

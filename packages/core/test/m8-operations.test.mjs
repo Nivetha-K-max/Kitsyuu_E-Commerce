@@ -234,7 +234,8 @@ test('settings: typed registry, locked business rules, audited edits of safe set
   assert.equal((await listSettings(db, admin)).groups.flatMap(g => g.items).find(i => i.key === 'inventory.low_stock_threshold').canEdit, true);
   // M10 added company details and the delivery charge (entered by the business); every rule-bearing setting stays locked.
   // ERP modules 1–8 add business switches that all start off (discounts, returns, emails, alerts) and thresholds with no value.
-  const erpKeys = ['carts.abandon_after_hours', 'company.state', 'discounts.enabled', 'discounts.stacking', 'notifications.abandoned_cart', 'notifications.order_delivered',
+  const erpKeys = ['carts.abandon_after_hours', 'company.state', 'discounts.enabled', 'discounts.stacking', 'discounts.first_customer_code', 'referrals.enabled', 'notifications.abandoned_cart', 'notifications.order_delivered',
+    'notifications.invoice_issued',   // unified billing (2026-10-12): the invoice email, off until the business switches it on
     'notifications.refund_processed', 'notifications.return_status', 'notifications.support_reply', 'returns.enabled', 'returns.window_days',
     // client change request, first pass
     'checkout.abandoned_after_hours', 'checkout.cart_refresh_minutes', 'notifications.abandoned_checkout', 'pricing.max_sale_discount_percent',
@@ -247,7 +248,7 @@ test('settings: typed registry, locked business rules, audited edits of safe set
     // purchasing / products workflows (2026-10-01): COD % discount with its minimum and stacking rule
     'payments.cod_discount_percent', 'payments.cod_discount_min_order', 'payments.cod_discount_with_other'];
   assert.deepEqual(all.filter(i => i.editable && !i.key.startsWith('alerts.')).map(i => i.key).sort(), ['company.address', 'company.gstin', 'company.legal_name', 'company.phone', 'company.support_email',
-    'inventory.low_stock_threshold', 'notifications.order_cancelled', 'notifications.order_shipped', 'reviews.eligibility', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method', ...erpKeys].sort(), 'editable settings');
+    'inventory.low_stock_threshold', 'notifications.order_cancelled', 'notifications.order_shipped', 'referrals.coupon_valid_days', 'referrals.min_order_paise', 'referrals.reward_paise', 'reviews.eligibility', 'shipping.flat_rate_paise', 'shipping.free_from_paise', 'shipping.method', ...erpKeys].sort(), 'editable settings');
   assert.ok(all.filter(i => i.key.startsWith('alerts.')).every(i => i.editable && i.type.kind === 'choice'), 'staff alert switches');
   for (const k of erpKeys) assert.equal(all.find(i => i.key === k).value, null, `${k} has no value until the business sets it`);
   assert.ok(s.policies.some(p => /returns/i.test(p.label) && /None/.test(p.value)));

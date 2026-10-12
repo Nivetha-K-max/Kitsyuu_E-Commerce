@@ -1,11 +1,13 @@
 'use client';
-/* The POS counter: search / scan → pick colour and size → bill → customer → (discount) → payment → bill printed.
+/* The POS counter: search / scan → pick colour and size → bill → customer → (coupon, points, discount) → payment → bill printed.
+   2026-10-12: a coupon code and, for a customer on the bill, their loyalty points. The counter only says WHICH coupon and
+   WHETHER to use points; whether either applies and what it takes off is the server's answer (the quote), shown line by line.
    Built for speed: one screen, keyboard first (F2 search, Enter adds a scanned barcode / exact SKU, F9 takes payment),
    large touch targets, no animation. Prices, tax, discounts and stock are always worked out on the server (quote), and
    the sale is completed on the server only for the total the cashier saw. */
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { posCompleteAction, posCustomersAction, posQuoteAction, posSearchAction } from './actions';
+import { posCompleteAction, posCustomersAction, posQuoteAction, posSearchAction, posStockAction } from './actions';
 
 type Variant = { variantId: string; sku: string; barcode: string | null; size: string; colour: string | null; colourLabel: string | null; unitPaise: number; stock: number };
 type Product = { productId: string; name: string; image: string | null; variants: Variant[] };
@@ -19,8 +21,10 @@ const inr = (p: number) => '₹' + (p / 100).toLocaleString('en-IN', { minimumFr
 const newKey = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, '');
 const MAX = 10;
 
-export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
+export default function PosCounter({ session, locations, maxDiscountBp, canDiscount }: {
   session: { id: string; number: string; location_id: string; location_name: string };
+  /** The branches POS can bill at. The session belongs to one of them (its cash drawer is counted there). */
+  locations: { id: string; name: string; code: string }[];
   maxDiscountBp: number | null; canDiscount: boolean;
 }) {
   const [q, setQ] = useState(''); const [results, setResults] = useState<Product[]>([]); const [searchMsg, setSearchMsg] = useState('');
@@ -29,11 +33,21 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
   const [customer, setCustomer] = useState<Customer | null>(null); const [custQ, setCustQ] = useState(''); const [custResults, setCustResults] = useState<Customer[]>([]);
   const [contactName, setContactName] = useState(''); const [contactPhone, setContactPhone] = useState('');
   const [discount, setDiscount] = useState(''); const [reason, setReason] = useState('');
+  const [coupon, setCoupon] = useState(''); const [usePoints, setUsePoints] = useState(false);
   const [method, setMethod] = useState<Method>('cash'); const [tendered, setTendered] = useState(''); const [reference, setReference] = useState('');
   const [error, setError] = useState(''); const [done, setDone] = useState<Done | null>(null);
   const [key, setKey] = useState(newKey);
   const [paying, startPay] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
+  // The branch's stock, shown while nothing is searched; and the store the cashier asked for, when it is not this session's.
+  const [stock, setStock] = useState<Product[]>([]); const [stockMore, setStockMore] = useState(false); const [stockState, setStockState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [otherStore, setOtherStore] = useState('');
+  const loadStock = useCallback(async () => {
+    const r = await posStockAction(session.location_id);
+    if (!r.ok) { setStockState('error'); return; }
+    setStock(r.data.products); setStockMore(r.data.more); setStockState('ready');
+  }, [session.location_id]);
+  useEffect(() => { void loadStock(); }, [loadStock]);
   // The staff discount is offered only when it can be used: this cashier may give one and a maximum is set (Configuration → Discounts).
   const offerDiscount = canDiscount && !!maxDiscountBp;
   const discountPercent = offerDiscount ? Math.max(0, Number(discount) || 0) : 0;
@@ -72,13 +86,16 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
   }
 
   // ---------- server quote whenever the bill changes
-  const quoteKey = JSON.stringify([lines.map(l => [l.variantId, l.qty]), customer?.id ?? null, discountPercent]);
+  const couponCode = coupon.trim();
+  const quoteKey = JSON.stringify([lines.map(l => [l.variantId, l.qty]), customer?.id ?? null, discountPercent, couponCode, usePoints]);
+  // Points belong to the customer on the bill: changing or removing the customer starts again without them.
+  useEffect(() => { setUsePoints(false); }, [customer?.id]);
   useEffect(() => {
     if (!lines.length) { setQuote(null); setQuoteErr(''); return; }
     let live = true;
     const t = setTimeout(async () => {
       const r = await posQuoteAction({ locationId: session.location_id, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
-        discountPercent, discountReason: reason });
+        discountPercent, discountReason: reason, couponCode, usePoints: usePoints && !!customer });
       if (!live) return;
       if (r.ok && r.data) { setQuote(r.data); setQuoteErr(r.data.problems.join(' ')); setLines(ls => ls.map(l => { const x = r.data!.lines.find(y => y.variantId === l.variantId); return x ? { ...l, stock: x.stock, unitPaise: x.unitPaise } : l; })); }
       else if (!r.ok) { setQuote(null); setQuoteErr(r.message); }
@@ -99,21 +116,25 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
   const change = method === 'cash' ? tenderedPaise - total : 0;
   const ready = !!quote && !quoteErr && lines.length > 0 && !paying
     && (method === 'cash' ? tenderedPaise >= total : reference.trim().length >= 4)
-    && (discountPercent === 0 || reason.trim().length >= 3);
+    && (discountPercent === 0 || reason.trim().length >= 3)
+    // A coupon or points that the server did not apply must be taken off the bill before payment (the server refuses the sale otherwise).
+    && (!couponCode || !!quote.coupon?.applied) && (!usePoints || (quote.loyalty?.usedPoints ?? 0) > 0);
 
   function pay() {
     if (!ready || !quote) return;
     setError('');
     startPay(async () => {
       const r = await posCompleteAction({ sessionId: session.id, idempotencyKey: key, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
-        contactName, contactPhone, discountPercent, discountReason: reason, method, tendered, reference, expectedTotalPaise: quote.totals.totalPaise });
+        contactName, contactPhone, discountPercent, discountReason: reason, method, tendered, reference, expectedTotalPaise: quote.totals.totalPaise,
+        couponCode, usePoints: usePoints && !!customer });
       if (!r.ok) { setError(r.message); return; }
       setDone({ orderId: r.data.orderId, posNumber: r.data.posNumber, totalPaise: r.data.totalPaise, changePaise: r.data.changePaise });
     });
   }
   function newSale() {
-    setLines([]); setQuote(null); setCustomer(null); setCustQ(''); setContactName(''); setContactPhone(''); setDiscount(''); setReason('');
+    setLines([]); setQuote(null); setCustomer(null); setCustQ(''); setContactName(''); setContactPhone(''); setDiscount(''); setReason(''); setCoupon(''); setUsePoints(false);
     setMethod('cash'); setTendered(''); setReference(''); setError(''); setDone(null); setKey(newKey()); setQ(''); setResults([]);
+    void loadStock();                                   // the sale just made changed what is left at this branch
     setTimeout(() => searchRef.current?.focus(), 0);
   }
 
@@ -144,12 +165,34 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
   return (
     <div className="pos" data-pos>
       <section className="pos-left card" aria-label="Products">
+        <div className="pos-store" data-pos-store>
+          <label htmlFor="pos-store">Store / branch</label>
+          <select id="pos-store" className="input" value={otherStore || session.location_id} onChange={e => setOtherStore(e.target.value === session.location_id ? '' : e.target.value)} data-pos-store-select>
+            {locations.some(l => l.id === session.location_id) ? null : <option value={session.location_id}>{session.location_name}</option>}
+            {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
+          </select>
+        </div>
+        {otherStore && (
+          <p className="msg" role="status" data-pos-store-switch>
+            This session and its cash drawer belong to <b>{session.location_name}</b>, so bills here take stock from {session.location_name} only.
+            To bill at {locations.find(l => l.id === otherStore)?.name ?? 'another store'}, <Link href="/pos/sessions#close">close this session</Link> and open one there.{' '}
+            <button type="button" className="btn ghost" onClick={() => setOtherStore('')} data-pos-store-stay>Stay at {session.location_name}</button>
+          </p>
+        )}
         <label className="pos-search-label" htmlFor="pos-search">Scan barcode or search name / SKU <kbd>F2</kbd></label>
         <input id="pos-search" ref={searchRef} className="pos-search" value={q} autoFocus autoComplete="off" placeholder="Scan or type…"
           onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void runSearch(q, true); } if (e.key === 'Escape') { setQ(''); setResults([]); } }} data-pos-search />
         {searchMsg && <p className="note" data-pos-search-msg>{searchMsg}</p>}
-        <ul className="pos-results" data-pos-results>
-          {results.map(p => (
+        {!q.trim() && (
+          <p className="pos-stock-head" data-pos-stock-head>
+            {stockState === 'loading' ? `Loading the stock at ${session.location_name}…`
+              : stockState === 'error' ? `The stock at ${session.location_name} could not be loaded. Search still works.`
+              : stock.length === 0 ? `Nothing is in stock at ${session.location_name}. Receive or transfer stock to this store (Inventory) to sell here.`
+              : `In stock at ${session.location_name}${stockMore ? ' (first ' + stock.length + ' products; search for the rest)' : ''}`}
+          </p>
+        )}
+        <ul className="pos-results" data-pos-results data-pos-listing={q.trim() ? 'search' : 'stock'}>
+          {(q.trim() ? results : stock).map(p => (
             <li key={p.productId} className="pos-product">
               <div className="pos-product-head">
                 {p.image ? <img src={p.image} alt="" width={44} height={56} loading="lazy" /> : <span className="pos-noimg" aria-hidden="true" />}
@@ -208,6 +251,24 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
           )}
         </div>
 
+        {lines.length > 0 && (
+          <div className="pos-row pos-discount" data-pos-coupon>
+            <label className="grow">Coupon code (optional)<input value={coupon} onChange={e => setCoupon(e.target.value.toUpperCase().slice(0, 40))} autoComplete="off" autoCapitalize="characters" placeholder="No coupon" data-pos-coupon-code /></label>
+            {couponCode && <button type="button" className="btn ghost" onClick={() => setCoupon('')} data-pos-coupon-clear>Remove</button>}
+            {couponCode && quote?.coupon && (quote.coupon.applied
+              ? <p className="note" role="status" data-pos-coupon-state="applied">Coupon {quote.coupon.code} applied.</p>
+              : <p className="msg error" role="alert" data-pos-coupon-state="rejected">{quote.coupon.message ?? 'This coupon does not apply.'} Remove it to take payment.</p>)}
+          </div>
+        )}
+        {customer && quote?.loyalty && (
+          <div className="pos-row pos-discount" data-pos-loyalty>
+            <p className="grow">Loyalty points: <b data-pos-points-balance>{quote.loyalty.balance}</b> available{!quote.loyalty.redeemable ? ' · points cannot be used yet (Configuration → Loyalty)' : ''}</p>
+            {quote.loyalty.redeemable && quote.loyalty.usablePoints > 0 && (
+              <label><input type="checkbox" checked={usePoints} onChange={e => setUsePoints(e.target.checked)} data-pos-use-points /> Use {quote.loyalty.usablePoints} points (− {inr(quote.loyalty.usableValuePaise)})</label>)}
+            {quote.loyalty.redeemable && quote.loyalty.usablePoints === 0 && <p className="note" data-pos-points-note>{quote.loyalty.message ?? 'No points can be used on this bill.'}</p>}
+          </div>
+        )}
+
         {offerDiscount && (
           <div className="pos-row pos-discount" data-pos-discount>
             <label>Discount %<input value={discount} onChange={e => setDiscount(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" data-pos-discount-pct /></label>
@@ -218,10 +279,11 @@ export default function PosCounter({ session, maxDiscountBp, canDiscount }: {
 
         {quote && (
           <dl className="pos-totals" data-pos-totals>
-            <dt>Subtotal ({quote.totals.units} item{quote.totals.units === 1 ? '' : 's'})</dt><dd>{inr(quote.totals.subtotalPaise)}</dd>
-            {quote.totals.discountPaise > 0 && <><dt>Discount</dt><dd data-pos-discount-amount>− {inr(quote.totals.discountPaise)}</dd></>}
-            <dt>{quote.totals.tax.configured ? `${quote.totals.tax.label}${quote.totals.pricesIncludeTax ? ' (included)' : ''}` : 'Tax'}</dt>
-            <dd>{quote.totals.tax.configured ? inr(quote.totals.taxPaise) : 'Not configured'}</dd>
+            {/* The one bill breakdown (core bill.ts), worked out on the server: every discount on its own line, in the order it is taken off. */}
+            {quote.bill.lines.map((l, n) => l.kind === 'subtotal' ? <span key={n} style={{ display: 'contents' }}><dt>Subtotal ({quote.totals.units} item{quote.totals.units === 1 ? '' : 's'})</dt><dd>{inr(l.amountPaise)}</dd></span>
+              : l.kind === 'total' ? null
+              : <span key={n} style={{ display: 'contents' }} data-pos-bill-line={l.kind}><dt>{l.label}</dt><dd {...(l.effect < 0 ? { 'data-pos-discount-amount': l.amountPaise } : {})}>{l.effect < 0 ? '− ' : ''}{inr(l.amountPaise)}</dd></span>)}
+            {!quote.totals.tax.configured && <><dt>Tax</dt><dd>Not configured</dd></>}
             <dt className="pos-total">Total payable</dt><dd className="pos-total" data-pos-total={quote.totals.totalPaise}>{inr(quote.totals.totalPaise)}</dd>
           </dl>
         )}

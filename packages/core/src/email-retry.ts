@@ -13,6 +13,7 @@ import { returnEmail } from './returns.ts';
 import { orderDeliveredEmail } from './shipping-admin.ts';
 import { retryTransactionalEmails, type EmailEvent, type EmailRebuilder, type EmailRetryRun } from './transactional-email.ts';
 import { orderPackedEmail, orderTrackingEmail, paymentRequestEmail } from './workflow-emails.ts';
+import { invoiceEmail } from './finance.ts';
 
 export interface EmailRetryOptions {
   /** The store's public address, for the links in the emails (none when unset, as in the first send). */
@@ -41,6 +42,12 @@ export function orderEmailRebuilders(opts: EmailRetryOptions = {}): Partial<Reco
     'order.payment_request': (q, ref) => paymentRequestEmail(q, ref.orderId, store),
     'return.status': ofReturn('status'),
     'refund.processed': ofReturn('refund'),
+    // The invoice whose email failed: the order's issued invoice that still has that subject (a voided invoice is not sent again).
+    'invoice.issued': async (q, ref) => {
+      const invoices = await q.selectFrom('invoices').select('id').where('order_id', '=', ref.orderId).where('status', '=', 'issued').execute();
+      for (const i of invoices) { const m = await invoiceEmail(q, i.id, { storeUrl: store }); if (m && m.subject === ref.subject) return m; }
+      return null;
+    },
   };
 }
 

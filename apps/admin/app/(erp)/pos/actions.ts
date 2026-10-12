@@ -5,10 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { DomainError, type ActionState } from '@kitsyuu/contracts';
-import { closePosSession, completePosSale, setVariantBarcode, createInvoiceForOrder, createStaffReturn, findPosCustomers, openPosSession, quotePosSale, searchPosProducts, voidPosSale,
-  type PosLineInput, type PosPaymentMethod } from '@kitsyuu/core';
+import { closePosSession, completePosSale, setVariantBarcode, createInvoiceForOrder, notifyInvoiceIssued, createStaffReturn, findPosCustomers, openPosSession, quotePosSale, searchPosProducts, voidPosSale,
+  listPosBranchStock, type PosLineInput, type PosPaymentMethod } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
-import { db, productImageUrl, requestContext, requireActor } from '@/lib/server';
+import { db, mailer, productImageUrl, requestContext, requireActor } from '@/lib/server';
 
 type Json<T> = { ok: true; data: T } | { ok: false; message: string };
 async function json<T>(run: () => Promise<T>): Promise<Json<T>> {
@@ -31,26 +31,39 @@ export async function posSearchAction(locationId: string, q: string) {
   });
 }
 
+/** The branch's available stock, for the counter's first view. */
+export async function posStockAction(locationId: string) {
+  const actor = await requireActor();
+  return json(async () => {
+    const r = await listPosBranchStock(db(), actor, { locationId });
+    return { more: r.more, products: r.products.map(p => ({ ...p, image: productImageUrl(p.imagePath) })) };
+  });
+}
+
 export async function posCustomersAction(term: string) {
   const actor = await requireActor();
   return json(() => findPosCustomers(db(), actor, String(term ?? '')));
 }
 
-export async function posQuoteAction(input: { locationId: string; lines: PosLineInput[]; customerId: string | null; discountPercent: number; discountReason: string }) {
+export async function posQuoteAction(input: { locationId: string; lines: PosLineInput[]; customerId: string | null; discountPercent: number; discountReason: string; couponCode?: string; usePoints?: boolean }) {
   const actor = await requireActor();
   return json(async () => {
     if (!input.lines.length) return null;
     const discount = input.discountPercent > 0 ? { percent: input.discountPercent, reason: input.discountReason || 'pending' } : null;
-    const q = await quotePosSale(db(), actor, { locationId: input.locationId, lines: input.lines, customerId: input.customerId, discount });
+    const q = await quotePosSale(db(), actor, { locationId: input.locationId, lines: input.lines, customerId: input.customerId, discount, couponCode: input.couponCode ?? null, usePoints: !!input.usePoints });
     return { lines: q.lines.map(l => ({ variantId: l.variantId, sku: l.sku, name: l.name, size: l.size, colourLabel: l.colourLabel, unitPaise: l.unitPaise, qty: l.qty,
       lineTotalPaise: l.lineTotalPaise, stock: l.branchStock, problem: l.problem })), problems: q.problems,
       totals: { subtotalPaise: q.totals.subtotalPaise, discountPaise: q.totals.discountPaise, taxPaise: q.totals.taxPaise, totalPaise: q.totals.totalPaise, units: q.totals.units,
-        pricesIncludeTax: q.totals.pricesIncludeTax, tax: q.totals.tax, discounts: q.totals.discounts } };
+        pricesIncludeTax: q.totals.pricesIncludeTax, tax: q.totals.tax, discounts: q.totals.discounts },
+      // 2026-10-12: the bill as every bill is shown (core bill.ts), the state of the typed coupon, and the linked customer's points.
+      bill: q.bill, coupon: q.coupon,
+      loyalty: q.loyalty && { redeemable: q.loyalty.redeemable, balance: q.loyalty.balance, usablePoints: q.loyalty.usablePoints, usableValuePaise: q.loyalty.usableValuePaise,
+        usedPoints: q.loyalty.usedPoints, discountPaise: q.loyalty.discountPaise, message: q.loyalty.message } };
   });
 }
 
 export async function posCompleteAction(input: { sessionId: string; idempotencyKey: string; lines: PosLineInput[]; customerId: string | null; contactName: string; contactPhone: string;
-  discountPercent: number; discountReason: string; method: PosPaymentMethod; tendered: string; reference: string; expectedTotalPaise: number }) {
+  discountPercent: number; discountReason: string; method: PosPaymentMethod; tendered: string; reference: string; expectedTotalPaise: number; couponCode?: string; usePoints?: boolean }) {
   const actor = await requireActor();
   const r = await json(async () => {
     const tenderedPaise = input.method === 'cash' ? rupees(input.tendered) : null;
@@ -59,6 +72,7 @@ export async function posCompleteAction(input: { sessionId: string; idempotencyK
       sessionId: input.sessionId, idempotencyKey: input.idempotencyKey, lines: input.lines, customerId: input.customerId,
       contact: { name: input.contactName, phone: input.contactPhone },
       discount: input.discountPercent > 0 ? { percent: input.discountPercent, reason: input.discountReason } : null,
+      couponCode: input.couponCode ?? null, usePoints: !!input.usePoints,
       payment: { method: input.method, tenderedPaise, reference: input.reference }, expectedTotalPaise: input.expectedTotalPaise,
     }, await requestContext());
   });
@@ -135,7 +149,9 @@ export async function issueInvoiceAction(_: ActionState, form: FormData): Promis
   const actor = await requireActor();
   const r = await handle(orderInput, form, async input => {
     const inv = await createInvoiceForOrder(db(), actor, { orderId: input.orderId }, await requestContext());
-    return { ok: true, message: `Tax invoice ${inv.number} issued.` };
+    // The invoice email, only when the business switched it on (Configuration → Customer emails); never blocks the invoice.
+    const mail = await notifyInvoiceIssued(db(), mailer(), inv.id, { storeUrl: process.env.STORE_URL || null });
+    return { ok: true, message: `Tax invoice ${inv.number} issued.${mail.sent ? ' It was handed to the email service for the customer.' : ''}` };
   });
   if (r.ok) revalidatePath('/pos', 'layout');
   return r;

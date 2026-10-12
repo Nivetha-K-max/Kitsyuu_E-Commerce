@@ -58,6 +58,10 @@ async function event(tx: Tx, returnId: string, from: string | null, to: string, 
   await tx.insertInto('return_events').values({ return_id: returnId, from_status: from, to_status: to, note, actor_type: actor.type, staff_user_id: actor.staffId ?? null }).execute();
 }
 
+/** 2026-10-12: one request names each order line once (the table allows one row per line); twice was a database error. */
+const listedTwice = (items: { orderItemId: string }[]) => new Set(items.map(i => i.orderItemId)).size !== items.length;
+const LISTED_TWICE = 'An item is listed twice. Choose each item once, with the quantity being returned.';
+
 /** Units of each order line already in other (not rejected / cancelled) return requests. */
 async function alreadyReturned(q: Queryable, orderId: string, exceptReturnId?: string) {
   let query = q.selectFrom('return_items as i').innerJoin('return_requests as r', 'r.id', 'i.return_id')
@@ -93,6 +97,7 @@ export async function requestReturn(db: Db, p: CustomerPrincipal, input: { order
   const opts = await customerReturnOptions(db, p, input.orderNumber);
   if (!opts.allowed) throw new ForbiddenError(opts.reason);
   if (!opts.reasons.some(r => r.code === input.reasonCode)) throw new DomainError('invalid', 'Choose a reason.');
+  if (listedTwice(input.items)) throw new DomainError('invalid', LISTED_TWICE);
   const created = await db.transaction().execute(async tx => {
     const o = await tx.selectFrom('orders').select(['id', 'order_number']).where('order_number', '=', input.orderNumber).where('customer_id', '=', p.customerId)
       .forUpdate().executeTakeFirstOrThrow();
@@ -238,6 +243,7 @@ export async function createStaffReturn(db: Db, actor: StaffPrincipal, input: { 
   const s = await returnSettings(db);
   if (!s.enabled || !s.windowDays) throw new ForbiddenError('Returns are not offered (Configuration → Returns): all sales are final.');
   if (!input.items.length || input.items.some(i => !Number.isInteger(i.qty) || i.qty < 1)) throw new DomainError('invalid', 'Choose the items and quantities being returned.');
+  if (listedTwice(input.items)) throw new DomainError('invalid', LISTED_TWICE);
   const reason = await db.selectFrom('return_reasons').select('code').where('code', '=', input.reasonCode).where('is_active', '=', true).executeTakeFirst();
   if (!reason) throw new DomainError('invalid', 'Choose a reason.');
   const created = await db.transaction().execute(async tx => {
@@ -391,6 +397,10 @@ export async function refundReturn(db: Db, actor: StaffPrincipal, provider: Paym
     if (r.status !== 'refund_pending') throw new ConflictError('A refund can be made once the return is inspected and waiting for its refund.');
     const open = await tx.selectFrom('refunds').select('id').where('return_id', '=', r.id).where('status', 'in', ['requested', 'pending']).executeTakeFirst();
     if (open) throw new ConflictError('A refund for this return is already in progress.');
+    // 2026-10-12: the order row is locked before what is left is worked out (as refundOrderEdit does), so two refunds on the
+    // same order (two returns, or a return and an order edit) are made one after the other and can never add up to more
+    // than was paid. Before, each could read what was left before the other's refund existed.
+    const o = await tx.selectFrom('orders').select('order_number').where('id', '=', r.order_id).forUpdate().executeTakeFirstOrThrow();
     const pays = (await refundable(tx, r.order_id)).filter(p => p.left > 0);
     const pay = pays.find(p => p.left >= input.amount);
     if (!pay) throw new ConflictError(`At most ${(Math.max(0, ...pays.map(p => p.left)) / 100).toFixed(2)} can be refunded on this order's payment.`);
@@ -399,7 +409,6 @@ export async function refundReturn(db: Db, actor: StaffPrincipal, provider: Paym
         throw new ConflictError(`Refunds through ${pay.provider} are not available from the admin. Refund it in the provider's dashboard or by bank transfer, then record it here as a manual refund with its reference.`);
       if (!pay.provider_payment_id) throw new ConflictError('This payment has no provider payment id, so the provider cannot refund it. Record a manual refund instead.');
     }
-    const o = await tx.selectFrom('orders').select('order_number').where('id', '=', r.order_id).executeTakeFirstOrThrow();
     const f = await tx.insertInto('refunds').values({ payment_id: pay.id, order_id: r.order_id, return_id: r.id, amount_paise: input.amount, reason: input.note,
       status: input.mode === 'manual' ? 'processed' : 'pending', method: input.mode, reference: input.reference, requested_by: actor.staffId,
       ...(input.mode === 'manual' ? { processed_at: sql<Date>`now()`, processed_by: actor.staffId } : {}) }).returning('id').executeTakeFirstOrThrow();
@@ -449,6 +458,61 @@ export async function refundReturn(db: Db, actor: StaffPrincipal, provider: Paym
     throw new ConflictError(`${failure} Nothing was refunded.`);
   }
   return { status: answer!.status, number: pending.number };
+}
+
+/** How long a provider refund must have been waiting before staff may settle it by hand. A refund is 'pending' for a few
+    seconds while the provider is being asked; this keeps a person from settling one that is still on its way. */
+export const PENDING_REFUND_SETTLE_AFTER_MINUTES = 10;
+
+/** 2026-10-12: settles a provider refund that stayed 'pending' (the provider accepted it but did not say it was done, or
+    the request was cut off before its answer was recorded). Until now such a refund had no way out and blocked any new
+    refund for its return. Staff look the refund up with the payment provider and record what they found:
+      · 'processed': the provider did refund it. Its refund id is required and is kept; the payment, the order and the
+        return move on exactly as if the provider's answer had arrived (same code path).
+      · 'failed': the provider did not refund it. The reason is required; the money is free to be refunded again, and
+        the return is still waiting for its refund.
+    No provider is called and nothing is assumed: the record is the staff member's statement, with their name, in the
+    audit log. Only a 'pending' refund made through the provider, at least PENDING_REFUND_SETTLE_AFTER_MINUTES old, can be
+    settled, and only once. Needs refunds.create. */
+export async function settlePendingRefund(db: Db, actor: StaffPrincipal, input: { refundId: string; outcome: 'processed' | 'failed'; reference: string | null; note: string }, ctx: MutationContext) {
+  requirePermission(actor, 'refunds.create');
+  const reference = (input.reference ?? '').trim().slice(0, 120) || null, note = input.note.trim().slice(0, 300);
+  if (note.length < 3) throw new DomainError('invalid', 'Say what you found with the payment provider (at least 3 characters).');
+  if (input.outcome === 'processed' && !reference) throw new DomainError('invalid', "Enter the provider's refund id (from the provider's dashboard).");
+  return db.transaction().execute(async tx => {
+    const seen = await tx.selectFrom('refunds').select(['id', 'order_id', 'return_id']).where('id', '=', input.refundId).executeTakeFirst();
+    if (!seen) throw new NotFoundError('Refund not found.');
+    // Locks in the order every refund path uses: the return, then the order, then the refund itself.
+    const ret = seen.return_id ? await tx.selectFrom('return_requests').select(['id', 'number', 'status']).where('id', '=', seen.return_id).forUpdate().executeTakeFirst() : undefined;
+    const o = await tx.selectFrom('orders').select('order_number').where('id', '=', seen.order_id).forUpdate().executeTakeFirstOrThrow();
+    const f = await tx.selectFrom('refunds').select(['id', 'payment_id', 'order_id', 'amount_paise', 'status', 'method', 'provider_refund_id',
+      sql<boolean>`created_at <= now() - make_interval(mins => ${PENDING_REFUND_SETTLE_AFTER_MINUTES})`.as('old_enough')]).where('id', '=', seen.id).forUpdate().executeTakeFirstOrThrow();
+    if (f.status !== 'pending' || f.method !== 'provider') throw new ConflictError(`This refund is ${f.status}; only a refund still waiting for the payment provider can be settled here.`);
+    if (!f.old_enough) throw new ConflictError(`This refund was requested less than ${PENDING_REFUND_SETTLE_AFTER_MINUTES} minutes ago and may still be on its way to the provider. Check again later.`);
+    if (input.outcome === 'processed') {
+      if (f.provider_refund_id && f.provider_refund_id !== reference) throw new ConflictError(`The provider's id recorded for this refund is ${f.provider_refund_id}. Enter that id to confirm it, or settle it as not refunded.`);
+      try {
+        await tx.updateTable('refunds').set({ status: 'processed', provider_refund_id: reference, processed_at: sql<Date>`now()`, processed_by: actor.staffId }).where('id', '=', f.id).execute();
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505') throw new ConflictError('That provider refund id is already recorded for another refund.');
+        throw e;
+      }
+      await markPaymentRefunded(tx, f.order_id, f.payment_id);
+      if (ret && ret.status === 'refund_pending') {
+        await tx.updateTable('return_requests').set({ status: 'refunded', refund_amount_paise: f.amount_paise }).where('id', '=', ret.id).execute();
+        await event(tx, ret.id, ret.status, 'refunded', `Refund confirmed with the payment provider by staff (${reference})`, { type: 'staff', staffId: actor.staffId });
+      }
+    } else {
+      await tx.updateTable('refunds').set({ status: 'failed', failure_reason: `Settled by staff as not refunded: ${note}`.slice(0, 300) }).where('id', '=', f.id).execute();
+      // An order edit keeps the link to its refund; a failed one is unlinked so the difference can be refunded again.
+      await tx.updateTable('order_edits').set({ refund_id: null }).where('refund_id', '=', f.id).execute();
+      if (ret) await event(tx, ret.id, ret.status, ret.status, `Refund settled as not made by the provider: ${note}`.slice(0, 1000), { type: 'staff', staffId: actor.staffId });
+    }
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'refund.settle_pending', entityType: 'refunds', entityId: f.id,
+      before: { status: 'pending', provider_refund_id: f.provider_refund_id }, after: { status: input.outcome, provider_refund_id: input.outcome === 'processed' ? reference : f.provider_refund_id },
+      metadata: { order_number: o.order_number, return_number: ret?.number ?? null, amount_paise: f.amount_paise, note } });
+    return { status: input.outcome, orderNumber: o.order_number, returnId: ret?.id ?? null, returnNumber: ret?.number ?? null };
+  });
 }
 
 /** Customer email about a return (approved, rejected, information needed, completed) or a refund; only when switched on. */

@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { can, type StaffPrincipal } from '@kitsyuu/auth';
 import { paiseToRupees } from '@kitsyuu/contracts';
 import type { getOrderPayment } from '@kitsyuu/core';
-import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
+import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Facts, Section } from '@/components/frame';
 import { NavLink } from '@/components/NavFrame';
 import { StatusBadge } from '@/components/ui';
@@ -16,6 +16,7 @@ import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { refundProvider } from '@/lib/payments';
 import { METHOD_LONG, PaymentPill, paymentState, providerLabel } from '../../payments/payment-ui';
 import { recordManualRefundAction } from '../../payments/actions';
+import { settleRefundAction } from '../../returns/actions';
 import { codCollectAction, refundOrderEditAction } from '../actions';
 
 const EXCEPTION_HELP: Record<string, string> = {
@@ -183,7 +184,20 @@ export function PaymentPanel({ actor, d, returnsHref }: { actor: StaffPrincipal;
                 <td><StatusBadge status={r.status} />{r.failure_reason && <div className="note">{r.failure_reason}</div>}</td>
                 <td>{r.reason}{r.return_id && <div className="note">return <NavLink href={`${returnsHref}&return=${r.return_id}`}>{r.return_number}</NavLink></div>}</td>
                 <td>{r.method === 'provider' ? 'Payment provider' : r.method === 'manual' ? 'Paid outside, recorded' : 'By hand (to be paid outside)'}</td>
-                <td className="mono">{r.reference ?? r.provider_refund_id ?? '—'}</td>
+                <td className="mono">{r.reference ?? r.provider_refund_id ?? '—'}
+                  {/* 2026-10-12: a provider refund that stayed pending is settled with what staff found at the provider. */}
+                  {r.status === 'pending' && r.method === 'provider' && can(actor, 'refunds.create') && (
+                    <details className="row-edit" data-settle-refund={r.id}><summary className="btn ghost sm">Settle…</summary>
+                      <ActionForm action={settleRefundAction} submitLabel="Record" className="form compact row-edit-form" id={`settle-refund-${r.id}`} label="Settle this pending refund"
+                        confirmText={`Record what the payment provider shows for this refund of ${formatPaise(r.amount_paise)}? This is kept with your name and cannot be changed afterwards.`}>
+                        <Hidden name="refundId" value={r.id} />
+                        <p className="note">Look this refund up in the payment provider&rsquo;s dashboard first. Nothing is sent to the provider from here.</p>
+                        <Select name="outcome" label="What the provider shows" options={[{ value: 'processed', label: 'Refunded (enter its refund id)' }, { value: 'failed', label: 'Not refunded' }]} />
+                        <Field name="reference" label="Provider's refund id" defaultValue={r.provider_refund_id ?? ''} hint="Required when it was refunded." />
+                        <Field name="note" label="What you found" required />
+                      </ActionForm>
+                    </details>
+                  )}</td>
               </tr>))}
             </tbody></table></div>
         )}

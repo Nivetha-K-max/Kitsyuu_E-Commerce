@@ -19,7 +19,9 @@ import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { priceOrder, type CartTotals } from './pricing.ts';
 import { lineLabel, pricedLine, variantQuery, type PricedLine } from './cart.ts';
 import { checkStaffDiscount, inStore, staffDiscountMaxBp, staffRule } from './draft-orders.ts';
-import { earnForOrder } from './loyalty.ts';
+import { earnForOrder, lockLoyaltyAccount, redeemForOrder, reverseOrderPoints } from './loyalty.ts';
+import { counterDiscounts, couponCodeOf, recordDiscountRedemptions } from './discounts.ts';
+import { billFromTotals } from './bill.ts';
 import { markPaymentRefunded } from './returns.ts';
 import type { MutationContext } from './staff.ts';
 
@@ -34,12 +36,14 @@ const inr = (paise: number) => `${paise < 0 ? '−' : ''}₹${(Math.abs(paise) /
 /** What the POS screen needs: the branches, the cashier's open session, the discount limit and what this staff member may do. */
 export async function posContext(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'pos.access');
-  const [locations, session, maxDiscountBp] = await Promise.all([
+  const [locations, session, maxDiscountBp, otherLocations] = await Promise.all([
     db.selectFrom('locations').select(['id', 'code', 'name', 'address']).where('is_online', '=', false).where('is_active', '=', true).orderBy('sort_order').orderBy('name').execute(),
     openSessionOf(db, actor.staffId),
     staffDiscountMaxBp(db),
+    // Locations POS cannot bill at, so the screen can say why they are not in the list (the online stock; switched off).
+    db.selectFrom('locations').select(['id', 'code', 'name', 'is_online', 'is_active']).where(eb => eb.or([eb('is_online', '=', true), eb('is_active', '=', false)])).orderBy('sort_order').orderBy('name').execute(),
   ]);
-  return { locations, session, maxDiscountBp, methods: POS_PAYMENT_METHODS.map(m => ({ code: m, label: METHOD_LABEL[m] })),
+  return { locations, otherLocations, session, maxDiscountBp, methods: POS_PAYMENT_METHODS.map(m => ({ code: m, label: METHOD_LABEL[m] })),
     can: { sell: can(actor, 'pos.sell'), discount: can(actor, 'orders.discount'), void: can(actor, 'pos.void'), reports: can(actor, 'pos.reports'), invoice: can(actor, 'finance.manage') } };
 }
 
@@ -161,6 +165,26 @@ export async function searchPosProducts(db: Db, actor: StaffPrincipal, input: { 
   return { exact: hit ? { ...toVariant(hit), productId: hit.product_id, name: hit.name } : null, products: [...products.values()].slice(0, 30) };
 }
 
+/** What can be sold at this branch right now: every size with stock AT THIS BRANCH, by product (up to `limit` products,
+    by name). Shown on the counter before anything is searched, so the cashier sees the branch's stock at a glance. */
+export async function listPosBranchStock(db: Db, actor: StaffPrincipal, input: { locationId: string; limit?: number }): Promise<{ products: PosProduct[]; more: boolean }> {
+  requirePermission(actor, 'pos.access');
+  const limit = Math.min(Math.max(input.limit ?? 40, 1), 100);
+  const rows = await variantQuery(db).innerJoin('location_stock as ls', join => join.onRef('ls.variant_id', '=', 'v.id').on('ls.location_id', '=', input.locationId))
+    .select(['v.barcode', sql<number>`ls.qty::int`.as('branch_qty'), 'v.sort_order'])
+    .where('v.is_active', '=', true).where('ls.qty', '>', 0)
+    .orderBy('p.name').orderBy('v.colour_slug').orderBy('v.sort_order').limit(1500).execute();
+  const products = new Map<string, PosProduct>();
+  for (const r of rows) {
+    const p = products.get(r.product_id) ?? { productId: r.product_id, name: r.name, imagePath: r.image_path, variants: [] };
+    p.variants.push({ variantId: r.variant_id, sku: r.sku, barcode: r.barcode, size: r.size, colour: r.colour_slug,
+      colourLabel: r.colour_slug ? (r.colour_label ?? r.colour_slug) : null, unitPaise: r.unit_paise, stock: r.branch_qty });
+    products.set(r.product_id, p);
+  }
+  const all = [...products.values()];
+  return { products: all.slice(0, limit), more: all.length > limit };
+}
+
 // ---------------------------------------------------------------- pricing a bill
 export type PosLineInput = { variantId: string; qty: number };
 export type PosDiscountInput = { percent: number; reason: string | null } | null;
@@ -179,7 +203,10 @@ function cleanLines(lines: PosLineInput[]): PosLineInput[] {
 }
 
 /** Prices the lines for this branch: each line with the branch's stock and a problem when it cannot be sold. */
-async function priceBill(q: Queryable, locationId: string, input: { lines: PosLineInput[]; customerId?: string | null; discount: PosDiscountInput }) {
+/* 2026-10-12: a counter bill may also carry a coupon (the store's own coupons, by the same rules) and, for a linked customer,
+   loyalty points. Order: staff discount and coupon first (combined as the stacking setting says), then points on what is
+   left, then tax: the same priceOrder the store checkout uses. Points always need a customer on the bill. */
+async function priceBill(q: Queryable, locationId: string, input: { lines: PosLineInput[]; customerId?: string | null; discount: PosDiscountInput; couponCode?: string | null; usePoints?: boolean }) {
   const lines = cleanLines(input.lines);
   const ids = lines.map(l => l.variantId);
   const rows = new Map((await variantQuery(q).where('v.id', 'in', ids).execute()).map(r => [r.variant_id, r]));
@@ -196,15 +223,21 @@ async function priceBill(q: Queryable, locationId: string, input: { lines: PosLi
   }
   const bp = input.discount && input.discount.percent > 0 ? Math.round(input.discount.percent * 100) : 0;
   if (bp) await checkStaffDiscount(q, priced, bp);
+  const subtotal = priced.reduce((n, l) => n + l.lineTotalPaise, 0);
+  const rule = bp ? staffRule(bp, input.discount?.reason ?? '') : null;
+  const staff = rule ? { code: rule.code, label: rule.label, amountPaise: Math.max(0, Math.floor(await rule.evaluate({ lines: priced, subtotalPaise: subtotal, customerId: input.customerId ?? null }))) } : null;
+  const code = couponCodeOf(input.couponCode);
   const totals: CartTotals = await priceOrder(q, priced, {
-    config: { shipping: inStore, discounts: bp ? [staffRule(bp, input.discount?.reason ?? '')] : [] },
-    customerId: input.customerId ?? null, shipTo: null, payment: null,
+    config: { shipping: inStore, discounts: [], discountSource: counterDiscounts(code, staff) },
+    customerId: input.customerId ?? null, shipTo: null,
+    // With a customer on the bill the points are always quoted (their balance and what it can take off); used only when asked.
+    payment: input.customerId ? { method: 'online', usePoints: !!input.usePoints } : null,
   });
-  return { lines: priced, totals, discountBp: bp };
+  return { lines: priced, totals, discountBp: bp, bill: billFromTotals(totals), coupon: totals.coupon ?? null, loyalty: totals.payment?.loyalty ?? null };
 }
 
 /** The bill as the counter shows it (always priced on the server: price, sale price, discount limits, tax, branch stock). */
-export async function quotePosSale(db: Db, actor: StaffPrincipal, input: { locationId: string; lines: PosLineInput[]; customerId?: string | null; discount: PosDiscountInput }) {
+export async function quotePosSale(db: Db, actor: StaffPrincipal, input: { locationId: string; lines: PosLineInput[]; customerId?: string | null; discount: PosDiscountInput; couponCode?: string | null; usePoints?: boolean }) {
   requirePermission(actor, 'pos.access');
   if (input.discount && input.discount.percent > 0) requirePermission(actor, 'orders.discount');
   const r = await priceBill(db, input.locationId, input);
@@ -220,6 +253,9 @@ export interface PosSaleInput {
   customerId?: string | null;
   contact?: { name?: string | null; phone?: string | null } | null;
   discount: PosDiscountInput;
+  /** 2026-10-12: a coupon code typed at the counter, and whether the linked customer's loyalty points are used. The server
+      decides whether either applies and what it takes off; a coupon or points that do not apply refuse the sale. */
+  couponCode?: string | null; usePoints?: boolean;
   payment: { method: PosPaymentMethod; tenderedPaise?: number | null; reference?: string | null };
   /** The total the cashier showed the customer; the sale is refused if the server's total differs. */
   expectedTotalPaise: number;
@@ -262,7 +298,14 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
         contact = { name: c.full_name, email: c.email, phone: c.phone ?? contact.phone };
       }
 
-      const bill = await priceBill(tx, s.location_id, { lines: input.lines, customerId: input.customerId ?? null, discount });
+      const couponCode = couponCodeOf(input.couponCode), usePoints = !!input.usePoints;
+      if (usePoints && !input.customerId) throw new DomainError('invalid', 'Loyalty points need a customer on the bill.');
+      // The points priced below cannot be spent twice: the customer's balance row stays locked until the sale is saved.
+      if (usePoints) await lockLoyaltyAccount(tx, input.customerId!);
+      const bill = await priceBill(tx, s.location_id, { lines: input.lines, customerId: input.customerId ?? null, discount, couponCode, usePoints });
+      if (couponCode && !bill.coupon?.applied) throw new ConflictError(`Coupon ${couponCode} was not applied: ${bill.coupon?.message ?? 'it is not valid.'} Remove it from the bill or fix it, then take payment.`);
+      const pointsUsed = bill.loyalty?.usedPoints ?? 0, pointsValue = bill.loyalty?.discountPaise ?? 0;
+      if (usePoints && pointsUsed <= 0) throw new ConflictError(`Loyalty points were not used: ${bill.loyalty?.message ?? 'this customer has no points that can be used on this bill.'} Untick them, then take payment.`);
       const bad = bill.lines.find(l => l.problem);
       if (bad) throw new ConflictError(bad.problem === 'unavailable' ? `${lineLabel(bad)} is not offered.` : `Only ${bad.branchStock} of ${lineLabel(bad)} ${bad.branchStock === 1 ? 'is' : 'are'} in stock at ${s.location_name}.`);
       const t = bill.totals;
@@ -282,7 +325,8 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
         status: 'delivered', payment_status: 'paid', currency: 'INR',
         subtotal_paise: t.subtotalPaise, discount_paise: t.discountPaise, shipping_paise: t.shippingPaise, tax_paise: t.taxPaise,
         total_paise: t.totalPaise, prices_include_tax: t.pricesIncludeTax,
-        pricing: JSON.stringify({ tax: t.tax, shipping: t.shipping, discounts: t.discounts, source: { pos: posNumber }, pos }),
+        pricing: JSON.stringify({ tax: t.tax, shipping: t.shipping, discounts: t.discounts, ...(couponCode ? { coupon: couponCode } : {}), source: { pos: posNumber }, pos }),
+        loyalty_points_used: pointsUsed, loyalty_discount_paise: pointsValue,
         payment_method: input.payment.method, cod_status: null, cod_fee_paise: 0,
         contact: JSON.stringify(contact),
         // A counter sale has no delivery: its address is the branch (shown on bills and invoices as the place of sale).
@@ -309,10 +353,13 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
         status: 'captured', method: input.payment.method, captured_at: sql<Date>`now()`,
         raw: JSON.stringify({ reference, tendered_paise: tenderedPaise, change_paise: changePaise, cashier_id: actor.staffId, session: s.number, location_id: s.location_id }),
       }).execute();
+      // The coupon's use is recorded (and its limits re-checked under a lock) and the points are taken, in this same transaction.
+      await recordDiscountRedemptions(tx, order.id, input.customerId ?? null, t.discounts);
+      if (pointsUsed > 0) await redeemForOrder(tx, input.customerId!, order.id, pointsUsed, order.order_number);
       if (input.customerId) { await earnForOrder(tx, order.id, 'paid'); await earnForOrder(tx, order.id, 'delivered'); }
       await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'pos.sale', entityType: 'orders', entityId: order.id,
         after: { pos_number: posNumber, order_number: order.order_number, location_id: s.location_id, payment_method: input.payment.method, total_paise: t.totalPaise,
-          staff_discount_paise: staffDiscount, customer_id: input.customerId ?? null },
+          staff_discount_paise: staffDiscount, customer_id: input.customerId ?? null, discount_paise: t.discountPaise, coupon: couponCode, loyalty_points_used: pointsUsed },
         metadata: { session: s.number, reference, units: t.units, ...(staffDiscount ? { discount_bp: bill.discountBp, discount_reason: discount!.reason } : {}) } });
       return { orderId: order.id, orderNumber: order.order_number, posNumber, totalPaise: t.totalPaise, changePaise, replay: false };
     });
@@ -329,7 +376,7 @@ export async function getPosSale(db: Db, actor: StaffPrincipal, orderId: string)
   const o = await db.selectFrom('orders as o').leftJoin('locations as l', 'l.id', 'o.location_id').leftJoin('staff_users as u', 'u.id', 'o.created_by')
     .leftJoin('pos_sessions as s', 's.id', 'o.pos_session_id').leftJoin('customers as c', 'c.id', 'o.customer_id')
     .select(['o.id', 'o.order_number', 'o.pos_number', 'o.status', 'o.payment_status', 'o.payment_method', 'o.created_at', 'o.subtotal_paise', 'o.discount_paise', 'o.tax_paise',
-      'o.shipping_paise', 'o.total_paise', 'o.prices_include_tax', 'o.pricing', 'o.contact', 'o.staff_discount_bp', 'o.staff_discount_reason', 'o.customer_id',
+      'o.shipping_paise', 'o.total_paise', 'o.prices_include_tax', 'o.pricing', 'o.contact', 'o.staff_discount_bp', 'o.staff_discount_reason', 'o.customer_id', 'o.loyalty_points_used', 'o.cod_fee_paise',
       'l.name as location_name', 'l.address as location_address', 'l.code as location_code', 'u.email as cashier_email', 'u.full_name as cashier_name',
       's.number as session_number', 's.status as session_status', 's.staff_id as session_staff_id', 'c.email as customer_email', 'c.full_name as customer_name'])
     .where('o.id', '=', orderId).executeTakeFirst();
@@ -377,6 +424,8 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
     for (const it of items) {
       await sql`select public.order_stock_at_location(${o.id}::uuid, ${it.variant_id}::uuid, ${it.qty}::int, 'pos_void', ${actor.staffId}::uuid, ${`Void ${o.pos_number}`}::text)`.execute(tx);
     }
+    // 2026-10-12: points used on the voided bill go back to the customer, and points it earned are taken back (once each).
+    await reverseOrderPoints(tx, o.id, `POS sale ${o.pos_number} voided`);
     const pay = await tx.selectFrom('payments').select(['id', 'amount_paise']).where('order_id', '=', o.id).where('provider', '=', 'pos').where('status', '=', 'captured').executeTakeFirst();
     if (pay) {
       await tx.insertInto('refunds').values({ payment_id: pay.id, order_id: o.id, amount_paise: pay.amount_paise, reason: `POS void: ${reason}`.slice(0, 500), status: 'processed',

@@ -9,8 +9,10 @@
    Reconciliation compares the platform's own records (orders marked paid, captured payments, refunds). It does NOT see
    bank or provider settlements (no settlement import exists), so it never claims the books are reconciled with the bank. */
 import { recordAudit, sql, type Db, type Queryable } from "@kitsyuu/db";
-import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { ConflictError, DomainError, NotFoundError, paiseToRupees, uuid } from '@kitsyuu/contracts';
+import { requirePermission, type Mailer, type MailMessage, type StaffPrincipal } from '@kitsyuu/auth';
+import { billFromOrder, paymentMethodLabel } from './bill.ts';
+import { sendTransactionalEmail, type TransactionalEmailResult } from './transactional-email.ts';
 import type { MutationContext } from './staff.ts';
 import { companyDetails } from './settings.ts';
 import { customerRef } from './customers.ts';
@@ -195,6 +197,79 @@ export async function getInvoice(db: Db, actor: StaffPrincipal, invoiceId: strin
     db.selectFrom('finance_notes').select(['id', 'kind', 'number', 'reason', 'amount_paise', 'tax_paise', 'note_date', 'status']).where('invoice_id', '=', invoiceId).orderBy('created_at').execute(),
   ]);
   return { invoice: inv, items, notes };
+}
+
+// ---------------------------------------------------------------- the invoice by email (2026-10-12)
+const invoiceSubject = (number: string) => `Your KITSYUU tax invoice ${number}`;
+const inr = (paise: number) => `₹${paiseToRupees(paise)}`;
+
+/** The tax invoice as an email: its number and date, the items, and the same bill breakdown the invoice page shows
+    (bill.ts). Only for an ISSUED invoice of an order, sent to the email the invoice was billed to (else the order's
+    contact); null when there is nothing to send or nobody to send it to. States what was invoiced; promises nothing. */
+export async function invoiceEmail(q: Queryable, invoiceId: string, opts: { storeUrl?: string | null } = {}): Promise<(MailMessage & { orderId: string }) | null> {
+  const i = await q.selectFrom('invoices as i').innerJoin('orders as o', 'o.id', 'i.order_id')
+    .select(['i.id', 'i.invoice_number', 'i.status', 'i.issued_at', 'i.subtotal_paise', 'i.discount_paise', 'i.shipping_paise', 'i.tax_paise', 'i.total_paise', 'i.prices_include_tax',
+      'i.tax_split', 'i.billing_address', 'o.id as order_id', 'o.order_number', 'o.customer_id', 'o.contact', 'o.pricing', 'o.payment_method', 'o.payment_status', 'o.cod_status',
+      'o.cod_fee_paise', 'o.loyalty_points_used']).where('i.id', '=', invoiceId).executeTakeFirst();
+  if (!i || i.status !== 'issued' || !i.invoice_number) return null;
+  const bill = (i.billing_address ?? {}) as Record<string, unknown>, contact = (i.contact ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const to = text(bill.email) ?? text(contact.email);
+  if (!to) return null;
+  const items = await q.selectFrom('invoice_items').select(['description', 'qty', 'line_total_paise']).where('invoice_id', '=', i.id).orderBy('position').execute();
+  const b = billFromOrder({ subtotal_paise: i.subtotal_paise, discount_paise: i.discount_paise, shipping_paise: i.shipping_paise, tax_paise: i.tax_paise, total_paise: i.total_paise,
+    prices_include_tax: i.prices_include_tax, cod_fee_paise: i.cod_fee_paise, loyalty_points_used: i.loyalty_points_used, pricing: i.pricing },
+    { taxSplit: i.tax_split as { type?: string; cgst?: number; sgst?: number; igst?: number } | null });
+  const due = i.payment_method === 'cod' && i.cod_status === 'to_collect' && i.payment_status !== 'paid';
+  const name = text(bill.name) ?? text(contact.name);
+  const link = opts.storeUrl && i.customer_id ? [`View or print this invoice: ${new URL(`/account/orders/${encodeURIComponent(i.order_number)}/invoice`, opts.storeUrl).toString()}`] : [];
+  const lines = [
+    `Hello${name ? ' ' + name : ''},`, '',
+    `Here is the tax invoice for your KITSYUU order ${i.order_number}.`, '',
+    `Invoice number: ${i.invoice_number}`,
+    `Invoice date: ${new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeZone: 'Asia/Kolkata' }).format(new Date(i.issued_at as Date))}`, '',
+    'Items',
+    ...items.map(it => `- ${it.description} × ${it.qty}: ${inr(it.line_total_paise)}`), '',
+    ...b.lines.map(l => `${l.label}: ${l.effect < 0 ? '−' : ''}${inr(l.amountPaise)}`), '',
+    `Payment method: ${paymentMethodLabel(i.payment_method)}`,
+    `Payment status: ${due ? 'Payable on delivery' : (i.payment_status ?? 'unpaid').replace(/_/g, ' ')}`,
+    ...(link.length ? ['', ...link] : []),
+  ];
+  return { to, subject: invoiceSubject(i.invoice_number), text: lines.join('\n'), orderId: i.order_id };
+}
+
+/** Sends the invoice email when an invoice has just been issued, only if the business switched that email on
+    (notifications.invoice_issued, off until then). Once per invoice; logged; never throws and never undoes the invoice. */
+export function notifyInvoiceIssued(db: Db, mailer: Mailer, invoiceId: string, opts: { storeUrl?: string | null } = {}): Promise<TransactionalEmailResult> {
+  return sendTransactionalEmail(db, mailer, 'invoice.issued', q => invoiceEmail(q, invoiceId, opts));
+}
+
+/** Staff email an invoice by hand (the invoice page, the order page). Works whether the automatic email is on or off, and
+    may be done again on purpose. The attempt is logged as sent or failed (sent = the mailer accepted it, not that it
+    arrived) and the action is audited without the address. Needs finance.manage. */
+export async function sendInvoiceEmail(db: Db, actor: StaffPrincipal, mailer: Mailer, input: { invoiceId: string }, ctx: MutationContext, opts: { storeUrl?: string | null } = {}) {
+  requirePermission(actor, 'finance.manage');
+  if (!uuid.safeParse(input.invoiceId).success) throw new NotFoundError('Invoice not found.');
+  const i = await db.selectFrom('invoices').select(['id', 'invoice_number', 'status', 'order_id']).where('id', '=', input.invoiceId).executeTakeFirst();
+  if (!i) throw new NotFoundError('Invoice not found.');
+  if (i.status !== 'issued' || !i.order_id) throw new ConflictError('Only an issued invoice of an order can be emailed.');
+  if (!(await invoiceEmail(db, i.id, opts))) throw new DomainError('invalid', 'This invoice has no email address to send to (the order has no contact email).');
+  const result = await sendTransactionalEmail(db, mailer, 'invoice.issued', q => invoiceEmail(q, i.id, opts), { checked: true, resend: true });
+  await db.transaction().execute(tx => recordAudit(tx, { ...staffAudit(actor, ctx), action: 'invoice.email', entityType: 'invoices', entityId: i.id,
+    metadata: { number: i.invoice_number, result: result.sent ? 'sent' : result.reason } }));
+  return { number: i.invoice_number!, result };
+}
+
+/** The email attempts of one invoice, newest first (sent or failed; when; to whom), for the invoice and order pages. */
+export async function listInvoiceEmails(db: Db, actor: StaffPrincipal, invoiceId: string) {
+  requirePermission(actor, 'finance.read');
+  if (!uuid.safeParse(invoiceId).success) throw new NotFoundError('Invoice not found.');
+  const i = await db.selectFrom('invoices').select(['invoice_number', 'order_id']).where('id', '=', invoiceId).executeTakeFirst();
+  if (!i) throw new NotFoundError('Invoice not found.');
+  if (!i.order_id || !i.invoice_number) return [];
+  const rows = await db.selectFrom('notification_log').select(['id', 'recipient', 'status', 'created_at']).where('order_id', '=', i.order_id).where('event', '=', 'invoice.issued')
+    .where('subject', '=', invoiceSubject(i.invoice_number)).orderBy('created_at', 'desc').orderBy('id', 'desc').limit(10).execute();
+  return rows.map(r => ({ ...r, id: String(r.id) }));
 }
 
 // ---------------------------------------------------------------- credit / debit notes

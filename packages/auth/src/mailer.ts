@@ -6,6 +6,10 @@
    - resend: Resend's HTTP API (https://resend.com), decided 2026-09-27. Needs RESEND_API_KEY and MAIL_FROM (an address on a
      domain verified in Resend). The key never leaves the server and is never logged.
    Another provider plugs in as another Mailer.
+   In a production deployment (VERCEL=1 or KITSYUU_DEPLOYMENT=production) only a working provider counts (2026-10-09):
+   console, file, an unknown value or a resend set-up that cannot start all become the "unconfigured" mailer. It delivers
+   nothing, writes no message to any log, and every send FAILS with "email delivery is not configured", so an email is
+   never recorded as sent when nobody received it.
    Every message is written as plain text; the HTML part is made from that text (mail-html.ts) unless one is given. */
 import { emailHtml } from './mail-html.ts';
 
@@ -83,7 +87,30 @@ export function resendMailer(cfg: ResendConfig): Mailer {
   };
 }
 
-export function createMailer(kind = process.env.MAILER || 'console'): Mailer {
+/** Stands in for a provider that is not set up: nothing is delivered and nothing is written anywhere; every send fails. */
+export function unconfiguredMailer(reason: string): Mailer {
+  return {
+    kind: 'unconfigured',
+    async send() { throw new MailError(`Email delivery is not configured (${reason}). Nothing was sent.`, false); },
+  };
+}
+/** True for a mailer that reaches nobody (development console, or a production deployment without a provider). */
+export const deliversNothing = (m: Pick<Mailer, 'kind'>): boolean => m.kind === 'console' || m.kind === 'unconfigured';
+
+const deployed = (env: Record<string, string | undefined>) => env.VERCEL === '1' || env.KITSYUU_DEPLOYMENT === 'production';
+
+export function createMailer(kind = process.env.MAILER || 'console', env: Record<string, string | undefined> = process.env): Mailer {
+  if (deployed(env)) {
+    let reason: string;
+    if (kind === 'resend') {
+      try {
+        return resendMailer({ apiKey: env.RESEND_API_KEY ?? '', from: env.MAIL_FROM ?? '', replyTo: env.MAIL_REPLY_TO || undefined, apiBase: env.RESEND_API_BASE || undefined });
+      } catch (e) { reason = (e as Error).message.replace(/\.$/, ''); }
+    } else reason = kind === 'console' || kind === 'file' ? `MAILER=${kind} delivers nothing` : 'MAILER has an unknown value';
+    console.error(`[mail] ERROR: email delivery is NOT configured in this deployment (${reason}). Customers and staff receive no email. `
+      + 'Set MAILER=resend, RESEND_API_KEY and MAIL_FROM (a sender on a domain verified in Resend).');
+    return unconfiguredMailer(reason);
+  }
   if (kind === 'console') return consoleMailer();
   if (kind === 'file') return fileMailer(process.env.MAIL_OUTBOX_DIR ?? '');
   if (kind === 'resend') {

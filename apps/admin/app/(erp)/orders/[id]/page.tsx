@@ -13,7 +13,7 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { can } from '@kitsyuu/auth';
 import { INDIAN_STATES, NotFoundError, paiseToRupees, uuid } from '@kitsyuu/contracts';
-import { getOrder, getOrderPayment, getReturn, getShipmentDetail, listOrderEdits, orderCodState, orderEditOptions, orderEmails, orderOrigin, pricingView, returnSettings,
+import { billFromOrder, listInvoiceEmails, getOrder, getOrderPayment, getReturn, getShipmentDetail, listOrderEdits, orderCodState, orderEditOptions, orderEmails, orderOrigin, pricingView, returnSettings,
   settingsShipping, SHIPMENT_MOVES } from '@kitsyuu/core';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Entity, Facts, Section, StateBlock } from '@/components/frame';
@@ -24,7 +24,7 @@ import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { refundProvider } from '@/lib/payments';
 import { db, productImageUrl, requireActor } from '@/lib/server';
-import { createInvoiceAction } from '../../finance/actions';
+import { createInvoiceAction, emailInvoiceAction } from '../../finance/actions';
 import { METHOD_LONG, PaymentPill, providerLabel } from '../../payments/payment-ui';
 import { updateShipmentAction } from '../../shipping/actions';
 import { codCancelAction, codCollectAction, editOrderAction, refundOrderEditAction, setPackingStateAction, startReturnAction, updateOrderStatusAction, updateShipmentTrackingAction } from '../actions';
@@ -120,6 +120,10 @@ export default async function OrderPage({ params, searchParams }: { params: Para
   const codReady = codDue && (o.status === 'shipped' || o.status === 'delivered');
   const intact = d.integrity.linesMatchUnitPrices && d.integrity.linesMatchSubtotal && d.integrity.totalCoversSubtotal;
   const issued = d.billing?.invoices.find(i => i.status === 'issued') ?? null;
+  // 2026-10-12: the one bill breakdown of this order (core bill.ts), and the email attempts of its invoice (Invoice tab only).
+  const bill = billFromOrder({ subtotal_paise: o.subtotalPaise, discount_paise: o.discountPaise, shipping_paise: o.shippingPaise, tax_paise: o.taxPaise, total_paise: o.totalPaise,
+    prices_include_tax: o.pricesIncludeTax, cod_fee_paise: o.codFeePaise, loyalty_points_used: o.loyaltyPointsUsed, pricing: origin?.pricing });
+  const invoiceEmails = tab === 'invoice' && issued && can(actor, 'finance.read') ? await listInvoiceEmails(db(), actor, issued.id) : [];
   const canIssue = !issued && can(actor, 'finance.manage') && ['paid', 'processing', 'shipped', 'delivered'].includes(o.status);
   const refundedPaise = d.billing?.refunds.filter(r => r.status === 'processed').reduce((n, r) => n + r.amount_paise, 0) ?? 0;
   const refundsOpen = d.billing?.refunds.filter(r => r.status === 'requested' || r.status === 'pending').length ?? 0;
@@ -359,12 +363,13 @@ export default async function OrderPage({ params, searchParams }: { params: Para
               );
             })}</tbody>
             <tfoot>
-              <tr><th colSpan={5} className="num">Subtotal</th><td className="num" data-subtotal>{rupees(o.subtotalPaise)}</td></tr>
-              {o.discountPaise > 0 && <tr><th colSpan={5} className="num">Discounts{o.loyaltyPointsUsed > 0 ? ` (incl. ${o.loyaltyPointsUsed} points, ${rupees(o.loyaltyDiscountPaise)})` : ''}</th><td className="num" data-discount>−{rupees(o.discountPaise)}</td></tr>}
-              <tr><th colSpan={5} className="num">Delivery</th><td className="num" data-shipping-amount>{rupees(o.shippingPaise)}</td></tr>
-              {o.codFeePaise > 0 && <tr><th colSpan={5} className="num">Cash on delivery fee</th><td className="num" data-cod-fee>{rupees(o.codFeePaise)}</td></tr>}
-              {!o.pricesIncludeTax && <tr><th colSpan={5} className="num">Tax</th><td className="num">{rupees(o.taxPaise)}</td></tr>}
-              <tr><th colSpan={5} className="num">Total{o.pricesIncludeTax ? ' (tax-inclusive)' : ''}</th><td className="num" data-order-total><b>{rupees(o.totalPaise)}</b></td></tr>
+              {/* 2026-10-12: the one bill breakdown (core bill.ts): each discount on its own line (staff, coupon, points…), the same
+                  lines as the POS receipt, the invoice and the invoice email. */}
+              {bill.lines.map((l, n) => l.kind === 'subtotal' ? <tr key={n} data-bill-line="subtotal"><th colSpan={5} className="num">Subtotal</th><td className="num" data-subtotal>{rupees(l.amountPaise)}</td></tr>
+                : l.kind === 'total' ? <tr key={n} data-bill-line="total"><th colSpan={5} className="num">Total{o.pricesIncludeTax ? ' (tax-inclusive)' : ''}</th><td className="num" data-order-total><b>{rupees(l.amountPaise)}</b></td></tr>
+                : <tr key={n} data-bill-line={l.kind}><th colSpan={5} className="num">{l.label}{l.kind === 'loyalty' && o.loyaltyPointsUsed > 0 && !/\d/.test(l.label) ? ` (${o.loyaltyPointsUsed} points)` : ''}</th>
+                    <td className="num" {...(l.effect < 0 ? { 'data-discount': l.code ?? '' } : l.kind === 'delivery' ? { 'data-shipping-amount': '' } : l.kind === 'cod_fee' ? { 'data-cod-fee': '' } : {})}>{l.effect < 0 ? '−' : ''}{rupees(l.amountPaise)}</td></tr>)}
+              {!bill.lines.some(l => l.kind === 'delivery') && <tr data-bill-line="delivery"><th colSpan={5} className="num">Delivery</th><td className="num" data-shipping-amount>{rupees(o.shippingPaise)}</td></tr>}
             </tfoot>
           </table></div>
           <p className="note" data-integrity={intact ? 'ok' : 'mismatch'}>
@@ -630,6 +635,11 @@ export default async function OrderPage({ params, searchParams }: { params: Para
             {canIssue && <ActionForm action={createInvoiceAction} submitLabel="Issue invoice" id="issue-invoice-form" label="Issue the invoice for this order" className="inline-form">
               <Hidden name="orderId" value={o.id} /></ActionForm>}
             {issued && can(actor, 'finance.read') && <p className="ord-action-row"><Link className="btn ghost sm" href={`/finance/invoices/${issued.id}`} data-link="print-invoice">Open and print invoice</Link></p>}
+            {issued && can(actor, 'finance.read') && <p className="note" data-order-invoice-emails>{invoiceEmails.length === 0 ? 'This invoice has not been emailed.'
+              : `Emailed: ${invoiceEmails.map(e => `${e.status === 'sent' ? 'sent' : 'FAILED'} ${formatDateTime(e.created_at as Date)}`).join(' · ')} (sent = accepted by the email service, not a delivery confirmation).`}</p>}
+            {issued && can(actor, 'finance.manage') && <ActionForm action={emailInvoiceAction} submitLabel={invoiceEmails.length ? 'Email invoice again' : 'Email invoice'} variant="ghost" id="order-email-invoice-form"
+              label="Email this invoice to the customer" className="inline-form" confirmText={`Email invoice ${issued.invoice_number} to the customer${invoiceEmails.length ? ' again' : ''}?`}>
+              <Hidden name="invoiceId" value={issued.id} /></ActionForm>}
             {!issued && !canIssue && ['paid', 'processing', 'shipped', 'delivered'].includes(o.status) && <p className="note">Issuing an invoice needs the finance.manage permission.</p>}
           </Section>)}
 

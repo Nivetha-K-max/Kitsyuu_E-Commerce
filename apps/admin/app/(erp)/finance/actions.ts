@@ -1,20 +1,38 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import {
   createInvoiceInput, expenseInput, financeNoteInput, financeNoteStatusInput, productTaxInput, taxRateInput, vendorPaymentInput, voidExpenseInput, voidInvoiceInput,
   type ActionState,
 } from '@kitsyuu/contracts';
 import {
-  createFinanceNote, createInvoiceForOrder, saveExpense, saveTaxRate, saveVendorPayment, setFinanceNoteStatus, setProductTax, voidExpense, voidInvoice,
+  createFinanceNote, createInvoiceForOrder, notifyInvoiceIssued, sendInvoiceEmail, saveExpense, saveTaxRate, saveVendorPayment, setFinanceNoteStatus, setProductTax, voidExpense, voidInvoice,
 } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
-import { db, requestContext, requireActor } from '@/lib/server';
+import { db, mailer, requestContext, requireActor } from '@/lib/server';
 
 const done = (r: ActionState) => { if (r.ok) { revalidatePath('/finance', 'layout'); revalidatePath('/orders', 'layout'); } return r; };
 
 export async function createInvoiceAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();
-  return done(await handle(createInvoiceInput, form, async input => { const r = await createInvoiceForOrder(db(), actor, input, await requestContext()); return { ok: true, message: `Invoice ${r.number} issued.` }; }));
+  return done(await handle(createInvoiceInput, form, async input => { const r = await createInvoiceForOrder(db(), actor, input, await requestContext());
+    // 2026-10-12: the invoice email, only when the business switched it on (off by default); it never blocks or undoes the invoice.
+    await notifyInvoiceIssued(db(), mailer(), r.id, { storeUrl: process.env.STORE_URL || null });
+    return { ok: true, message: `Invoice ${r.number} issued.` }; }));
+}
+/** 2026-10-12: staff email an issued invoice to the customer (finance.manage; checked in the core). The message says what
+    happened to the attempt, and never that the email arrived. */
+const emailInvoiceInput = z.object({ invoiceId: z.string().regex(/^[0-9a-f-]{36}$/i, 'Not a valid invoice.') });
+export async function emailInvoiceAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  return done(await handle(emailInvoiceInput, form, async input => {
+    const m = mailer();
+    const r = await sendInvoiceEmail(db(), actor, m, input, await requestContext(), { storeUrl: process.env.STORE_URL || null });
+    if (!r.result.sent) return { ok: false, message: `Invoice ${r.number} could not be emailed (${r.result.reason === 'failed' ? 'the email service refused or did not answer' : r.result.reason.replace(/_/g, ' ')}). The attempt is logged; nothing else changed.` };
+    return { ok: true, message: m.kind === 'console' || m.kind === 'file'
+      ? `No email provider is configured here: the email for invoice ${r.number} was only written to the server's own log, not sent to the customer.`
+      : `Invoice ${r.number} was handed to the email service. That is not a confirmation that it was delivered.` };
+  }));
 }
 export async function voidInvoiceAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();

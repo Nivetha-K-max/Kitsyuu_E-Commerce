@@ -7,6 +7,7 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { formatNumber, formatPaise } from '@/lib/format';
 import { defaultRange, one, type SP } from '@/lib/erp';
 import { db, requireActor } from '@/lib/server';
+import Link from 'next/link';
 import MarketingNav from '../MarketingNav';
 
 export const metadata: Metadata = { title: 'Promotion report' };
@@ -21,6 +22,8 @@ export default async function PromotionReportPage({ searchParams }: { searchPara
   return (
     <Workspace name="marketing-report" title="Marketing" summary="Discount and coupon use on paid orders in the period (from recorded redemptions).">
       <MarketingNav current="/marketing/report" />
+      {/* Referrals (2026-10-12): the referral activity and rewards are a page of this Report view (Marketing keeps its five views). */}
+      <p className="actions"><Link className="btn ghost sm" href="/marketing/referrals" data-link="referrals">Referrals and rewards</Link></p>
       <RangeForm from={range.from} to={range.to} />
       {rows.length === 0 ? <StateBlock title="No discounts were used in this period" name="promotions">Choose another period, or wait for orders that use a discount.</StateBlock> : (
         <div className="table-wrap"><table data-promotion-report>

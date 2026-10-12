@@ -10,7 +10,7 @@ import {launch} from './cdp.mjs';
 import {createDb} from '@kitsyuu/db';
 import {cancelCodOrder, cancelOrderByCustomer, createInvoiceForOrder} from '@kitsyuu/core';
 
-const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG, RZP_OFF_BASE, RZP_LIVE_BASE, RZP_OFF_LOG, RZP_LIVE_LOG} = process.env;
+const {BASE, RZP_BASE, DOWN_BASE, FAKE_RZP_URL, RZP_WEBHOOK_SECRET, SERVER_LOG, KITSYUU_DB_URL, TEST_REFUSED_BASE, NO_PROVIDER_BASE, TEST_REFUSED_LOG, CRON_SECRET, RZP_SERVER_LOG, RZP_OFF_BASE, RZP_LIVE_BASE, RZP_OFF_LOG, RZP_LIVE_LOG, LIMIT_BASE, LIMIT_DOWN_BASE, LIMIT_LOG, LIMIT_DOWN_LOG, LIMIT_REDIS_URL, LIMIT_REDIS_TOKEN} = process.env;
 const RETURNS_POLICY = 'All sales are final. We do not accept returns or offer refunds.';
 const mailsAbout = (log, orderNumber) => fs.readFileSync(log, 'utf8').split(`subject="Your KITSYUU order ${orderNumber} is confirmed"`).length - 1;
 if (!/@localhost[:/]/.test(KITSYUU_DB_URL || '')) throw new Error('commerce tests only run against a local database');
@@ -323,6 +323,43 @@ try {
     ok(`[config] ${label}: checkout says payment is not set up and offers no order button`, (await exists('[data-no-payments]')) && !(await exists('#st-checkout-form')),
       JSON.stringify({added, status: await text('#st-buy-status'), main: (await text('main')).slice(0, 200)}));
   }
+  // ---------- request limits on public endpoints (:3019 counts in a local stand-in for Redis; :3020 cannot reach its limiter) ----------
+  {
+    const check = (base, ip) => fetch(`${base}/api/cart/check`, {method: 'POST', headers: {'content-type': 'application/json', 'x-forwarded-for': ip}, body: JSON.stringify({lines: []})});
+    const leftIn = ms => ms - (Date.now() % ms);
+    while (leftIn(60_000) < 25_000) await new Promise(r => setTimeout(r, 1000));          // the cart-check minute
+    const statuses = [];
+    for (let i = 0; i < 12; i++) statuses.push(...(await Promise.all(Array.from({length: 10}, () => check(LIMIT_BASE, '203.0.113.21')))).map(r => r.status));
+    ok('[limits] cart check: 120 a minute from one address are answered, the rest are refused (429)', statuses.every(s => s === 200), JSON.stringify(statuses.filter(s => s !== 200).length));
+    const over = await check(LIMIT_BASE, '203.0.113.21');
+    ok('[limits] cart check: the 121st is refused with 429, a wait time and no stock data', over.status === 429 && over.headers.get('retry-after') === '60' && (await over.json()).lines === null, String(over.status));
+    ok('[limits] another address is not affected', (await check(LIMIT_BASE, '203.0.113.22')).status === 200);
+    ok('[limits] the store without a limiter (the main test server) is not limited', (await Promise.all(Array.from({length: 130}, () => check(BASE, '203.0.113.21')))).every(r => r.status === 200));
+    // The newsletter form, as a visitor uses it: 5 an hour from one address, the 6th is told to wait.
+    const subscribe = async n => {
+      await go(`${LIMIT_BASE}/`, '!!document.querySelector("[data-newsletter-form]")');
+      await until(`(()=>{const f=document.querySelector('[data-newsletter-form]');return !!f&&Object.keys(f).some(k=>k.startsWith('__reactProps'))})()`, 15000);
+      await fill('[data-newsletter-form] input[name=email]', `limit.news.${n}@test.local`);
+      await ev(`(()=>{const c=document.querySelector('[data-newsletter-form] input[name=consent]');if(!c.checked)c.click();return true})()`);
+      await ev(`(document.querySelector('[data-newsletter-form] button[type=submit], [data-newsletter-form] button').click(),true)`);
+      await until(`(document.querySelector('[data-newsletter-msg]')?.innerText || '').trim().length > 0`, 15000);
+      return text('[data-newsletter-msg]');
+    };
+    while (leftIn(3_600_000) < 120_000) await new Promise(r => setTimeout(r, 5000));     // the newsletter hour
+    const replies = []; for (let n = 1; n <= 6; n++) replies.push(await subscribe(n));
+    ok('[limits] newsletter: five sign-ups from one address are accepted', replies.slice(0, 5).every(r => /on the list/.test(r)), JSON.stringify(replies));
+    ok('[limits] newsletter: the sixth is told to wait, and is not stored', /Too many attempts\. Please try again in (a moment|\d+ seconds|\d+ minutes)\./.test(replies[5])
+      && (await q(`select count(*)::int n from newsletter_subscribers where email like 'limit.news.%@test.local'`))[0].n === 5, replies[5]);
+    const limitLog = fs.readFileSync(LIMIT_LOG, 'utf8');
+    ok('[limits] refusals are logged for monitoring, without the address, an email or the token', /\[rate-limit\] blocked name=cart-check caller=[a-f0-9]{12} /.test(limitLog) && /\[rate-limit\] blocked name=newsletter /.test(limitLog)
+      && !/203\.0\.113\.21|limit\.news\./.test(limitLog.split('\n').filter(l => l.includes('[rate-limit]')).join('\n')) && !limitLog.includes(LIMIT_REDIS_TOKEN));
+    // limiter unreachable: the store keeps serving, and says so in its log
+    const down = await Promise.all(Array.from({length: 5}, () => check(LIMIT_DOWN_BASE, '203.0.113.21')));
+    ok('[limits] limiter unreachable: requests are still served', down.every(r => r.status === 200), JSON.stringify(down.map(r => r.status)));
+    ok('[limits] limiter unreachable: logged as an error (once, not per request)', (fs.readFileSync(LIMIT_DOWN_LOG, 'utf8').match(/\[rate-limit\] ERROR: the limiter is not answering/g) || []).length === 1);
+    ok('[limits] a server without limiter settings says in its log that limits are off', /\[rate-limit\] not configured/.test(fs.readFileSync(SERVER_LOG, 'utf8')));
+  }
+
   // Razorpay is the chosen gateway but cannot start: :3017 has no credentials; :3018 has a live-format key without RAZORPAY_LIVE_MODE=on.
   for (const [base, label] of [[RZP_OFF_BASE, 'Razorpay selected without credentials'], [RZP_LIVE_BASE, 'a live Razorpay key without the live switch']]) {
     await addToCart(base, P3, 1);

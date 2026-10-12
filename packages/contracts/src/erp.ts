@@ -196,6 +196,42 @@ export const refundInput = z.object({
   returnId: uuid, mode: z.enum(['provider', 'manual']), amount: money(),
   reference: optText(120), note: reqText(3, 300, 'Say why (at least 3 characters).'),
 }).superRefine((v, ctx) => { if (v.mode === 'manual' && !v.reference) ctx.addIssue({ code: 'custom', path: ['reference'], message: 'Enter the reference of the refund you made (bank / UPI / Razorpay dashboard).' }); });
+// ============================== leads pipeline + content studio (2026-10-12) ==============================
+const optDay = z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.').nullable());
+const optLink = z.string().trim().max(500).optional().transform(v => v || null).pipe(z.string().regex(/^https:\/\/\S+$/, 'Enter a link that starts with https://').nullable());
+const optChoice = <T extends [string, ...string[]]>(values: T) => z.union([z.enum(values), z.literal('').transform(() => null)]).optional().transform(v => v ?? null);
+export const leadInput = z.object({
+  leadId: optUuid, name: reqText(1, 120, 'Enter the name.'),
+  phone: z.string().trim().min(7, 'Enter a phone number.').max(24).refine(v => { const d = v.replace(/\D/g, ''); return d.length >= 7 && d.length <= 15; }, 'Enter a phone number (7 to 15 digits).'),
+  email: z.string().trim().toLowerCase().max(254).optional().transform(v => v || null).pipe(z.email({ message: 'Enter a valid email address.' }).nullable()),
+  interest: optText(120), timeline: optText(80),
+  source: z.enum(['manual', 'ads', 'instagram', 'whatsapp', 'walk_in', 'referral', 'website', 'other']).default('manual'),
+  notes: optText(2000),
+});
+const leadStage = z.enum(['new', 'engaged', 'qualified', 'visited', 'converted', 'disqualified'], { message: 'Reload the page and try again.' });
+export const leadMoveInput = z.object({ leadId: uuid, stage: leadStage, expectedStage: leadStage, note: optText(300) });
+export const ideaInput = z.object({ ideaId: optUuid, title: reqText(1, 160, 'Give the idea a title.'), description: optText(2000), link: optLink,
+  status: z.enum(['exploring', 'shortlisted', 'parked']).optional() });
+const ideaStatus = z.enum(['exploring', 'shortlisted', 'parked'], { message: 'Reload the page and try again.' });
+export const ideaStatusInput = z.object({ ideaId: uuid, status: ideaStatus, expectedStatus: ideaStatus });
+export const ideaIdInput = z.object({ ideaId: uuid });
+export const pieceInput = z.object({
+  pieceId: optUuid, title: reqText(1, 160, 'Give the piece a title.'),
+  platform: optChoice(['instagram', 'facebook', 'youtube', 'whatsapp', 'other']), format: optChoice(['reel', 'post', 'story', 'video', 'other']),
+  ownerId: z.union([uuid, z.literal('').transform(() => null)]).optional().transform(v => v ?? null), targetOn: optDay,
+  hook: optText(300), script: optText(6000), footageLink: optLink, finalLink: optLink, postedLink: optLink, notes: optText(2000),
+});
+const pieceStage = z.enum(['idea', 'script', 'shoot', 'edit', 'scheduled', 'posted'], { message: 'Reload the page and try again.' });
+export const pieceMoveInput = z.object({ pieceId: uuid, expectedStage: pieceStage });
+export const pieceDecisionInput = z.object({ pieceId: uuid, decision: z.enum(['approve', 'send_back']), expectedStage: pieceStage, note: optText(300) });
+export const pieceDateInput = z.object({ pieceId: uuid, targetOn: optDay });
+export const pieceIdInput = z.object({ pieceId: uuid });
+
+/** 2026-10-12: what staff found with the payment provider for a refund that stayed pending. */
+export const settleRefundInput = z.object({
+  refundId: uuid, outcome: z.enum(['processed', 'failed'], { message: 'Choose what the provider shows.' }),
+  reference: optText(120), note: reqText(3, 300, 'Say what you found (at least 3 characters).'),
+}).superRefine((v, ctx) => { if (v.outcome === 'processed' && !v.reference) ctx.addIssue({ code: 'custom', path: ['reference'], message: "Enter the provider's refund id." }); });
 export const returnListQuery = z.object({
   q: z.string().trim().max(40).optional().transform(v => v || undefined),
   status: z.enum(['open', 'all', ...RETURN_STATUSES]).default('open'), page,

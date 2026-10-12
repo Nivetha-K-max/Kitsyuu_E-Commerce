@@ -55,7 +55,7 @@ const lastMailLink = async prevCount => { for (let i = 0; i < 50; i++) { const m
 const cookie = async () => (await b.send('Network.getAllCookies')).cookies.find(c => c.name === '__Host-kitsyuu_admin');
 const signOutBrowser = () => b.send('Network.clearBrowserCookies');
 const allErrors = [];
-const visit = async (p, ready = 'document.readyState==="complete"') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+const visit = async (p, ready = 'document.readyState==="complete"') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e))); };
 
 try {
   await b.viewport(1440, 900);
@@ -103,7 +103,7 @@ try {
   ok('dashboard customers = database', (await kpi('Customers')).startsWith(String(dbCounts.c)));
   ok('dashboard shows no inventory alerts (none in the data)', !!(await ev('!!document.querySelector("[data-empty=low-stock]")')));
   const nav = await ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
-  ok('super admin sees every section', nav === 'Dashboard|Orders|POS billing|Customers|Products|Inventory|Payments|Returns|Shipping|Reviews|Support|Purchasing|Production|Pricing & discounts|Marketing|Store content|Finance|Reports|Catalogue setup|Team & access|Configuration|System', nav);
+  ok('super admin sees every section', nav === 'Dashboard|Orders|POS billing|Customers|Products|Inventory|Payments|Returns|Shipping|Reviews|Support|Purchasing|Production|Pricing & discounts|Marketing|Store content|Leads|Content studio|Finance|Reports|Catalogue setup|Team & access|Configuration|System', nav);
   // Client change request (2026-10-03): no quick-action buttons and no Recent activity on the dashboard; the audit log itself stays.
   ok('dashboard: no "New product" / "Open reports" quick actions, no Recent activity', !(await ev('!!document.querySelector(\'.page-head a[href="/products/new"], .page-head a[href="/reports"]\')'))
     && !/Recent activity/i.test(await text('main')) && !(await ev('!!document.querySelector("#act-h")')));

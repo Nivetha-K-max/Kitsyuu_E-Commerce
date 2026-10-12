@@ -42,7 +42,7 @@ const count = sel => ev(`document.querySelectorAll(${JSON.stringify(sel)}).lengt
 const here = () => ev('location.pathname + location.search');
 const allErrors = [];
 const READY = '!!document.querySelector("main") && !document.querySelector("[data-loading]")';
-const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e))); };
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const click = async sel => {
   const s = JSON.stringify(sel);

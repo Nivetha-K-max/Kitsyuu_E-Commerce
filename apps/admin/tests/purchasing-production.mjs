@@ -46,7 +46,7 @@ const attr = (sel, name) => ev(`document.querySelector(${JSON.stringify(sel)})?.
 const count = sel => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
 const list = (sel, expr) => ev(`[...document.querySelectorAll(${JSON.stringify(sel)})].map(e=>${expr})`);
 const READY = '!!document.querySelector("main") && !document.querySelector("[data-loading]")';
-const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e)).map(e => `${p}: ${e}`)); };
+const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e)).map(e => `${p}: ${e}`)); };
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const asked = () => ev('(window.__q ?? []).join(" | ")');
 const click = async sel => { await hydrated(sel); await ev(`document.querySelector(${JSON.stringify(sel)}).click(),true`); };
@@ -379,6 +379,86 @@ try {
   await submit('#production-start-form');
   await until(`!document.querySelector('#production-start-form')`, 15000);
 
+  // ---------- Production calendar: milestones and tasks (2026-10-12) ----------
+  const pr3Id = pr3Path.split('/').pop();
+  const [pr3] = await q('select number from production_orders where id = $1', [pr3Id]);
+  const calToday = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Kolkata'}).format(new Date());
+  const calDay = n => { const d = new Date(calToday + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const msRows = () => q("select kind, title, to_char(due_on, 'YYYY-MM-DD') due, done_at is not null done from production_milestones where production_order_id = $1 order by due_on, created_at", [pr3Id]);
+  await visit('/production', '!!document.querySelector("[data-workspace=production]")');
+  ok('production: the list links to the calendar', (await attr('[data-link=production-calendar]', 'href')) === '/production/calendar');
+  await visit(pr3Path, '!!document.querySelector("[data-section=milestones]")');
+  ok('production order: no milestone or task exists until staff add one (none is automatic)', (await exists('[data-empty=milestones]')) && (await q('select count(*)::int n from production_milestones'))[0].n === 0);
+  const addMs = async (kind, due, title = '') => {
+    await visit(pr3Path, '!!document.querySelector("[data-add-milestone]")');
+    await ev("document.querySelector('[data-add-milestone]').open = true");
+    await fill('#milestone-form select[name=kind]', kind); await fill('#milestone-form input[name=title]', title); await fill('#milestone-form input[name=dueOn]', due);
+    await submit('#milestone-form');
+  };
+  await addMs('ready_for_trial', calToday);
+  ok('production order: "Ready for Trial" is added and listed with its date', (await until("!!document.querySelector('[data-milestone=ready_for_trial]')", 15000)) && /Added to the calendar/.test(await message('#milestone-form'))
+    && (await text('[data-milestone=ready_for_trial] [data-milestone-date]')).trim() === calToday, await message('#milestone-form'));
+  await visit(pr3Path, '!!document.querySelector("[data-add-milestone]")');
+  ok('production order: a milestone that is set is no longer offered; Ex-Factory and Task still are', (await list('#milestone-form select[name=kind] option', 'e.value')).join('|') === 'ex_factory|task');
+  // The same milestone sent again, as an out-of-date page (or a second tab) would send it.
+  await ev("document.querySelector('[data-add-milestone]').open = true");
+  await sendAs('#milestone-form', 'kind', 'ready_for_trial');
+  await fill('#milestone-form input[name=dueOn]', calDay(1)); await submit('#milestone-form');
+  ok('production order: a second "Ready for Trial" is refused and says why; there is still exactly one', /already has its "Ready for Trial" milestone/.test(await message('#milestone-form'))
+    && (await msRows()).filter(r => r.kind === 'ready_for_trial').length === 1, await message('#milestone-form'));
+  await addMs('ex_factory', calDay(2));
+  await addMs('task', calDay(-1), 'Trim check (e2e)');
+  await visit(pr3Path, '!!document.querySelector("[data-milestones]")');
+  ok('production order: Ex-Factory and a task are added; yesterday\'s open task is shown as overdue', JSON.stringify((await msRows()).map(r => [r.kind, r.due])) === JSON.stringify([['task', calDay(-1)], ['ready_for_trial', calToday], ['ex_factory', calDay(2)]])
+    && (await attr('[data-milestone=task]', 'data-milestone-state')) === 'overdue' && (await attr('[data-milestone=ex_factory]', 'data-milestone-state')) === 'open', JSON.stringify(await msRows()));
+  // The date of a milestone is changed in place: it moves, no second one appears.
+  const [exf] = await q("select id from production_milestones where production_order_id = $1 and kind = 'ex_factory'", [pr3Id]);
+  await ev("document.querySelector('[data-milestone=ex_factory] details').open = true");
+  await fill('#ms-edit-' + exf.id + ' input[name=dueOn]', calDay(3)); await submit('#ms-edit-' + exf.id);
+  ok('production order: changing Ex-Factory\'s date moves that milestone (still one)', JSON.stringify((await msRows()).filter(r => r.kind === 'ex_factory').map(r => r.due)) === JSON.stringify([calDay(3)]));
+
+  await visit('/production/calendar', '!!document.querySelector("[data-calendar=month]")');
+  const monthKeys = await list('[data-calendar=month] [data-event]', 'e.dataset.event');
+  ok('calendar: opens on the month, on the frame, with Month · Week · Day and a way back to Production', (await exists('[data-workspace=production-calendar]')) && (await list('[data-calendar-views] [data-view]', 'e.dataset.view')).join('|') === 'month|week|day'
+    && (await attr('[data-calendar-views] [aria-current=page]', 'data-view')) === 'month' && (await count('[data-calendar=month] [data-day]')) === 42 && (await exists('a[href="/production"]')));
+  ok('calendar month: today holds the Ready for Trial of this order, linked to it; no entry appears twice', (await attr('[data-day="' + calToday + '"] [data-event-kind=ready_for_trial]', 'href')) === pr3Path
+    && new RegExp(pr3.number).test(await text('[data-day="' + calToday + '"] [data-event-kind=ready_for_trial]')) && new Set(monthKeys).size === monthKeys.length
+    && (await count('[data-calendar=month] [data-event-kind=ready_for_trial]')) === 1 && (await count('[data-calendar=month] [data-event-kind=ex_factory]')) <= 1, monthKeys.join());
+  ok('calendar month: the cancelled production order is not on it', !(await ev("[...document.querySelectorAll('[data-calendar=month] [data-event]')].some(e => e.getAttribute('href') === " + JSON.stringify(pr2Path) + ")")));
+  await click('[data-calendar-views] [data-view=week]');
+  ok('calendar week: seven days of the same entries (the view is in the address)', (await until("/view=week/.test(location.search) && document.querySelectorAll('[data-calendar=week] [data-day]').length === 7", 20000))
+    && (await exists('[data-calendar=week] [data-day="' + calToday + '"] [data-event-kind=ready_for_trial]')));
+  const weekTitle = await text('[data-calendar-title]');
+  await click('[data-calendar-next]');
+  ok('calendar week: Next moves one week on; Today comes back', (await until("/date=/.test(location.search) && document.querySelector('[data-calendar-title]')?.innerText !== " + JSON.stringify(weekTitle), 20000))
+    && !(await exists('[data-day="' + calToday + '"]')) && (await attr('[data-calendar-today]', 'href')) === '/production/calendar?view=week');
+  await visit('/production/calendar?view=day&date=' + calDay(-1), '!!document.querySelector("[data-calendar=day]")');
+  const [task] = await q("select id from production_milestones where production_order_id = $1 and kind = 'task'", [pr3Id]);
+  const taskRow = '[data-calendar-day] [data-event="m:' + task.id + '"]';
+  ok('calendar day: yesterday lists the task with its order, overdue, with Mark done', (await attr(taskRow, 'data-event-state')) === 'overdue' && /Trim check \(e2e\)/.test(await text(taskRow)) && new RegExp(pr3.number).test(await text(taskRow)) && (await exists('#ms-done-' + task.id)));
+  await submit('#ms-done-' + task.id);
+  ok('calendar day: marked done, by this staff member; it is no longer overdue', (await until("document.querySelector(" + JSON.stringify(taskRow) + ")?.dataset.eventState === 'done'", 15000))
+    && (await q('select s.email from production_milestones m join staff_users s on s.id = m.done_by where m.id = $1', [task.id]))[0]?.email === 'pp.root@test.local' && !(await exists('#ms-del-' + task.id)));
+  await visit('/production/calendar?view=day&date=2031-02-03', '!!document.querySelector("[data-empty=calendar-day]")');
+  ok('calendar day: a day with nothing says so', /Nothing on this day/.test(await text('[data-empty=calendar-day]')));
+  await visit('/production/calendar?view=year&date=not-a-date', '!!document.querySelector("[data-calendar=month]")');
+  ok('calendar: an unknown view or date falls back to this month', await exists('[data-day="' + calToday + '"]'));
+  // From the calendar: a task for a customer order is accepted, a production milestone on it is refused.
+  const [custOrder] = await q("select id, order_number from orders where status in ('paid', 'processing', 'shipped') order by created_at limit 1");
+  if (custOrder) {
+    await openDrawer('new-milestone', '#create-milestone-form');
+    await fill('#create-milestone-form input[name=ref]', custOrder.order_number); await fill('#create-milestone-form select[name=kind]', 'ex_factory'); await fill('#create-milestone-form input[name=dueOn]', calToday);
+    await submit('#create-milestone-form');
+    ok('calendar: "Ex-Factory" on a customer order is refused (a production milestone belongs to a production order)', /production milestone: it belongs to a production order, not to a customer order/.test(await message('#create-milestone-form'))
+      && (await q('select count(*)::int n from production_milestones where order_id is not null'))[0].n === 0, await message('#create-milestone-form'));
+    await fill('#create-milestone-form select[name=kind]', 'task'); await fill('#create-milestone-form input[name=title]', 'Call about delivery (e2e)');
+    await submit('#create-milestone-form');
+    ok('calendar: a task for a customer order is added and shown today, linked to the order', /Added to the calendar/.test(await message('#create-milestone-form'))
+      && (await until("[...document.querySelectorAll('[data-day=\"" + calToday + "\"] [data-event-kind=task]')].some(e => e.getAttribute('href') === '/orders/" + custOrder.id + "')", 15000)), await message('#create-milestone-form'));
+  }
+  const calAudit = Object.fromEntries((await q("select action, count(*)::int n from audit_logs where entity_type = 'production_milestones' group by 1")).map(r => [r.action, r.n]));
+  ok('calendar: every change is audited (3 added on the order' + (custOrder ? ' + 1 customer task' : '') + ', 1 date change, 1 done)', calAudit['milestone.create'] === (custOrder ? 4 : 3) && calAudit['milestone.update'] === 1 && calAudit['milestone.done'] === 1, JSON.stringify(calAudit));
+
   // ================= inventory manager: receives goods and records the quality check; nothing else =================
   ok('inventory manager signs in', await signIn('inventory', 'Purchasing Stock'));
   await visit('/purchase-orders', '!!document.querySelector("[data-po-table]")');
@@ -407,6 +487,12 @@ try {
   await visit(pr3Path + '?tab=output', '!!document.querySelector("#qc-form")');
   ok('inventory manager: the quality check form is offered on Output', await exists('#qc-form'));
 
+  await visit('/production/calendar', '!!document.querySelector("[data-calendar=month]")');
+  ok('inventory manager: reads the calendar but cannot add to it; a customer order\'s task is not shown (no orders.read)', !(await exists('[data-drawer-open=new-milestone]')) && (await exists('[data-day="' + calToday + '"] [data-event-kind=ready_for_trial]'))
+    && !(await ev("[...document.querySelectorAll('[data-event]')].some(e => (e.getAttribute('href') ?? '').startsWith('/orders/'))")));
+  await visit(pr3Path, '!!document.querySelector("[data-milestones]")');
+  ok('inventory manager: a production order lists its milestones read-only', (await count('[data-milestone]')) === 3 && !(await exists('#milestone-form')) && !(await exists('[id^=ms-done-],[id^=ms-edit-],[id^=ms-del-]')));
+
   // ================= support: neither purchasing nor production =================
   ok('support signs in', await signIn('support', 'Purchasing Support'));
   const gates = [];
@@ -414,6 +500,9 @@ try {
     await visit(p); gates.push((await exists('[data-gate=forbidden]')) && !(await exists('[data-po-table],[data-entity],[data-vendors-table],[data-materials-table],[data-production-table],#receive-form,#qc-form,#create-po-form,[data-po-print],[data-grn-print]')));
   }
   ok('no procurement.read / production.read: no list, order, receipt, vendor, material or production page is served', gates.every(Boolean), gates.join());
+
+  await visit('/production/calendar');
+  ok('no production.read: the production calendar is not served', (await exists('[data-gate=forbidden]')) && !(await exists('[data-calendar]')));
 
   // ================= phone width =================
   await b.send('Network.clearBrowserCookies');
@@ -429,6 +518,12 @@ try {
       await visit(p);
       ok(`390px: no sideways page scroll: ${p.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id')}`, await noOverflow());
     }
+    const calWide = [];
+    for (const p of ['/production/calendar', '/production/calendar?view=week', '/production/calendar?view=day&date=' + calDay(-1), pr3Path]) { await visit(p); if (!(await noOverflow())) calWide.push(p); }
+    ok('390px: no sideways page scroll on the calendar (month, week, day) or a production order with milestones', calWide.length === 0, calWide.join(', '));
+    await visit('/production/calendar', '!!document.querySelector("[data-calendar=month]")');
+    ok('390px calendar: the month is a list of the days that have entries, each naming its weekday', await ev("(()=>{const c=document.querySelector('[data-calendar=month]');const days=[...c.querySelectorAll('[data-day]')].filter(d=>getComputedStyle(d).display!=='none');return getComputedStyle(c).display==='block' && days.length>0 && days.every(d=>Number(d.dataset.dayCount)>0 && getComputedStyle(d.querySelector('.cal-dow')).display!=='none' && d.getBoundingClientRect().right<=innerWidth+1)})()"));
+    await b.shot('p9-390-calendar.png');
     await visit('/purchase-orders', '!!document.querySelector("[data-po-table]")');
     ok('390px orders: each order is a card that keeps its figures, labelled', await ev(`(()=>{const r=document.querySelector('[data-po]');const box=r.getBoundingClientRect();
       return getComputedStyle(r).display !== 'table-row' && box.width <= innerWidth && [...r.querySelectorAll('td[data-label]')].every(td=>getComputedStyle(td,'::before').content.includes(td.dataset.label))})()`));
@@ -455,6 +550,7 @@ try {
     await visit(poPath + '?tab=receiving', '!!document.querySelector("[data-po-receipts]")'); await b.shot('p9-receiving.png');
     await visit(prPath, '!!document.querySelector("[data-production-progress]")'); await b.shot('p9-production.png');
     await visit('/purchase-orders', '!!document.querySelector("[data-po-table]")'); await b.shot('p9-purchase-orders.png');
+    await visit('/production/calendar', '!!document.querySelector("[data-calendar=month]")'); await b.shot('p9-calendar.png');
     await visit(`/vendors/${vendor.id}`, '!!document.querySelector("[data-entity=vendor]")'); await b.shot('p9-vendor.png');
   }
 

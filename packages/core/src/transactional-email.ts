@@ -31,6 +31,9 @@ export const EMAIL_EVENTS = {
   'order.payment_request': 'notifications.payment_request',
   'return.status': 'notifications.return_status',
   'refund.processed': 'notifications.refund_processed',
+  // 2026-10-12: the tax invoice by email. Sent automatically when an invoice is issued only with this switch on; staff can
+  // always send it by hand from the invoice or the order (sendInvoiceEmail, finance.ts), which does not need the switch.
+  'invoice.issued': 'notifications.invoice_issued',
   // For the payment gateway (not connected to anything yet): the gateway integration calls sendTransactionalEmail with
   // these when a payment fails or is still pending. A successful payment is the order confirmation ('order.placed').
   'payment.failed': 'notifications.payment_failed',
@@ -82,7 +85,8 @@ async function deliver(mailer: Mailer, m: MailMessage, tries = QUICK_TRIES, budg
     nothing to say (wrong state, no email address). With an order, the same email is sent once: a second call answers
     'duplicate'. Never throws. */
 export async function sendTransactionalEmail(db: Db, mailer: Mailer, event: EmailEvent, build: (q: Queryable) => Promise<BuiltEmail | null>,
-  opts: { /** Skip the switch (used by the retry, which has already checked it). */ checked?: boolean; quickTries?: number[]; quickBudgetMs?: number } = {}): Promise<TransactionalEmailResult> {
+  opts: { /** Skip the switch (used by the retry, which has already checked it). */ checked?: boolean; quickTries?: number[]; quickBudgetMs?: number;
+    /** Send even if this email was already sent for the order (staff sending an invoice again on purpose). Still one at a time, still logged. */ resend?: boolean } = {}): Promise<TransactionalEmailResult> {
   try {
     if (!opts.checked && !(await emailEnabled(db, event))) return { sent: false, reason: 'off' };
     const first = await build(db);
@@ -101,8 +105,8 @@ export async function sendTransactionalEmail(db: Db, mailer: Mailer, event: Emai
       if (!m || !m.to?.trim() || !m.orderId) return { sent: false, reason: 'no_recipient' } as const;
       const done = await tx.selectFrom('notification_log').select('id').where('order_id', '=', m.orderId).where('event', '=', event)
         .where('subject', '=', m.subject.slice(0, 200)).where('status', '=', 'sent').executeTakeFirst();
-      if (done) return { sent: false, reason: 'duplicate' } as const;
-      const error = await deliver(mailer, { to: m.to, subject: m.subject, text: m.text, html: m.html, idempotencyKey: emailIdempotencyKey(event, m.orderId, m) }, opts.quickTries, opts.quickBudgetMs);
+      if (done && !opts.resend) return { sent: false, reason: 'duplicate' } as const;
+      const error = await deliver(mailer, { to: m.to, subject: m.subject, text: m.text, html: m.html, ...(opts.resend ? {} : { idempotencyKey: emailIdempotencyKey(event, m.orderId, m) }) }, opts.quickTries, opts.quickBudgetMs);
       await log(tx, m, error);
       return error ? { sent: false, reason: 'failed' } as const : { sent: true } as const;
     });
@@ -133,7 +137,7 @@ export type EmailRetryRun = { checked: number; sent: number; failed: number; ski
 export async function retryTransactionalEmails(db: Db, mailer: Mailer, rebuilders: Partial<Record<EmailEvent, EmailRebuilder>>,
   opts: { limit?: number; now?: Date; quickTries?: number[] } = {}): Promise<EmailRetryRun> {
   const run: EmailRetryRun = { checked: 0, sent: 0, failed: 0, skipped: 0, waiting: 0, gaveUp: 0, missing: 0 };
-  if (mailer.kind === 'console') return { ...run, noProvider: true };
+  if (mailer.kind === 'console' || mailer.kind === 'unconfigured') return { ...run, noProvider: true };
   const now = opts.now ?? new Date(), limit = opts.limit ?? 50;
   const since = new Date(now.getTime() - EMAIL_RETRY_WINDOW_HOURS * 3_600_000);
   const tally = (r: TransactionalEmailResult) => { if (r.sent) run.sent++; else if (r.reason === 'failed' || r.reason === 'error') run.failed++; else run.skipped++; };

@@ -610,6 +610,18 @@ export const materialInput = z.object({
   unit: z.string().trim().min(1, 'Enter the unit (m, kg, pcs…).').max(20),
   reorderLevel: z.string().trim().optional().transform(v => v || null).pipe(z.string().regex(/^\d{1,10}(\.\d{1,3})?$/, 'Enter a number, up to 3 decimals.').transform(Number).nullable()),
   notes: optText(1000),
+  /** 2026-10-12, packaging: what the item is (set when it is created), and its usual supplier and where it is kept (a form that
+      does not send them leaves them as they are; an empty choice clears them). */
+  kind: z.enum(['material', 'packaging']).optional(),
+  vendorId: z.union([uuid, z.literal('').transform(() => null)]).optional(),
+  locationId: z.union([uuid, z.literal('').transform(() => null)]).optional(),
+});
+/** Packaging used (2026-10-12): how much, and the stock the person saw, so a form sent twice is recorded once. */
+export const packagingUseInput = z.object({
+  materialId: uuid,
+  qty: z.string().trim().regex(/^\d{1,10}(\.\d{1,3})?$/, 'Enter the quantity used, up to 3 decimals.').transform(Number).refine(n => n > 0, 'Enter a quantity above zero.'),
+  expectedStock: z.string().trim().regex(/^\d{1,11}(\.\d{1,3})?$/, 'Reload the page and try again.').transform(Number),
+  note: z.string().trim().min(1, 'Say what it was used for.').max(300),
 });
 export const adjustMaterialInput = z.object({
   materialId: uuid,
@@ -723,6 +735,20 @@ export const productionStatusInput = z.object({
   expectedStatus: z.enum(['planned', 'in_progress', 'completed', 'cancelled']),
   note: z.string().trim().max(300).optional().transform(v => v || null),
 });
+/** Production calendar (2026-10-12): a milestone or task. On a new entry `kind` is required and it belongs to the production
+    order given, or to the order whose number is typed in `ref`; on an existing one (milestoneId) only date, note and a task's title change. */
+export const milestoneInput = z.object({
+  milestoneId: uuid.optional(),
+  productionOrderId: uuid.optional(),
+  ref: z.string().trim().max(40).optional().transform(v => v || null),
+  kind: z.enum(['ready_for_trial', 'ex_factory', 'task']).optional(),
+  title: z.string().trim().max(120, 'At most 120 characters.').optional().transform(v => v || null),
+  dueOn: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a date.'),
+  note: z.string().trim().max(300).optional().transform(v => v || null),
+});
+const yesNo = z.enum(['yes', 'no'], { message: 'Reload the page and try again.' }).transform(v => v === 'yes');
+export const milestoneDoneInput = z.object({ milestoneId: uuid, done: yesNo, expectedDone: yesNo });
+export const milestoneDeleteInput = z.object({ milestoneId: uuid });
 export const qualityCheckInput = z.object({
   productionOrderId: uuid,
   passed: wholeQty('Enter the pieces that passed (0 or more).'),

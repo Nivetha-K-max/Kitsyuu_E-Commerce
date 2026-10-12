@@ -35,6 +35,8 @@ export async function logoutAction(): Promise<void> {
 
 export async function forgotPasswordAction(_: ActionState, form: FormData): Promise<ActionState> {
   return handle(resetRequestInput, form, async input => {
+    // The same answer for every address: this deployment cannot send email at all.
+    if (mailer().kind === 'unconfigured') return { ok: false, message: 'Reset emails cannot be sent at the moment. Ask an administrator to check the email settings.' };
     await requestStaffPasswordReset(db(), mailer(), input, { ...(await requestContext()), resetUrl });
     return { ok: true, message: 'If an active staff account uses that email, a reset link has been sent to it.' };
   });

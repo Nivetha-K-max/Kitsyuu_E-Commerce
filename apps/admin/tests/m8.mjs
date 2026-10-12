@@ -41,7 +41,7 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const navText = () => ev(`[...document.querySelectorAll('.nav a')].map(a=>a.textContent).join('|')`);
 const allErrors = [];
-const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e))); };
 /* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const confirms = () => ev('window.__q ?? []');
@@ -375,7 +375,7 @@ try {
   ok('provider notifications listed without their content', (await exists('[data-event-row="razorpay:evt_e2e"]')) && !/hidden-e2e/.test(await ev('document.documentElement.outerHTML')));
 
   // ---------- settings ----------
-  await visit('/settings', '!!document.querySelector("[data-settings-table]")');
+  await visit('/settings?group=all', '!!document.querySelector("[data-settings-table]")');
   // Client change request (2026-10-03): Settings is the Configuration area, with an index of areas over the same registry.
   ok('configuration: the page is titled Configuration and lists Company, Locations, Billing, Tax, POS and Orders',
     /Configuration/.test(await text('h1')) && await ev(`[...document.querySelectorAll('[data-config-area]')].map(d => d.dataset.configArea).join()`) === 'Company,Locations,Billing,Tax,POS,Orders');
@@ -385,10 +385,10 @@ try {
   ok('settings: tax and account security locked', (await exists('[data-setting="billing.prices_include_tax"] [data-locked]')) && (await exists('[data-setting="auth.login_max_failures"] [data-locked]')));
   // M10 made company details and the delivery charge editable too; business rules (tax, hold time, security) stay locked.
   const editable = await ev(`[...document.querySelectorAll('[data-settings-table] form')].map(f=>f.closest('[data-setting]').dataset.setting).sort().join()`);
-  ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable.split(',').filter(k => !k.startsWith('alerts.')).join() === ['carts.abandon_after_hours','checkout.abandoned_after_hours','checkout.cart_refresh_minutes','company.address','company.gstin','company.legal_name','company.phone','company.state','company.support_email','discounts.enabled','discounts.stacking','inventory.low_stock_threshold',
+  ok('settings: forms only for safe settings (low stock, company, delivery); no free-form editor', editable.split(',').filter(k => !k.startsWith('alerts.')).join() === ['carts.abandon_after_hours','checkout.abandoned_after_hours','checkout.cart_refresh_minutes','company.address','company.gstin','company.legal_name','company.phone','company.state','company.support_email','discounts.enabled','discounts.first_customer_code','discounts.stacking','inventory.low_stock_threshold',
     'loyalty.earn_points_per_100','loyalty.earn_when','loyalty.enabled','loyalty.expiry_months','loyalty.max_redeem_points','loyalty.min_redeem_points','loyalty.point_value_paise',
-    'notifications.abandoned_cart','notifications.abandoned_checkout','notifications.order_cancelled','notifications.order_delivered','notifications.order_shipped','notifications.refund_processed','notifications.return_status','notifications.support_reply',
-    'payments.cod_discount','payments.cod_enabled','payments.cod_max_order','payments.cod_min_order','pricing.max_sale_discount_percent','returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method',
+    'notifications.abandoned_cart','notifications.abandoned_checkout','notifications.invoice_issued','notifications.order_cancelled','notifications.order_delivered','notifications.order_shipped','notifications.refund_processed','notifications.return_status','notifications.support_reply',
+    'payments.cod_discount','payments.cod_enabled','payments.cod_max_order','payments.cod_min_order','pricing.max_sale_discount_percent','referrals.coupon_valid_days','referrals.enabled','referrals.min_order_paise','referrals.reward_paise','returns.enabled','returns.window_days','reviews.eligibility','shipping.flat_rate_paise','shipping.free_from_paise','shipping.method',
     // commerce workflows (2026-10-01)
     'discounts.staff_max_percent','emails.cart_reminder_intro','emails.cart_reminder_subject','notifications.abandoned_cart_auto','notifications.order_packed','notifications.order_tracking','notifications.payment_request',   // order_tracking: Phase 6 (2026-10-08)
     'payments.cod_discount_min_order','payments.cod_discount_percent','payments.cod_discount_with_other',
@@ -411,7 +411,7 @@ try {
 
   // ================= manager: settings read-only =================
   ok('manager signs in', await signIn('manager', 'Manager M8'));
-  await visit('/settings', '!!document.querySelector("[data-settings-table]")');
+  await visit('/settings?group=all', '!!document.querySelector("[data-settings-table]")');
   ok('manager sees settings without any form', (await ev(`document.querySelectorAll('[data-settings-table] form').length`)) === 0);
   await visit('/payments', '!!document.querySelector("[data-payments-tabs]")');
   ok('manager (billing.read, no refunds.create) sees payments', await exists('[data-payments-tabs]'));
@@ -473,10 +473,10 @@ try {
   ok('admin signs in again', await until(`location.pathname==='/dashboard'`));
 
   // ================= M10: company details, delivery charge, packing slip =================
-  await visit('/settings');
+  await visit('/settings?group=all');
   ok('M10 settings: Company and Shipping groups are editable', (await exists('[data-setting="company.legal_name"] form')) && (await exists('[data-setting="shipping.method"] select')));
   await fill('[data-setting="company.legal_name"] input[name=value]', 'KITSYUU E2E Pvt Ltd'); await submit('[data-setting="company.legal_name"] form');
-  await visit('/settings');
+  await visit('/settings?group=all');
   ok('M10 settings: company name saved and shown', /KITSYUU E2E Pvt Ltd/.test(await text('[data-setting="company.legal_name"] [data-setting-value]')));
   await visit(`/orders/${o2}/packing-slip`, '!!document.querySelector("[data-packing-slip]")');
   const slip = await text('[data-packing-slip]');

@@ -19,7 +19,8 @@ export default async function SignupPage({ searchParams }: { searchParams: SP })
         <h1 id="st-page-title">Create account</h1>
         <div className="st-plp-aside"><p className="st-result-count">Account</p><p>We will email you a link to confirm your address before your first log-in.</p></div>
       </header>
-      <SignupForm next={next ? safeNext(next) : undefined} />
+      {/* Referrals (2026-10-12): a code carried in the link (?ref=) is sent with the form; the server decides whether it counts. */}
+      <SignupForm next={next ? safeNext(next) : undefined} referral={/^[A-Za-z0-9]{6,12}$/.test(one((await searchParams).ref)) ? one((await searchParams).ref).toUpperCase() : undefined} />
     </div>
   );
 }

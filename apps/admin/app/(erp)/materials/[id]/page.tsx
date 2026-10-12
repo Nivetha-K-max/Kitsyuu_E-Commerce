@@ -6,20 +6,23 @@
    The ledger is material_movements, the only record of material stock: every receipt (from a goods receipt on a purchase
    order), every quantity production used (against a production order), and every correction or write-off, each with the
    balance after it. It is read-only here. A correction is made with the existing action, which writes one ledger row
-   through adjust_material_stock; nothing on this page sets a quantity directly. */
+   through adjust_material_stock; nothing on this page sets a quantity directly.
+   2026-10-12: a packaging item is the same record (kind 'packaging'). It also shows its usual supplier and where it is
+   kept, and has "Record use": one ledger row for packaging used, carrying the stock this page showed so a form sent twice
+   (or after someone else recorded) is refused instead of counted twice. */
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { listMaterials } from '@kitsyuu/core';
+import { listMaterials, materialPlaces } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Entity, Facts, Section, StateBlock } from '@/components/frame';
 import { FilterLink } from '@/components/NavFrame';
 import { Drawer } from '@/components/overlays';
 import { Forbidden, PageHead } from '@/components/ui';
-import { formatDateTime, formatNumber } from '@/lib/format';
+import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { adjustMaterialAction, saveMaterialAction } from '../actions';
+import { adjustMaterialAction, recordPackagingUseAction, saveMaterialAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Material' };
 type Params = Promise<{ id: string }>;
@@ -41,6 +44,9 @@ export default async function MaterialPage({ params, searchParams }: { params: P
   if (!m) notFound();
   const manage = can(actor, 'procurement.manage'), seeProduction = can(actor, 'production.read');
   const tab: Tab = TABS.find(t => t[0] === sp.tab)?.[0] ?? 'ledger';
+  const packaging = m.kind === 'packaging';
+  const places = packaging && manage && tab === 'details' ? await materialPlaces(db(), actor) : null;
+  const back = packaging ? { href: '/materials?kind=packaging', label: 'Packaging' } : { href: '/materials', label: 'Materials' };
   const self = `/materials/${m.id}`;
   const href = (t: string) => (t === 'ledger' ? self : `${self}?tab=${t}`);
   const page = Math.min(10_000, Math.max(1, parseInt(one(sp.page) ?? '1', 10) || 1));
@@ -54,7 +60,7 @@ export default async function MaterialPage({ params, searchParams }: { params: P
   const production = numbers.length ? await db().selectFrom('production_orders').select(['id', 'number']).where('number', 'in', numbers).execute() : [];
 
   return (
-    <Entity module={{ href: '/materials', label: 'Materials' }} name="material" title={m.name}
+    <Entity module={back} name="material" title={m.name}
       status={!m.is_active ? <span className="badge disabled">Inactive</span> : m.low ? <span className="badge low_stock" data-low>Low</span> : undefined}
       factsAttr="data-material-facts"
       facts={[
@@ -62,8 +68,25 @@ export default async function MaterialPage({ params, searchParams }: { params: P
         { label: 'In stock', value: `${fmt(m.stock)} ${m.unit}`, attr: 'stock' },
         { label: 'On order', value: m.incoming ? `${fmt(m.incoming)} ${m.unit}` : '—', attr: 'incoming' },
         { label: 'Reorder at', value: m.reorderLevel === null ? 'Not set' : `${fmt(m.reorderLevel)} ${m.unit}` },
+        ...(packaging ? [
+          { label: 'To order', value: m.toOrder ? `${fmt(m.toOrder)} ${m.unit}` : '—', attr: 'to-order' },
+          { label: 'Supplier', value: m.vendor_name ?? 'Not set', attr: 'supplier' },
+          { label: 'Kept at', value: m.location_name ?? 'Not set', attr: 'kept-at' },
+          ...(can(actor, 'costs.read') ? [{ label: 'Last cost', value: m.last_cost_paise === null ? '—' : `${formatPaise(m.last_cost_paise)} / ${m.unit}`, attr: 'last-cost' }] : []),
+        ] : []),
       ]}
-      actions={manage ? (
+      actions={manage ? (<>
+        {packaging && m.is_active && (
+          <Drawer trigger="Record use" triggerClass="btn sm" name="use-packaging" scope="ord" title={`Record use of ${m.name}`}
+            description={`In stock now: ${fmt(m.stock)} ${m.unit}. Record what was used (packing orders, samples…). For a miscount or damage, use Adjust stock.`}>
+            <ActionForm action={recordPackagingUseAction} submitLabel="Record use" id="packaging-use-form" label={`Record use of ${m.name}`}
+              confirmText={`Record this use of ${m.name}? It is written to the ledger and cannot be edited afterwards.`}>
+              <Hidden name="materialId" value={m.id} /><Hidden name="expectedStock" value={String(m.stock)} />
+              <Field name="qty" label={`Quantity used (${m.unit})`} required hint="Cannot be more than is in stock." />
+              <Field name="note" label="Used for" required hint="e.g. Packed orders of 12 Oct." />
+            </ActionForm>
+          </Drawer>
+        )}
         <Drawer trigger="Adjust stock" triggerClass="btn ghost sm" name="adjust-material" scope="ord" title={`Adjust ${m.name}`}
           description={`In stock now: ${fmt(m.stock)} ${m.unit}. Receipts come from purchase orders and usage from production; use this only for a count correction or a write-off.`}>
           <ActionForm action={adjustMaterialAction} submitLabel="Record" id={`mat-adj-${m.id}`} label={`Adjust ${m.name}`} resetOnSuccess
@@ -74,7 +97,7 @@ export default async function MaterialPage({ params, searchParams }: { params: P
             <Field name="note" label="Note" required />
           </ActionForm>
         </Drawer>
-      ) : undefined}
+      </>) : undefined}
       tabs={TABS.map(([tid, label]) => ({ id: tid, label }))} current={tab} tabHref={href}>
 
       {tab === 'ledger' && (
@@ -86,7 +109,7 @@ export default async function MaterialPage({ params, searchParams }: { params: P
                 const pr = r.reason === 'consume' ? production.find(p => p.number === r.note) : undefined;
                 return (
                   <tr key={String(r.id)} data-material-movement={r.reason}>
-                    <td className="nowrap">{formatDateTime(r.created_at as Date)}</td><td>{REASON[r.reason] ?? r.reason}</td>
+                    <td className="nowrap">{formatDateTime(r.created_at as Date)}</td><td>{packaging && r.reason === 'consume' && !pr ? 'Packaging used' : REASON[r.reason] ?? r.reason}</td>
                     <td className="num" data-delta>{Number(r.delta) > 0 ? '+' : ''}{fmt(Number(r.delta))} {m.unit}</td><td className="num" data-balance>{fmt(Number(r.balance_after))} {m.unit}</td>
                     <td data-reference>
                       {r.po_id ? <><Link href={`/purchase-orders/${r.po_id}/receipts/${r.receipt_id}`} className="mono">{r.receipt_number ?? 'Delivery'}</Link> · <Link href={`/purchase-orders/${r.po_id}?tab=receiving`} className="mono">{r.po_number}</Link></>
@@ -116,13 +139,20 @@ export default async function MaterialPage({ params, searchParams }: { params: P
             <Field name="name" label="Name" defaultValue={m.name} required />
             <Field name="unit" label="Unit" defaultValue={m.unit} required />
             <Field name="reorderLevel" label="Reorder at" defaultValue={m.reorderLevel === null ? '' : String(m.reorderLevel)} hint="Leave empty for no alert." />
+            {places && <>
+              <Select name="vendorId" label="Usual supplier" defaultValue={m.vendor_id ?? ''} options={[{ value: '', label: 'Not set' }, ...places.vendors.map(v => ({ value: v.id, label: v.name })),
+                ...(m.vendor_id && !places.vendors.some(v => v.id === m.vendor_id) ? [{ value: m.vendor_id, label: `${m.vendor_name} (inactive)` }] : [])]} />
+              <Select name="locationId" label="Kept at" defaultValue={m.location_id ?? ''} hint="Where it is usually kept. Stock is one quantity for the item, not per location." options={[{ value: '', label: 'Not set' }, ...places.locations.map(l => ({ value: l.id, label: l.name })),
+                ...(m.location_id && !places.locations.some(l => l.id === m.location_id) ? [{ value: m.location_id, label: `${m.location_name} (inactive)` }] : [])]} />
+            </>}
             <TextArea name="notes" label="Notes" defaultValue={m.notes ?? ''} rows={2} />
           </ActionForm>
         </Section>
       ) : (
         <Section id="md-h" title="Material details" name="details">
           <Facts items={[{ label: 'Name', value: m.name }, { label: 'Code', value: m.code }, { label: 'Unit', value: m.unit },
-            { label: 'Reorder at', value: m.reorderLevel === null ? 'Not set' : `${fmt(m.reorderLevel)} ${m.unit}` }, { label: 'Notes', value: m.notes ?? '—' }]} />
+            { label: 'Reorder at', value: m.reorderLevel === null ? 'Not set' : `${fmt(m.reorderLevel)} ${m.unit}` },
+            ...(packaging ? [{ label: 'Supplier', value: m.vendor_name ?? 'Not set' }, { label: 'Kept at', value: m.location_name ?? 'Not set' }] : []), { label: 'Notes', value: m.notes ?? '—' }]} />
           <p className="note" data-readonly="material">Changing a material needs the procurement.manage permission.</p>
         </Section>
       ))}

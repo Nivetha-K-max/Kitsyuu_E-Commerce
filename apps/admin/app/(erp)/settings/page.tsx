@@ -8,11 +8,14 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { updateSettingAction } from './actions';
-import { Workspace } from '@/components/frame';
+import { ViewTabs, Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'Configuration' };
 
 const anchor = (group: string) => `g-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+const slug = (group: string) => anchor(group).slice(2);
+type SP = Promise<Record<string, string | string[] | undefined>>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 /* Configuration areas (client change request, 2026-10-03): one index of where each kind of business configuration lives.
    It adds no data and no second settings system. An area points at groups of the settings registry on this page (by
@@ -46,18 +49,36 @@ function show(s: SettingRow): string {
 }
 
 /* A read view of the typed settings registry. Only settings the registry marks editable get a form (one validated value,
-   audited); everything else is shown with the reason it is locked. There is no free-form editor and no way to add keys. */
-export default async function SettingsPage() {
+   audited); everything else is shown with the reason it is locked. There is no free-form editor and no way to add keys.
+   2026-10-12 (client request): the topics are a row of tabs. Overview (the configuration areas) comes first; each group
+   of the registry is a tab that shows that group alone (?group=<topic>); then Store policies; "All settings" is the whole
+   registry on one page, as before. Nothing about the settings, who may change them, or the audit has changed. */
+export default async function SettingsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'settings.read')) return <><PageHead section="System" title="Configuration" /><Forbidden permission="settings.read" /></>;
   const { groups, unregistered, policies } = await listSettings(db(), actor);
   const has = new Set(groups.map(g => g.group));
+  const asked = (one((await searchParams).group) ?? '').toLowerCase().slice(0, 60);
+  const all = asked === 'all', onPolicies = asked === 'policies';
+  const chosen = groups.find(g => slug(g.group) === asked);
+  const overview = !all && !onPolicies && !chosen;
+  const shownGroups = all ? groups : chosen ? [chosen] : [];
+  const unknown = overview && asked !== '';
+  // In "All settings" an area points at a group further down the page; everywhere else it opens that group's tab.
+  const topicHref = (g: string) => (all ? `#${anchor(g)}` : `/settings?group=${slug(g)}`);
+  const tabs = [{ id: 'overview', label: 'Overview', href: '/settings' }, ...groups.map(g => ({ id: slug(g.group), label: g.group, href: `/settings?group=${slug(g.group)}` })),
+    { id: 'policies', label: 'Store policies', href: '/settings?group=policies' }, { id: 'all', label: 'All settings', href: '/settings?group=all' }];
   return (
-    <Workspace name="configuration" title="Configuration" summary="Business rules are locked here; only safe operational settings can be changed, and every change is audited.">
+    <Workspace name="configuration" title="Configuration"
+      summary={chosen ? `${chosen.group}: ${chosen.items.length} setting${chosen.items.length === 1 ? '' : 's'}, ${chosen.items.filter(s => s.editable).length} can be changed; the rest are locked business rules. Every change is audited.`
+        : onPolicies ? 'Store policies: rules that live in code or deployment configuration. Shown for reference.' : 'Business rules are locked here; only safe operational settings can be changed, and every change is audited.'}>
+      <div data-config-topics><ViewTabs label="Configuration topics" current={all ? 'all' : onPolicies ? 'policies' : chosen ? slug(chosen.group) : 'overview'} items={tabs} /></div>
+      {unknown && <p className="msg" data-config-unknown>There is no configuration topic called “{asked}”. Choose one above.</p>}
+      {(overview || all) && (
       <section className="card" aria-labelledby="areas-h" data-section="config-areas">
         <h2 id="areas-h">Configuration areas</h2>
         <dl className="facts" data-config-areas>{AREAS.map(a => {
-          const links = [...a.groups.filter(g => has.has(g)).map(g => ({ href: `#${anchor(g)}`, label: `${g} settings` })),
+          const links = [...a.groups.filter(g => has.has(g)).map(g => ({ href: topicHref(g), label: `${g} settings` })),
             ...a.links.filter(l => can(actor, l.permission))];
           return (
             <Fragment key={a.name}><dt>{a.name}</dt>
@@ -66,7 +87,8 @@ export default async function SettingsPage() {
             </Fragment>);
         })}</dl>
       </section>
-      {groups.map(g => (
+      )}
+      {shownGroups.map(g => (
         <section className="card" key={g.group} aria-labelledby={anchor(g.group)} data-settings-group={g.group}>
           <h2 id={anchor(g.group)}>{g.group}</h2>
           <div className="table-wrap"><table data-settings-table>
@@ -86,12 +108,14 @@ export default async function SettingsPage() {
             </tbody></table></div>
         </section>
       ))}
+      {(all || onPolicies) && (
       <section className="card" aria-labelledby="pol-h" data-section="policies">
         <h2 id="pol-h">Store policies</h2>
         <p className="note">Rules that live in code or deployment configuration. Shown for reference; they are not changed here.</p>
         <dl className="facts" data-policies>{policies.map(p => <Fragment key={p.label}><dt>{p.label}</dt><dd>{p.value}<div className="note">{p.source}</div></dd></Fragment>)}</dl>
       </section>
-      {unregistered.length > 0 && (
+      )}
+      {(all || onPolicies) && unregistered.length > 0 && (
         <section className="card" aria-labelledby="unreg-h" data-section="unregistered">
           <h2 id="unreg-h">Other stored values</h2>
           <p className="note">Values stored in the database that the settings registry does not describe. Read-only.</p>

@@ -778,3 +778,95 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 
 /* Performance (2026-10-01): cart / wishlist before this browser's list is read: space kept for the content (no layout jump). */
 .st-loading-area{min-height:60svh}
+
+/* The welcome popup for the first-order offer (2026-10-12; components/FirstOfferPopup.tsx). A modal dialog on the store's own
+   surface and type: no colour of its own. Full width with a 16px gutter on phones; no motion for reduced-motion visitors. */
+.st-offer-layer{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px}
+.st-offer-backdrop{position:absolute;inset:0;background:#000000a6}
+.st-offer{position:relative;width:min(100%,440px);max-height:calc(100dvh - 32px);overflow:auto;padding:36px 28px 28px;background:var(--ink);color:var(--paper);border:1px solid var(--line);animation:st-offer-in .28s ease-out both}
+.st-offer h2{margin:6px 0 14px;font:400 clamp(28px,7vw,40px)/1.05 var(--display);letter-spacing:.01em;text-transform:uppercase}
+.st-offer-terms{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:6px;color:var(--muted);font-size:14px;line-height:1.5}
+.st-offer-code{margin:0 0 18px;font-size:14px}
+.st-offer-code b{display:inline-block;margin-left:8px;padding:6px 12px;border:1px dashed var(--line);font:500 15px var(--mono);letter-spacing:1.5px;color:var(--paper)}
+.st-offer-actions{display:grid;gap:12px;justify-items:start}
+.st-offer-actions .button{width:100%;justify-content:center;min-height:48px}
+.st-offer-actions .text-link{background:none;border:0;padding:6px 0;min-height:44px;cursor:pointer;color:inherit;font:inherit;text-align:left}
+.st-offer-close{position:absolute;top:6px;right:6px;width:44px;height:44px;display:grid;place-items:center;background:none;border:0;color:inherit;font-size:26px;line-height:1;cursor:pointer}
+.st-offer :is(a,button):focus-visible{outline:2px solid var(--red);outline-offset:2px}
+@keyframes st-offer-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.st-offer{animation:none}}
+
+/* Referrals (2026-10-12; app/account/referrals): the customer's code and reward coupons, in the account's own type. */
+.st-ref-code{margin:0 0 10px}
+.st-ref-code b,.st-ref-coupon{display:inline-block;padding:6px 12px;border:1px dashed var(--line);font:500 15px var(--mono);letter-spacing:1.5px}
+.st-ref-link{overflow-wrap:anywhere;font-family:var(--mono);font-size:13px}
+
+/* Help window (2026-10-12): a Help button bottom-right and the window it opens (help topics, order status, a message).
+   Below the welcome offer (z-index 60) so the two never fight; full width at phone size; no motion of its own. */
+.st-help{position:fixed;right:16px;bottom:16px;z-index:50}
+.st-help-launch{min-width:72px;min-height:48px;padding:0 20px;background:var(--ink);color:var(--paper);border:1px solid var(--line);font:500 13px var(--mono);letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
+.st-help-launch:hover{border-color:var(--paper)}
+.st-help-panel{display:flex;flex-direction:column;width:min(380px,calc(100vw - 32px));max-height:min(640px,calc(100dvh - 32px));background:var(--ink);color:var(--paper);border:1px solid var(--line);box-shadow:0 12px 40px #00000066}
+.st-help-head{position:relative;padding:16px 56px 12px 18px;border-bottom:1px solid var(--line)}
+.st-help-head h2{margin:0 0 6px;font:400 24px/1.1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+.st-help-head p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5}
+.st-help-close{position:absolute;top:6px;right:6px;width:44px;height:44px;display:grid;place-items:center;background:none;border:0;color:inherit;font-size:26px;line-height:1;cursor:pointer}
+.st-help-tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}
+.st-help-tabs button{min-height:44px;padding:6px 4px;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:500 11px var(--mono);letter-spacing:.8px;text-transform:uppercase;cursor:pointer}
+.st-help-tabs button.is-on{color:var(--paper);border-bottom-color:var(--paper)}
+.st-help-body{padding:16px 18px 18px;overflow:auto;font-size:14px;line-height:1.55}
+.st-help-note{margin:10px 0;color:var(--muted);font-size:13px}
+.st-help-body .text-link{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;min-height:24px}
+.st-help-ask label,.st-help-form label{display:block;margin:12px 0 6px;font:11px var(--mono);letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.st-help-ask label{margin-top:0}
+.st-help-row{display:flex;gap:8px}
+.st-help-row input{flex:1;min-width:0}
+.st-help-body :is(input,select,textarea){width:100%;min-height:44px;padding:10px 12px;background:transparent;color:inherit;border:1px solid var(--line);font:inherit;font-size:16px}
+.st-help-body select option{color:#101011;background:#fff}
+.st-help-body textarea{resize:vertical}
+.st-help-body .button{min-height:44px;justify-content:center}
+.st-help-form .button{width:100%;margin-top:16px}
+.st-help-hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.st-help-topics{margin:12px 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.st-help-topics li{border-bottom:1px solid var(--line)}
+.st-help-topics summary{padding:12px 0;min-height:44px;cursor:pointer;font-weight:500}
+.st-help-topics p{margin:0 0 12px;color:var(--muted)}
+.st-help-order{margin:14px 0 0;display:grid;gap:0;border-top:1px solid var(--line)}
+.st-help-order div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
+.st-help-order dt{color:var(--muted)}
+.st-help-order dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.st-help :is(a,button,input,select,textarea,summary):focus-visible{outline:2px solid var(--red);outline-offset:2px}
+@media (max-width:480px){
+  .st-help{right:12px;bottom:12px}
+  .st-help-panel{width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+}
+@media print{.st-help{display:none}}
+
+/* The robot picture on the Help button and the help window's title (2026-10-12). */
+.st-help-launch{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.st-help-head h2{display:flex;align-items:center;gap:10px}
+.st-help-bot{flex:none}
+
+/* The help mascot (2026-10-12): a small white robot with electric-blue eyes above the Help button, with a "Need help?"
+   bubble. It floats very gently, blinks, and waves now and then; all of it stops for reduced motion. It sits in the same
+   corner as the Help button, inside the safe area, and is not in the page while the help window is open. */
+.st-help{right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom))}
+.st-help-trigger{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.st-help-robot{position:relative;display:block;width:84px;height:92px;padding:0;margin-right:2px;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.st-help-robot:focus-visible{outline:2px solid #1f6bff;outline-offset:4px;border-radius:12px}
+.st-help-mascot{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 6px 10px #00000040)}
+.st-help-mascot-shadow{fill:#00000026}
+.st-help-mascot-body{animation:st-mascot-float 4.5s ease-in-out infinite;transform-origin:48px 60px}
+.st-help-mascot-arm{transform-origin:72px 66px;animation:st-mascot-wave 7s ease-in-out infinite}
+.st-help-mascot-eyes{transform-origin:48px 34px;animation:st-mascot-blink 5.5s linear infinite}
+.st-help-robot:hover .st-help-mascot-body{animation-duration:2.6s}
+.st-help-bubble{position:absolute;right:calc(100% - 14px);top:2px;padding:7px 12px;white-space:nowrap;background:#ffffff;color:#0b1b3a;border:1.5px solid #0b1b3a;border-radius:14px 14px 4px 14px;font:600 13px/1.2 var(--font,system-ui,sans-serif);box-shadow:0 6px 16px #00000033}
+@keyframes st-mascot-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes st-mascot-wave{0%,72%,100%{transform:rotate(0)}76%{transform:rotate(-14deg)}80%{transform:rotate(8deg)}84%{transform:rotate(-12deg)}88%{transform:rotate(6deg)}92%{transform:rotate(0)}}
+@keyframes st-mascot-blink{0%,94%,100%{transform:scaleY(1)}96.5%{transform:scaleY(.1)}}
+@media (max-width:480px){
+  .st-help{right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom))}
+  .st-help-robot{width:64px;height:70px}
+  .st-help-bubble{font-size:12px;padding:6px 10px}
+}
+@media (prefers-reduced-motion:reduce){.st-help-mascot-body,.st-help-mascot-arm,.st-help-mascot-eyes{animation:none}}

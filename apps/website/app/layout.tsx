@@ -6,6 +6,8 @@ import StoreProvider from '@/components/StoreProvider';
 import AuthProvider from '@/components/AuthProvider';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import FirstOfferPopup from '@/components/FirstOfferPopup';
+import HelpWidget from '@/components/HelpWidget';
 import { DEFAULT_THEME, THEME_BOOT, THEME_COLOUR } from '@/lib/theme';
 import { siteUrl } from '@/lib/seo';
 
@@ -60,6 +62,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Suspense fallback={<header className="st-header" />}><Header /></Suspense>
           <main id="main" tabIndex={-1}>{children}</main>
           <Footer catalogue={catalogue} policy={policy} tagline={copy.footerTagline} />
+          {/* The first-order offer (2026-10-12): asks the server only after the visitor scrolls into the store; renders nothing otherwise. */}
+          <FirstOfferPopup />
+          {/* The help window (2026-10-12): a Help button; it asks the server for nothing until it is opened. */}
+          <HelpWidget />
         </StoreProvider>
         </AuthProvider>
       </body>

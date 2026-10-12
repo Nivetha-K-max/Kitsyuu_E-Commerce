@@ -8,6 +8,7 @@ import { formatDateTime, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { openSessionAction } from './actions';
 import PosCounter from './PosCounter';
+import BranchStockPreview from './BranchStockPreview';
 import { Workspace } from '@/components/frame';
 
 export const metadata: Metadata = { title: 'POS billing' };
@@ -27,8 +28,21 @@ export default async function PosPage() {
     return (
       <Workspace name="pos" title="POS billing" summary="Counter sales at a branch" actions={<div className="ord-head-actions">{nav}</div>}>
         {!c.can.sell ? <p className="msg">You can see POS sales and bills; ringing up sales needs the “POS: sell” permission.</p>
-          : c.locations.length === 0 ? <Empty title="No branch yet" action={<Link className="btn" href="/locations">Add a retail location</Link>}>POS sales are made at a retail branch (Locations).</Empty>
-          : (
+          : c.locations.length === 0 ? (
+            <>
+              <Empty title="No branch yet" action={<Link className="btn" href="/locations">Add a retail location</Link>}>POS sales are made at a retail branch (Locations).</Empty>
+              {c.otherLocations.length > 0 && (
+                <section className="card" aria-labelledby="pos-other-h" data-pos-other-locations>
+                  <h2 id="pos-other-h">Locations you have</h2>
+                  <p className="note">None of these can be billed at from POS. Add a retail store in Locations and move stock to it with a transfer; it then appears here to choose.</p>
+                  <ul className="pos-other">
+                    {c.otherLocations.map(l => <li key={l.id}><b>{l.name}</b> <span className="mono">({l.code})</span> · {!l.is_active ? 'switched off' : 'online stock: sold through the website, not at a counter'}</li>)}
+                  </ul>
+                </section>
+              )}
+            </>
+          ) : (
+            <>
             <section className="card pos-open" aria-labelledby="open-h" data-pos-open>
               <h2 id="open-h">Open a cashier session</h2>
               <p className="note">Choose the store you are billing at and count the cash in the drawer. Stock is taken from this store only.</p>
@@ -36,7 +50,10 @@ export default async function PosPage() {
                 <Select name="locationId" label="Store / branch" options={c.locations.map(l => ({ value: l.id, label: `${l.name} (${l.code})` }))} />
                 <Field name="openingCash" label="Opening cash in drawer (₹)" defaultValue="0" />
               </ActionForm>
+              {c.otherLocations.length > 0 && <p className="note" data-pos-not-listed>Not in the list: {c.otherLocations.map(l => `${l.name} (${!l.is_active ? 'switched off' : 'online stock'})`).join(', ')}.</p>}
             </section>
+            <BranchStockPreview formId="pos-open-form" locations={c.locations.map(l => ({ id: l.id, name: l.name }))} />
+            </>
           )}
         {recent.length > 0 && (
           <section className="card" aria-labelledby="recent-h">
@@ -57,7 +74,7 @@ export default async function PosPage() {
   return (
     <Workspace name="pos" title="POS billing" summary={`${s.location_name} · session ${s.number} · ${actor.email}`}
       actions={<div className="ord-head-actions">{nav}<Link className="btn ghost" href="/pos/sessions#close" data-pos-close-link>Close session</Link></div>}>
-      <PosCounter session={{ id: s.id, number: s.number, location_id: s.location_id, location_name: s.location_name }} maxDiscountBp={c.maxDiscountBp} canDiscount={c.can.discount} />
+      <PosCounter session={{ id: s.id, number: s.number, location_id: s.location_id, location_name: s.location_name }} locations={c.locations.map(l => ({ id: l.id, name: l.name, code: l.code }))} maxDiscountBp={c.maxDiscountBp} canDiscount={c.can.discount} />
     </Workspace>
   );
 }

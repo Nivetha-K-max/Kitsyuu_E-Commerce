@@ -79,7 +79,7 @@ export async function sendAbandonedCartReminders(db: Db, mailer: Mailer, opts: {
   const delayMinutes = opts.delayMinutes ?? abandonedCartDelayMinutes();
   const empty = { delayMinutes, checked: 0, sent: 0, failed: 0, noStock: 0 };
   if (!(await customerEmailEnabled(db, 'cart.auto_reminder'))) return { skipped: 'off', ...empty };
-  if (mailer.kind === 'console') return { skipped: 'no_provider', ...empty };
+  if (mailer.kind === 'console' || mailer.kind === 'unconfigured') return { skipped: 'no_provider', ...empty };
   const lastChange = sql<Date>`greatest(c.updated_at, (select max(i.updated_at) from public.cart_items i where i.cart_id = c.id))`;
   const due = await db.selectFrom('carts as c').innerJoin('customers as u', 'u.id', 'c.customer_id').leftJoin('cart_recovery as r', 'r.cart_id', 'c.id')
     .select(['c.id', 'c.customer_id', 'u.email', 'u.full_name', lastChange.as('last_change')])

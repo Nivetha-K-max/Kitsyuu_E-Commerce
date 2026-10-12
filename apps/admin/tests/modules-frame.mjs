@@ -46,7 +46,7 @@ const attr = (sel, name) => ev(`document.querySelector(${JSON.stringify(sel)})?.
 const count = sel => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
 const list = (sel, expr) => ev(`[...document.querySelectorAll(${JSON.stringify(sel)})].map(e=>${expr})`);
 const READY = '!!document.querySelector("main") && !document.querySelector("[data-loading]")';
-const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e)).map(e => `${p}: ${e}`)); };
+const visit = async (p, ready = READY) => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e)).map(e => `${p}: ${e}`)); };
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const click = async sel => { await hydrated(sel); await ev(`document.querySelector(${JSON.stringify(sel)}).click(),true`); };
 const openDrawer = async (name, form) => { await click(`[data-drawer-open=${name}]`); return until(`!!document.querySelector(${JSON.stringify(`[data-drawer=${name}] ${form}`)})`); };
@@ -171,6 +171,140 @@ try {
   await visit('/stock-value', '!!document.querySelector("[data-workspace=stock-value]")');
   ok('Inventory → Stock value: two views of one page', (await list('[data-value-views] [data-view]', 'e.dataset.view')).join('|') === 'pieces|materials');
 
+  // ================= Marketing → Referrals (2026-10-12) =================
+  // Two customers and a referral between them, written in this LOCAL test database and removed again below.
+  await visit('/marketing/report', '!!document.querySelector("[data-workspace=marketing-report]")');
+  ok('Marketing → Report links to Referrals and rewards (Marketing keeps its five views)', (await attr('[data-link=referrals]', 'href')) === '/marketing/referrals');
+  await visit('/marketing/referrals', '!!document.querySelector("[data-workspace=marketing-referrals]")');
+  ok('Referrals is on the frame under Report; with nothing set it says referrals are off and lists nothing', /OFF/.test(await text('[data-referral-terms]')) && (await exists('[data-empty=referrals]')));
+  const [ra] = await q(`insert into customers (email, full_name, email_verified_at) values ('mf.referrer@test.local', 'MF Referrer', now()) returning id`);
+  const [rb] = await q(`insert into customers (email, full_name, email_verified_at) values ('mf.referred@test.local', 'MF Referred', now()) returning id`);
+  await q(`insert into referral_codes (customer_id, code) values ($1, 'MFREFER1')`, [ra.id]);
+  const [rf] = await q(`insert into referrals (referrer_id, referred_id, code) values ($1, $2, 'MFREFER1') returning id`, [ra.id, rb.id]);
+  await q(`insert into settings (key, value) values ('referrals.enabled', '"on"') on conflict (key) do update set value = excluded.value`);
+  await visit('/marketing/referrals', '!!document.querySelector("[data-referrals-table]")');
+  ok('referrals: switched on, the terms are the configured ones (₹200 each, from ₹1,000, 30 days)', /On: ₹200\.00 coupon to each customer, on orders of ₹1,000\.00 or more, valid 30 days/.test(await text('[data-referral-terms]')), await text('[data-referral-terms]'));
+  ok('referrals: the referral is listed as waiting, with both customers linked to their pages (customers.read)', (await attr(`[data-referral="${rf.id}"]`, 'data-referral-status')) === 'pending'
+    && (await list(`[data-referral="${rf.id}"] a`, 'e.getAttribute("href")')).join() === `/customers/${ra.id},/customers/${rb.id}` && /mf\.referrer@test\.local[\s\S]*mf\.referred@test\.local[\s\S]*MFREFER1/.test(await text(`[data-referral="${rf.id}"]`)));
+  await autoConfirm();
+  await submit('#referral-run-form');
+  ok('referrals: "Check for rewards now" reports what it did; a referral with no delivered order stays waiting and gets no coupon', /Checked 1 waiting referral: 0 rewarded, 0 rejected, 1 still waiting/.test(await message('#referral-run-form'))
+    && (await q(`select (select count(*)::int from referral_rewards) w, (select status from referrals where id = $1) s`, [rf.id]))[0].w === 0, await message('#referral-run-form'));
+  await ev(`document.querySelector('[data-referral="${rf.id}"] details').open = true`);
+  await submit(`#reject-${rf.id}`);
+  ok('referrals: rejecting needs a reason', (await q(`select status from referrals where id = $1`, [rf.id]))[0].status === 'pending');
+  await fill(`#reject-${rf.id} input[name=reason]`, 'Same household (e2e)');
+  await submit(`#reject-${rf.id}`);
+  const [rj] = await q(`select r.status, r.reject_reason, s.email, (select count(*)::int from audit_logs a where a.action = 'referral.reject' and a.entity_id = r.id::text) audits from referrals r left join staff_users s on s.id = r.rejected_by where r.id = $1`, [rf.id]);
+  ok('referrals: rejected with the reason, by this staff member, audited; the row shows it and offers nothing more', rj.status === 'rejected' && rj.reject_reason === 'Same household (e2e)' && rj.email === 'mf.root@test.local' && rj.audits === 1
+    && await until(`document.querySelector('[data-referral="${rf.id}"]')?.dataset.referralStatus === 'rejected' && !document.querySelector('[data-referral="${rf.id}"] details')`, 15000) && /Same household/.test(await text(`[data-referral="${rf.id}"] [data-reject-reason]`)), JSON.stringify(rj));
+  await visit('/marketing/referrals?status=pending', '!!document.querySelector("[data-workspace=marketing-referrals]")');
+  ok('referrals: the status filter works (nothing waiting now)', await exists('[data-empty=referrals]'));
+  // Configuration: the topics are a row of tabs; a tab shows its topic alone; "All settings" is the whole registry (2026-10-12).
+  await visit('/settings', '!!document.querySelector("[data-config-topics]")');
+  const topics = await list('[data-config-topics] [data-view]', 'e.dataset.view');
+  ok('Configuration opens on Overview, with one tab per topic, then Store policies and All settings', topics[0] === 'overview' && topics.includes('referrals') && topics.includes('discounts') && topics.includes('company')
+    && topics.slice(-2).join('|') === 'policies|all' && new Set(topics).size === topics.length && (await attr('[data-config-topics] [aria-current=page]', 'data-view')) === 'overview'
+    && (await exists('[data-config-areas]')) && !(await exists('[data-settings-table]')), topics.join());
+  ok('Configuration overview: an area opens the tab of its settings', (await attr('[data-config-area=Company] a', 'href')) === '/settings?group=company');
+  await click('[data-config-topics] [data-view=referrals]');
+  ok('Configuration: a tab shows that topic alone and is marked current; the module stays current in the sidebar', (await until("/group=referrals/.test(location.search) && document.querySelectorAll('[data-settings-group]').length === 1", 20000))
+    && (await attr('[data-settings-group]', 'data-settings-group')) === 'Referrals' && (await attr('[data-config-topics] [aria-current=page]', 'data-view')) === 'referrals'
+    && (await exists('[data-setting="referrals.enabled"] form')) && !(await exists('[data-setting="company.legal_name"]')) && !(await exists('[data-config-areas]'))
+    && (await attr('.nav a[aria-current=page]', 'data-module')) === 'configuration');
+  await visit('/settings?group=policies', '!!document.querySelector("[data-policies]")');
+  ok('Configuration: Store policies is a tab of its own', !(await exists('[data-settings-table]')) && (await attr('[data-config-topics] [aria-current=page]', 'data-view')) === 'policies');
+  await visit('/settings?group=no-such-topic', '!!document.querySelector("[data-config-topics]")');
+  ok('Configuration: an unknown topic says so and shows the overview', (await exists('[data-config-unknown]')) && (await exists('[data-config-areas]')));
+  await visit('/settings?group=all', '!!document.querySelector("[data-settings-table]")');
+  ok('Configuration: "All settings" is every group on one page, as before', (await count('[data-settings-group]')) === topics.length - 3 && (await exists('[data-policies]')));
+  ok('Configuration has the referral settings: the switch, the reward, the coupon\'s validity and minimum order', (await exists('[data-setting="referrals.enabled"] form')) && /200/.test(await text('[data-setting="referrals.reward_paise"] [data-setting-value]'))
+    && /30/.test(await text('[data-setting="referrals.coupon_valid_days"] [data-setting-value]')) && (await exists('[data-setting="discounts.first_customer_code"] form')));
+  await q(`delete from settings where key = 'referrals.enabled'`);
+  await q(`delete from customers where id in ($1, $2)`, [ra.id, rb.id]);                 // their code and referral go with them
+
+  // ================= Purchasing → Materials → Packaging (2026-10-12) =================
+  // One supplier and one packaging item in this LOCAL test database; stock only through the page's own forms.
+  const [pkVendor] = await q("insert into vendors (name) values ('MF Packwell') returning id");
+  await visit('/materials', '!!document.querySelector("[data-workspace=materials]")');
+  ok('Materials has two lists of one view: Production materials · Packaging (Purchasing keeps its three views)', (await list('[data-material-kinds] [data-view]', 'e.dataset.view')).join('|') === 'material|packaging'
+    && (await list('[data-module-views=purchasing] [data-view]', 'e.dataset.view')).join('|') === '/purchase-orders|/vendors|/materials');
+  await visit('/materials?kind=packaging', '!!document.querySelector("[data-drawer-open=new-packaging]")');
+  ok('packaging: empty at first, says what belongs here; adding one is in a drawer', (await exists('[data-empty=packaging]')) && !(await exists('#create-packaging-form')) && (await openDrawer('new-packaging', '#create-packaging-form')));
+  await fill('#create-packaging-form input[name=code]', 'MF-BAG'); await fill('#create-packaging-form input[name=name]', 'MF courier bag'); await fill('#create-packaging-form input[name=unit]', 'pcs');
+  await fill('#create-packaging-form input[name=reorderLevel]', '40'); await fill('#create-packaging-form select[name=vendorId]', pkVendor.id);
+  await submit('#create-packaging-form');
+  const pkRow = '[data-packaging="MF-BAG"]';
+  ok('packaging: the new item is listed with no stock, low, 40 to order, its supplier named', (await until("!!document.querySelector('[data-packaging=\"MF-BAG\"]')", 15000)) && /Packaging item MF-BAG added/.test(await message('#create-packaging-form'))
+    && /^0 pcs/.test((await text(pkRow + ' [data-material-stock]')).trim()) && (await exists(pkRow + ' [data-low]')) && /40 pcs/.test(await text(pkRow + ' [data-to-order]')) && /MF Packwell/.test(await text(pkRow)), await text(pkRow));
+  const [pk] = await q("select id, kind, vendor_id from materials where code = 'MF-BAG'");
+  ok('packaging: stored as a material of kind packaging with its supplier', pk.kind === 'packaging' && pk.vendor_id === pkVendor.id);
+  await visit('/materials', '!!document.querySelector("[data-workspace=materials]")');
+  ok('packaging: not shown among the production materials', !(await exists('[data-material="MF-BAG"]')) && !(await exists(pkRow)));
+  const pkPath = '/materials/' + pk.id;
+  const pkStock = async () => Number((await q('select stock_qty from materials where id = $1', [pk.id]))[0].stock_qty);
+  await visit(pkPath, '!!document.querySelector("[data-entity=material]")');
+  ok('packaging item: on the entity frame (Ledger · Details), with supplier and what to order; Record use and Adjust stock are offered', (await tabs()) === 'ledger|details' && /MF Packwell/.test(await text('[data-fact=supplier]'))
+    && /40 pcs/.test(await text('[data-fact=to-order]')) && (await exists('[data-drawer-open=use-packaging]')) && (await exists('[data-drawer-open=adjust-material]')));
+  await autoConfirm();
+  await openDrawer('adjust-material', '#mat-adj-' + pk.id);
+  await fill('#mat-adj-' + pk.id + ' input[name=delta]', '50'); await fill('#mat-adj-' + pk.id + ' input[name=note]', 'Opening count (e2e)');
+  await submit('#mat-adj-' + pk.id);
+  ok('packaging item: a count correction puts 50 in stock through the ledger', (await pkStock()) === 50, await message('#mat-adj-' + pk.id));
+  await visit(pkPath, '!!document.querySelector("[data-drawer-open=use-packaging]")');
+  await autoConfirm();
+  await openDrawer('use-packaging', '#packaging-use-form');
+  await fill('#packaging-use-form input[name=qty]', '60'); await fill('#packaging-use-form input[name=note]', 'Too many (e2e)');
+  await submit('#packaging-use-form');
+  ok('packaging item: using more than is in stock is refused; nothing changes', /not enough|Not enough/.test(await message('#packaging-use-form')) && (await pkStock()) === 50, await message('#packaging-use-form'));
+  await fill('#packaging-use-form input[name=qty]', '20'); await fill('#packaging-use-form input[name=note]', 'Packed orders (e2e)');
+  await submit('#packaging-use-form');
+  ok('packaging item: 20 used is recorded; 30 left', /In stock now: 30/.test(await message('#packaging-use-form')) && (await pkStock()) === 30, await message('#packaging-use-form'));
+  // The same form sent again as the page that still showed 50 would send it (double click, back button, second tab).
+  await visit(pkPath, '!!document.querySelector("[data-drawer-open=use-packaging]")');
+  await autoConfirm();
+  await openDrawer('use-packaging', '#packaging-use-form');
+  await ev("(()=>{document.querySelector('#packaging-use-form').addEventListener('formdata',e=>{e.formData.set('expectedStock','50')});return true})()");
+  await fill('#packaging-use-form input[name=qty]', '20'); await fill('#packaging-use-form input[name=note]', 'Packed orders (e2e)');
+  await submit('#packaging-use-form');
+  ok('packaging item: a form from an out-of-date page is refused and says why; the use is not recorded twice', /changed to 30 since you opened this page/.test(await message('#packaging-use-form')) && (await pkStock()) === 30, await message('#packaging-use-form'));
+  await visit(pkPath, '!!document.querySelector("[data-material-ledger]")');
+  ok('packaging item: the ledger shows the correction and the use with their balances; the item is now low with 10 to order', (await list('[data-material-movement]', 'e.dataset.materialMovement')).join('|') === 'consume|correction'
+    && /Packaging used[\s\S]*-20 pcs[\s\S]*30 pcs[\s\S]*Packed orders \(e2e\)/.test(await text('[data-material-movement=consume]')) && (await exists('[data-entity=material] [data-low]')) && /10 pcs/.test(await text('[data-fact=to-order]')), await text('[data-material-ledger]'));
+  const [pkAudit] = await q("select (select count(*)::int from audit_logs where action = 'packaging.use' and entity_id = $1) uses, (select count(*)::int from material_movements where material_id = $2) moves, (select count(*)::int from materials m where m.stock_qty <> (select coalesce(sum(v.delta), 0) from material_movements v where v.material_id = m.id)) mismatch", [pk.id, pk.id]);
+  ok('packaging item: one audited use, two ledger rows, every material stock equals its ledger', pkAudit.uses === 1 && pkAudit.moves === 2 && pkAudit.mismatch === 0, JSON.stringify(pkAudit));
+  await visit(pkPath + '?tab=details', '!!document.querySelector("#mat-edit-' + pk.id + '")');
+  await fill('#mat-edit-' + pk.id + ' select[name=vendorId]', ''); await fill('#mat-edit-' + pk.id + ' input[name=reorderLevel]', '25');
+  await submit('#mat-edit-' + pk.id);
+  const [pkEdit] = await q('select vendor_id, reorder_level::float r, kind from materials where id = $1', [pk.id]);
+  ok('packaging item: details are edited (supplier cleared, reorder level 25); it stays packaging', pkEdit.vendor_id === null && pkEdit.r === 25 && pkEdit.kind === 'packaging', JSON.stringify(pkEdit));
+  await visit('/materials?kind=packaging&show=low', '!!document.querySelector("[data-workspace=materials]")');
+  ok('packaging: 30 in stock against 25 is no longer low; the low filter says nothing matches and leads back to packaging', (await exists('[data-empty=packaging]')) && (await attr('[data-empty=packaging] a', 'href')) === '/materials?kind=packaging');
+  await visit('/materials?kind=packaging&q=mf+cour&sort=stock', '!!document.querySelector("[data-packaging-table]")');
+  ok('packaging: search and sort are in the address and keep the packaging list', (await count('[data-packaging]')) === 1 && (await attr('[data-material-kinds] [aria-current=page]', 'data-view')) === 'packaging');
+
+  // ================= Sidebar: where am I, on every kind of page (2026-10-12) =================
+  const navState = () => ev("(()=>{const cur=[...document.querySelectorAll('.nav a[aria-current=page]')];return cur.length + ':' + (cur[0]?.dataset.module ?? '')})()");
+  const where = [];
+  for (const [p, mod] of [['/production/calendar', 'production'], ['/production/calendar?view=week', 'production'], ['/marketing/referrals', 'marketing'], ['/materials?kind=packaging', 'purchasing'], [pkPath, 'purchasing'],
+    ['/orders', 'orders'], ['/payments', 'payments'], ['/returns', 'returns'], ['/shipping', 'shipping'], ['/notifications', 'dashboard']]) {
+    await visit(p); const got = await navState(); if (got !== '1:' + mod) where.push(p + ' → ' + got);
+  }
+  ok('sidebar: exactly one module is current on each page, including the new calendar, referrals and packaging pages', where.length === 0, where.join(', '));
+  const modulesShown = await list('.nav a[data-module]', 'e.dataset.module');
+  ok('sidebar: flat, one link per module, no collapsible groups; a super admin sees every module', modulesShown.length === 24 && new Set(modulesShown).size === 24 && !(await exists('.nav details, .nav [aria-expanded], .nav button')), modulesShown.join());
+  await visit('/account');
+  ok('sidebar: My account belongs to no module (nothing is marked current there)', (await navState()) === '0:');
+  await b.viewport(1440, 560);
+  await visit('/system', '!!document.querySelector(".nav a[aria-current=page]")');
+  ok('sidebar: on a short screen the current module is brought into view', await until("(()=>{const n=document.querySelector('.nav'),a=n.querySelector('a[aria-current=page]');if(!a)return false;const nr=n.getBoundingClientRect(),ar=a.getBoundingClientRect();return a.dataset.module==='system' && n.scrollHeight>n.clientHeight && ar.top>=nr.top-1 && ar.bottom<=nr.bottom+1})()", 6000));
+  const sideW = await ev("Math.round(document.querySelector('.nav').closest('aside,.sidebar,[class*=side]').getBoundingClientRect().width)");
+  await visit('/marketing/referrals'); const sideW2 = await ev("Math.round(document.querySelector('.nav').closest('aside,.sidebar,[class*=side]').getBoundingClientRect().width)");
+  ok('sidebar: its width is the same from page to page', sideW > 0 && sideW === sideW2, sideW + ' / ' + sideW2);
+  await b.send('Input.dispatchKeyEvent', {type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9}); await b.send('Input.dispatchKeyEvent', {type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9});
+  ok('sidebar: a link focused from the keyboard shows the same focus ring as buttons', await ev("(()=>{const a=document.querySelector('.nav a[data-module=orders]');a.focus();const s=getComputedStyle(a);return a.matches(':focus-visible') && s.boxShadow !== 'none' && s.outlineStyle === 'none'})()"));
+  await b.viewport(1440, 900);
+
   // ================= nothing here touches stock, orders or prices =================
   const stock1 = (await q(`select (select count(*)::int from inventory_movements) moves, (select coalesce(sum(stock_qty),0)::int from product_variants) units, (select count(*)::int from orders) orders`))[0];
   ok('no stock movement, stock quantity or order changed', JSON.stringify(stock0) === JSON.stringify(stock1), JSON.stringify({stock0, stock1}));
@@ -182,6 +316,12 @@ try {
     await visit(p); gates.push((await exists('[data-gate=forbidden]')) && !(await exists('[data-entity],[data-campaigns-table],[data-pricing-table],[data-perm-matrix],#create-discount-form')));
   }
   ok('a support agent is refused Marketing, a campaign, Pricing, Finance, Team & access, Configuration, System and Stock value', gates.every(Boolean), gates.join());
+  await visit('/marketing/referrals');
+  ok('a support agent is refused Marketing → Referrals', (await exists('[data-gate=forbidden]')) && !(await exists('[data-workspace=marketing-referrals]')));
+  await visit('/materials?kind=packaging');
+  const pkGate = (await exists('[data-gate=forbidden]')) && !(await exists('[data-packaging-table]'));
+  await visit(pkPath);
+  ok('a support agent is refused the packaging list and a packaging item', pkGate && (await exists('[data-gate=forbidden]')) && !(await exists('[data-entity]')));
   await visit('/support', '!!document.querySelector("[data-workspace=support]")');
   ok('a support agent still has Support, on the frame, and can open the ticket', (await exists('[data-ticket-filters]')));
   await visit(T, '!!document.querySelector("[data-entity=ticket]")');
@@ -198,6 +338,10 @@ try {
     const wide = [];
     for (const p of [...PAGES.map(x => x[0]), C, C + '?tab=discounts', C + '?tab=banners', C + '?tab=results', T, `/staff/${me.id}`, `/roles/${role.id}`]) { await visit(p); if (!(await noOverflow())) wide.push(p.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ':id')); }
     ok(`390px: no sideways page scroll on any of the ${PAGES.length + 7} pages`, wide.length === 0, wide.join(', '));
+    const pkWide = [];
+    for (const p of ['/materials?kind=packaging', pkPath, pkPath + '?tab=details']) { await visit(p); if (!(await noOverflow())) pkWide.push(p); }
+    ok('390px: no sideways page scroll on the packaging list or a packaging item', pkWide.length === 0, pkWide.join(', '));
+    await visit('/materials?kind=packaging', '!!document.querySelector("[data-packaging-table]")'); await b.shot('mf-390-packaging.png');
     await visit('/marketing', '!!document.querySelector("[data-drawer-open=new-campaign]")');
     await openDrawer('new-campaign', '#create-campaign-form'); await w(500);
     ok('390px: the New campaign drawer fits the screen', await ev(`(()=>{const d=document.querySelector('[data-drawer=new-campaign]').getBoundingClientRect();return d.left >= -1 && d.right <= innerWidth + 1})()`));

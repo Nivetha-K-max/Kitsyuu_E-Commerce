@@ -32,7 +32,7 @@ export function LoginForm({ next, reason }: { next?: string; reason?: string }) 
   );
 }
 
-export function SignupForm({ next }: { next?: string }) {
+export function SignupForm({ next, referral }: { next?: string; referral?: string }) {
   return (
     <ActionForm action={signupAction} submitLabel="Create account" pendingLabel="Creating account…" label="Create an account"
       footer={<p className="st-auth-alt">Already have an account? <Link href={withNext('/login', next)}>Log in</Link></p>}>
@@ -40,6 +40,7 @@ export function SignupForm({ next }: { next?: string }) {
       <Field name="email" label="Email" type="email" autoComplete="email" required />
       <Field name="password" label="Password" type="password" autoComplete="new-password" required hint="At least 12 characters. A few unrelated words make a strong, memorable password." />
       <Field name="confirm" label="Repeat password" type="password" autoComplete="new-password" required />
+      {referral && <><input type="hidden" name="ref" value={referral} /><p className="st-acc-quiet" data-signup-referral>Referral code <b>{referral}</b> will be added to your new account.</p></>}
     </ActionForm>
   );
 }

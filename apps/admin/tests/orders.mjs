@@ -44,7 +44,7 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const rows = () => ev(`[...document.querySelectorAll('[data-order-row]')].map(r=>r.dataset.orderRow)`);
 const allErrors = [];
 // Ready = the page's content has streamed in (the (erp)/loading.tsx skeleton also sits inside main).
-const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]/.test(e))); };
+const visit = async (p, ready = '!!document.querySelector("main") && !document.querySelector("[data-loading]")') => { await b.goto(BASE + p, ready); allErrors.push(...b.errors.filter(e => !/http 40[34]|\/favicon\.ico/.test(e))); };
 /* Confirmations are an in-page dialog (components/confirm.tsx): accept each one as it opens and record its question. */
 const autoConfirm = () => ev(`window.__q=[];window.__acObs?.disconnect();window.__acObs=new MutationObserver(()=>{const d=document.querySelector('[data-confirm-dialog]:not([data-auto])');if(d){d.setAttribute('data-auto','1');window.__q.push(d.querySelector('[data-confirm-text]').textContent);d.querySelector('[data-confirm-accept]').click();}});window.__acObs.observe(document.body,{childList:true,subtree:true});true`);
 const confirms = () => ev('window.__q ?? []');
@@ -226,6 +226,24 @@ try {
   ok('payments list: failed only', (await ev(`[...document.querySelectorAll('[data-payment-of]')].map(r=>r.dataset.paymentOf).join()`)) === 'KTS-TEST-0007');
   await visit(`/orders/${o2}?tab=invoice`, '!!document.querySelector("[data-section=invoice]")');
   ok('accountant sees the issued invoice number', /KTS\/26-27\/\d{5}/.test(await ev(`document.querySelector('[data-invoices]')?.innerText ?? ''`)));
+  // 2026-10-12, unified billing: the invoice by email from the order (finance.manage), and the one bill breakdown on the invoice.
+  // The test server has no email provider (MAILER=console): the page must say the email was only logged, never that it was delivered.
+  const EI = '#order-email-invoice-form';
+  ok('order → Invoice: not emailed yet; the accountant can email it', /has not been emailed/.test(await ev(`document.querySelector('[data-order-invoice-emails]')?.innerText ?? ''`)) && (await exists(EI)));
+  await autoConfirm();
+  await submit(EI);
+  const eiMsg = await ev(`document.querySelector('${EI} [data-form-message]')?.innerText ?? ''`);
+  ok('email invoice: asks first, then says honestly what happened (no provider here: only written to the log; never "delivered")', /Email invoice KTS\//.test((await ev('window.__q ?? []')).at(-1) ?? '')
+    && /No email provider is configured/.test(eiMsg) && !/delivered to|was delivered\b/.test(eiMsg), eiMsg);
+  const [il] = await q(`select n.event, n.status, n.recipient, n.subject from notification_log n where n.order_id = $1 and n.event = 'invoice.issued'`, [o2]);
+  ok('email invoice: the attempt is logged against the order as sent, to the order\'s contact, and audited without the address', il?.status === 'sent' && il.recipient === 'asha.fixture@test.local' && /tax invoice KTS\//.test(il.subject)
+    && (await q(`select count(*)::int n from audit_logs where action = 'invoice.email' and metadata->>'result' = 'sent' and metadata::text not like '%asha.fixture%'`))[0].n === 1);
+  ok('order → Invoice: now shows the attempt and offers to send again', await until(`/Emailed: sent/.test(document.querySelector('[data-order-invoice-emails]')?.innerText ?? '') && /again/.test(document.querySelector('${EI} button[type=submit]')?.innerText ?? '')`, 15000));
+  const [fx] = await q(`select id, subtotal_paise, total_paise from invoices where order_id = $1 and status = 'issued'`, [o2]);
+  await visit(`/finance/invoices/${fx.id}`, '!!document.querySelector("[data-invoice]")');
+  ok('invoice page: the bill breakdown (subtotal … total) from the same calculation, the payment method in words, and the email attempt', (await ev(`[...document.querySelectorAll('[data-invoice-line]')].map(r=>r.dataset.invoiceLine).join()`)).startsWith('subtotal')
+    && (await ev(`document.querySelector('[data-invoice-line=total]').innerText`)).includes(money(fx.total_paise)) && /Online payment/.test(await ev(`document.querySelector('[data-invoice-payment]').innerText`))
+    && (await exists('[data-invoice-email=sent]')) && (await exists('#email-invoice-form')));
   await visit(`/orders/${o2}?tab=fulfilment`, '!!document.querySelector("[data-section=status]")');
   ok('accountant (no orders.update_status): no action in the header', (await ev(`document.querySelectorAll('[data-order-actions] form').length`)) === 0);
   ok('accountant cannot change status (no form, read-only note)', !(await exists(F)) && (await exists('[data-readonly=status]')));

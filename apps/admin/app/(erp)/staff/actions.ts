@@ -16,6 +16,7 @@ export async function inviteStaffAction(_: ActionState, form: FormData): Promise
   const actor = await requireActor();
   let staffId = '';
   const result = await handle(inviteStaffInput, form, async input => {
+    if (mailer().kind === 'unconfigured') return { ok: false, message: 'Email delivery is not configured for the admin (MAILER, RESEND_API_KEY, MAIL_FROM), so no email can be sent. Nothing was changed.' };
     staffId = (await inviteStaff(db(), mailer(), actor, input, await ctx())).staffId;
     return { ok: true };
   }, { roleIds: form.getAll('roleIds').map(String) });
@@ -50,7 +51,7 @@ export async function setStaffStatusAction(_: ActionState, form: FormData): Prom
 
 export async function resendInviteAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();
-  return handle(staffIdOnly, form, async input => { await resendInvite(db(), mailer(), actor, input.staffId, await ctx()); return { ok: true, message: 'A new invitation has been sent. Earlier links no longer work.' }; });
+  return handle(staffIdOnly, form, async input => { if (mailer().kind === 'unconfigured') return { ok: false, message: 'Email delivery is not configured for the admin (MAILER, RESEND_API_KEY, MAIL_FROM), so no email can be sent. Nothing was changed.' }; await resendInvite(db(), mailer(), actor, input.staffId, await ctx()); return { ok: true, message: 'A new invitation has been sent. Earlier links no longer work.' }; });
 }
 
 export async function revokeSessionsAction(_: ActionState, form: FormData): Promise<ActionState> {

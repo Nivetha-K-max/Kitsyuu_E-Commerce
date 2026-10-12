@@ -10,13 +10,15 @@
      from material stock through the material ledger (refused when there is not enough) in the same transaction.
    · Output: the quality check completes the order ONCE. Passed pieces enter the online store's stock through the stock
      ledger (reason production_in, the order's number on the row); rejected pieces never do. There is no partial output.
-   This page never changes a quantity itself; it shows the ledger rows the order wrote so they can be followed. */
+   This page never changes a quantity itself; it shows the ledger rows the order wrote so they can be followed.
+   2026-10-12: Overview also lists the order's milestones (Ready for Trial, Ex-Factory: one of each) and tasks, which the
+   production calendar shows by date. They are added by staff, never automatically, and change nothing else on the order. */
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError } from '@kitsyuu/contracts';
-import { getProductionOrder, listMaterials, listVendors, productionMaterialNeeds } from '@kitsyuu/core';
+import { MILESTONE_LABEL, getProductionOrder, listMaterials, listMilestones, listVendors, productionMaterialNeeds } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select } from '@/components/forms';
 import { Entity, Facts, Figures, Section, StateBlock } from '@/components/frame';
 import { NavLink } from '@/components/NavFrame';
@@ -24,7 +26,7 @@ import RecordActivity from '@/components/RecordActivity';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatDay } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { consumeMaterialAction, productionInputAction, productionStatusAction, qualityCheckAction, raiseProductionPoAction } from '../actions';
+import { consumeMaterialAction, deleteMilestoneAction, milestoneDoneAction, productionInputAction, productionStatusAction, qualityCheckAction, raiseProductionPoAction, saveMilestoneAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Production order' };
 /** Procurement status of a production order (see core procurementStatus). */
@@ -59,6 +61,8 @@ export default async function ProductionOrderPage({ params, searchParams }: { pa
   const remaining = o.status === 'cancelled' ? 0 : Math.max(0, o.qty_planned - passed - rejected);
 
   const onMaterials = tab === 'materials';
+  const milestones = tab === 'overview' ? await listMilestones(db(), actor, o.id) : [];
+  const missing = (['ready_for_trial', 'ex_factory'] as const).filter(k => !milestones.some(m => m.kind === k));
   const materials = onMaterials && manage && open && seeBuying ? (await listMaterials(db(), actor)).filter(m => m.is_active) : [];
   // What still has to be bought for this order, and the purchase orders raised for it (core).
   const needs = (onMaterials || tab === 'overview') && seeBuying ? await productionMaterialNeeds(db(), actor, o.id) : null;
@@ -115,6 +119,47 @@ export default async function ProductionOrderPage({ params, searchParams }: { pa
             ...(needs ? [{ label: 'Materials', value: <><span data-procurement-summary={needs.procurement}>{PROCUREMENT[needs.procurement]}</span> · <NavLink href={href('materials')}>open Materials</NavLink></> }] : []),
             ...(o.notes ? [{ label: 'Notes', value: o.notes }] : []),
           ]} />
+        </Section>
+        <Section id="ms-h" title="Milestones and tasks" name="milestones" wide meta={milestones.length ? `${milestones.length}` : undefined}
+          hint="Dates for this order on the production calendar. Ready for Trial and Ex-Factory can each be set once; tasks as many as needed. None is added automatically.">
+          {milestones.length === 0 ? <StateBlock title="Nothing scheduled" name="milestones">{manage && open ? 'Add a milestone or a task below.' : 'No milestone or task has been added to this order.'}</StateBlock> : (
+            <div className="table-wrap"><table data-milestones>
+              <thead><tr><th>What</th><th>Date</th><th>Status</th>{manage && <th>Change</th>}</tr></thead>
+              <tbody>{milestones.map(m => (
+                <tr key={m.id} data-milestone={m.kind} data-milestone-state={m.done ? 'done' : m.overdue ? 'overdue' : 'open'}>
+                  <td><b>{m.label}</b>{m.kind !== 'task' && <div className="note">Production milestone</div>}{m.note && <div className="note">{m.note}</div>}</td>
+                  <td className="nowrap" data-milestone-date><Link href={`/production/calendar?view=day&date=${m.due}`}>{m.due}</Link></td>
+                  <td>{m.done ? <><span className="badge active as-written">Done</span><div className="note">{formatDateTime(m.done_at as Date)}{m.done_by ? ` · ${m.done_by}` : ''}</div></> : m.overdue ? <span className="badge low_stock">Overdue</span> : <span className="badge as-written">Open</span>}</td>
+                  {manage && <td><div className="actions">
+                    <ActionForm action={milestoneDoneAction} submitLabel={m.done ? 'Mark not done' : 'Mark done'} variant="ghost" className="inline-form" id={`ms-done-${m.id}`} label={`${m.done ? 'Reopen' : 'Complete'} ${m.label}`}>
+                      <Hidden name="milestoneId" value={m.id} /><Hidden name="done" value={m.done ? 'no' : 'yes'} /><Hidden name="expectedDone" value={m.done ? 'yes' : 'no'} />
+                    </ActionForm>
+                    {!m.done && <details className="row-edit"><summary className="btn ghost sm">Change…</summary>
+                      <ActionForm action={saveMilestoneAction} submitLabel="Save" className="form compact row-edit-form" id={`ms-edit-${m.id}`} label={`Change ${m.label}`}>
+                        <Hidden name="milestoneId" value={m.id} />
+                        {m.kind === 'task' && <Field name="title" label="Task" defaultValue={m.title ?? ''} required />}
+                        <Field name="dueOn" label="Date" type="date" defaultValue={m.due} required />
+                        <Field name="note" label="Note" defaultValue={m.note ?? ''} />
+                      </ActionForm>
+                      <ActionForm action={deleteMilestoneAction} submitLabel="Remove" variant="danger" className="inline-form" id={`ms-del-${m.id}`} label={`Remove ${m.label}`}
+                        confirmText={`Remove "${m.label}" from ${o.number}? Use this only for an entry added by mistake.`}><Hidden name="milestoneId" value={m.id} /></ActionForm>
+                    </details>}
+                  </div></td>}
+                </tr>
+              ))}</tbody>
+            </table></div>
+          )}
+          {manage && open && (
+            <details className="row-edit" data-add-milestone><summary className="btn ghost sm">Add milestone or task</summary>
+              <ActionForm action={saveMilestoneAction} submitLabel="Add" className="form compact row-edit-form" id="milestone-form" label="Add a milestone or task" resetOnSuccess>
+                <Hidden name="productionOrderId" value={o.id} />
+                <Select name="kind" label="What" options={[...missing.map(k => ({ value: k, label: MILESTONE_LABEL[k] })), { value: 'task', label: 'Task' }]} />
+                <Field name="title" label="Task (leave empty for a milestone)" hint="What has to be done." />
+                <Field name="dueOn" label="Date" type="date" required />
+                <Field name="note" label="Note (optional)" />
+              </ActionForm>
+            </details>
+          )}
         </Section>
         {manage && d.next.length > 0 && (
           <Section id="st-h" title="Status" name="status" hint={o.status === 'planned' ? 'Starting lets materials used and the quality check be recorded.' : 'Completing is done with the quality check, under Output.'}>

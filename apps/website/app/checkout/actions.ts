@@ -9,6 +9,7 @@ import { cancelOrderByCustomer, checkoutRateLimit, currentPaymentSession, placeO
 import { handle } from '@/lib/actions';
 import { sendOrderConfirmation } from '@/lib/order-mail';
 import { commerceConfig, onlinePaymentNotice, onlinePaymentState, paymentProvider, testProvider } from '@/lib/commerce';
+import { limited } from '@/lib/rate-limit';
 import { db, requestContext, requireCustomer } from '@/lib/server';
 
 export async function placeOrderAction(_: ActionState, form: FormData): Promise<ActionState> {
@@ -87,6 +88,8 @@ export async function applyCouponAction(_: ActionState, form: FormData): Promise
   const me = await requireCustomer('/checkout');
   const r = await handle(couponInput, form, async input => {
     if (!input.code) return { ok: false, fieldErrors: { code: 'Enter a coupon code.' }, message: 'Enter a coupon code.' };
+    const wait = await limited('coupon', me.customerId);
+    if (wait) return { ok: false, message: wait };
     await setCartCoupon(db(), me, input.code);
     return { ok: true, message: 'Coupon added.' };
   });

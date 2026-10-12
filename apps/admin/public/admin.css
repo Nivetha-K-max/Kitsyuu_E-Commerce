@@ -1879,3 +1879,128 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .qty,td.qty,.ord-table td.qty{font-family:var(--font);font-variant-numeric:tabular-nums lining-nums}
 .empty{border:1px solid var(--border);border-style:solid;background:none;border-radius:var(--radius-lg)}
 .empty-icon{border-radius:50%;background:var(--surface-3);box-shadow:none;border:0}
+/* POS billing: store selector and the branch stock heading (2026-10-09) */
+.pos-store{display:grid;gap:6px;margin-bottom:14px}.pos-store label{font-size:13px;color:var(--muted)}.pos-store select{width:100%;min-height:44px}
+.pos-stock-head{margin:14px 0 0;font-size:13px;font-weight:600;color:var(--muted)}
+.pos-preview{margin-top:16px}.pos-variant-view{cursor:default}.pos-preview-list{max-height:none}.pos-other{margin:8px 0 0;padding-left:18px;display:grid;gap:6px}
+
+/* Production calendar (2026-10-12): month and week grids, one list of days at phone width. Ink on paper, no colour accent:
+   a done entry is quieter, an overdue one heavier, and both say so in words. */
+.cal-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin-bottom:12px}
+.cal-bar .ord-views{margin-bottom:0}
+.cal-nav{display:flex;align-items:center;gap:6px;min-width:0}
+.cal-nav .btn{height:32px;min-height:32px}
+.cal-title{margin:0 0 0 8px;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--border);gap:1px}
+.cal-head{padding:6px 8px;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:var(--surface)}
+.cal-day{display:flex;flex-direction:column;gap:4px;min-width:0;min-height:104px;padding:6px;background:var(--bg,var(--paper))}
+.cal-week .cal-day{min-height:220px}
+.cal-day.is-outside{opacity:.55}
+.cal-day.is-today{box-shadow:inset 0 0 0 2px var(--text)}
+.cal-date{align-self:flex-start;font-size:12.5px;font-weight:600;color:var(--text);text-decoration:none}
+.cal-date:hover{text-decoration:underline}
+.cal-dow{display:none}
+.cal-mon{font-weight:400;color:var(--muted)}
+.cal-ev{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;min-width:0;padding:3px 6px;border:1px solid var(--border);border-left:3px solid var(--text);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;line-height:1.3;text-decoration:none}
+.cal-ev:hover{border-color:var(--text)}
+.cal-ev b{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.cal-ev .mono{font-size:11px}
+.cal-ev[data-event-kind=due]{border-left-style:double;border-left-width:4px}
+.cal-ev[data-event-kind=task]{border-left-color:var(--muted)}
+.cal-ev.is-done{color:var(--muted);border-left-color:var(--faint)}
+.cal-ev.is-done b{text-decoration:line-through;font-weight:500}
+.cal-ev.is-overdue{border-color:var(--text);font-weight:600}
+.cal-flag{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.cal-more{font-size:12px;color:var(--muted)}
+@media (max-width:760px){
+  .cal{display:block;background:transparent;border:0}
+  .cal-head{display:none}
+  .cal-day{min-height:0;margin-bottom:6px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .cal-week .cal-day{min-height:0}
+  .cal-month .cal-day.is-empty,.cal-month .cal-day.is-outside{display:none}
+  .cal-dow{display:inline}
+  .cal-title{margin-left:4px;font-size:14px;white-space:normal}
+}
+
+/* Interaction states, one rule each (2026-10-12). No new colours: the existing focus ring and tokens.
+   · Keyboard focus in the sidebar is the same ring buttons, tabs and menus already use (it was a plain outline there).
+   · Anything marked aria-disabled looks and behaves like a disabled button.
+   · The sidebar keeps its width: a long label is cut with an ellipsis instead of pushing the content. */
+.nav a:focus-visible,.side-link:focus-visible{outline:none;box-shadow:var(--focus)}
+.btn[aria-disabled=true],.nav a[aria-disabled=true],.tabs a[aria-disabled=true]{opacity:.5;cursor:not-allowed;pointer-events:none}
+.nav a{min-width:0}
+
+/* Boards (2026-10-12): the leads pipeline, content R&D, content planning and the content calendar. One set of rules:
+   columns that scroll sideways as a row, cards in the existing surface and border tokens, no accent colour. States are
+   written on the card ("Needs approval", "2 left to fill"), never colour alone. Columns stack at phone width. */
+.kb{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(272px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px;align-items:start}
+.kb.kb-3{grid-auto-columns:minmax(260px,1fr)}
+.kb-col{display:flex;flex-direction:column;min-width:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}
+.kb-col[data-drop-over]{outline:2px solid var(--text);outline-offset:-2px}
+.kb-col[data-drop-busy],.cc-day[data-drop-busy],.cc-side[data-drop-busy]{opacity:.6}
+.kb-head{display:flex;align-items:baseline;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--border)}
+.kb-head h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.kb-count{font-size:12px;font-weight:600;color:var(--muted);padding:1px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface)}
+.kb-hint{margin-left:auto;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kb-cards{display:flex;flex-direction:column;gap:8px;padding:10px;max-height:min(68vh,760px);overflow-y:auto}
+.kb-empty{margin:0;padding:18px 8px;text-align:center;font-size:12.5px;color:var(--faint);border:1px dashed var(--border);border-radius:var(--radius-sm)}
+.kb-card{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-size:13px}
+.kb-card[draggable=true]{cursor:grab}
+.kb-card[data-dragging]{opacity:.45}
+.kb-card.is-waiting{border-color:var(--text)}
+.kb-card p{margin:0}
+.kb-who{display:flex;gap:10px;align-items:center;min-width:0}
+.kb-who>div{min-width:0}
+.kb-avatar{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--text);color:var(--surface);font-size:11px;font-weight:600}
+.kb-what{color:var(--text-2)}
+.kb-title{margin:0;font-size:13.5px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.kb-title-link{font-weight:600;color:var(--text);text-decoration:none;overflow-wrap:anywhere;line-height:1.35}
+.kb-title-link:hover{text-decoration:underline}
+.kb-desc{color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.kb-link{font-size:12.5px;font-weight:500}
+.kb-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.kb-flag{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.kb-foot{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:6px;padding-top:6px;border-top:1px solid var(--border)}
+.kb-move{flex:1 1 100%}
+.kb-move>summary{float:right}
+.kb-move[open]>summary{float:none}
+.kb-action{width:100%}
+.kb-action .btn,.btn.kb-action{width:100%;justify-content:center}
+.kb-said{margin:0;font-size:12.5px;font-weight:500}
+.kb-said:empty{display:none}
+.kb-said:not(:empty){padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
+.kb-ask{display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface);font-size:12.5px}
+.kb-ask label{display:grid;gap:4px}
+.kb-toggle{margin-left:auto}
+.kb-toggle .ord-views{margin-bottom:0}
+.kb-approvals{margin-bottom:14px;border:1px solid var(--text);border-radius:var(--radius-sm);background:var(--surface)}
+.kb-approvals h2{margin:0;padding:10px 14px;font-size:13.5px;font-weight:600;border-bottom:1px solid var(--border)}
+.kb-approvals ul{margin:0;padding:0;list-style:none}
+.kb-approvals li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.kb-approvals li:last-child{border-bottom:0}
+/* Content calendar: seven day columns (or a month of them) and the "no date yet" column at the side. */
+.cc{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;align-items:start}
+.cc-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.cc-day,.cc-side{display:flex;flex-direction:column;min-width:0;min-height:120px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2)}
+.cc-week .cc-day{min-height:360px}
+.cc-day.is-today{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.cc-day.is-outside{opacity:.55}
+.cc-day[data-drop-over],.cc-side[data-drop-over]{outline:2px solid var(--text);outline-offset:-2px}
+.cc-day-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.cc-day-head b{font-size:15px}
+.cc-dow{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cc-day .kb-cards,.cc-side .kb-cards{padding:8px;max-height:none}
+.cc-month .kb-cards{gap:4px;padding:6px}
+.kb-card.is-compact{padding:6px 8px;gap:4px;font-size:12px}
+.kb-card.is-compact .kb-title-link{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cc-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0;font-size:12.5px;color:var(--muted)}
+.cc-legend b{color:var(--text)}
+@media (max-width:1100px){.cc{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){
+  .kb{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:minmax(0,1fr);overflow-x:visible}
+  .kb-cards{max-height:none}
+  .kb-toggle{margin-left:0}
+  .cc-days{grid-template-columns:minmax(0,1fr)}
+  .cc-day,.cc-week .cc-day{min-height:0}
+  .cc-month .cc-day.is-empty,.cc-month .cc-day.is-outside{display:none}
+}

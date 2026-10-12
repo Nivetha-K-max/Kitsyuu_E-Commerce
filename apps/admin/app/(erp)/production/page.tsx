@@ -56,7 +56,8 @@ export default async function ProductionPage({ searchParams }: { searchParams: S
   return (
     <Workspace name="production" title="Production"
       summary={`${formatNumber(all.length)} order${all.length === 1 ? '' : 's'}${open ? ` · ${formatNumber(open)} open` : ''}`}
-      actions={manage ? <Link className="btn" href="/production/new" data-link="new-production">Plan production</Link> : undefined}>
+      actions={<><Link className="btn ghost" href="/production/calendar" data-link="production-calendar">Calendar</Link>
+        {manage && <Link className="btn" href="/production/new" data-link="new-production">Plan production</Link>}</>}>
       <div data-production-tabs>
         <ViewTabs label="Production status" current={status ?? 'all'}
           items={[{ id: 'all', label: 'All', href: link({ status: '' }) }, ...STATUSES.map(s => ({ id: s, label: STATUS_TAB[s], href: link({ status: s }), count: countOf(s) }))]} />

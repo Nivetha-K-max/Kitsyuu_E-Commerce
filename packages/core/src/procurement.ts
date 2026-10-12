@@ -74,31 +74,53 @@ export async function setVendorActive(db: Db, actor: StaffPrincipal, input: { ve
 }
 
 // ---------------------------------------------------------------- materials
-export async function listMaterials(db: Db, actor: StaffPrincipal) {
+/* 2026-10-12: packaging (courier bags, cartons, tissue, tags…) is a material of kind 'packaging': the same table, the same
+   ledger, the same purchase orders. `kind` narrows the list to one of the two; without it every item is returned, as before. */
+export async function listMaterials(db: Db, actor: StaffPrincipal, opts: { kind?: 'material' | 'packaging' } = {}) {
   requirePermission(actor, 'procurement.read');
-  const rows = await db.selectFrom('materials as m').select(['m.id', 'm.code', 'm.name', 'm.unit', 'm.stock_qty', 'm.reorder_level', 'm.notes', 'm.is_active',
+  const costs = can(actor, 'costs.read');
+  let base = db.selectFrom('materials as m').leftJoin('vendors as v', 'v.id', 'm.vendor_id').leftJoin('locations as loc', 'loc.id', 'm.location_id');
+  if (opts.kind) base = base.where('m.kind', '=', opts.kind);
+  const rows = await base.select(['m.id', 'm.code', 'm.name', 'm.unit', 'm.stock_qty', 'm.reorder_level', 'm.notes', 'm.is_active',
+    'm.kind', 'm.vendor_id', 'v.name as vendor_name', 'm.location_id', 'loc.name as location_name',
+    // What it cost last time it was bought (the newest purchase order line with a cost); only for staff who may see costs.
+    (costs ? sql<number | null>`(select l.unit_cost_paise from public.purchase_order_lines l join public.purchase_orders p on p.id = l.purchase_order_id
+      where l.material_id = m.id and l.unit_cost_paise is not null order by p.created_at desc limit 1)` : sql<number | null>`null`).as('last_cost_paise'),
     sql<string>`coalesce((select sum(l.qty_ordered - l.qty_received) from public.purchase_order_lines l join public.purchase_orders p on p.id = l.purchase_order_id
       where l.material_id = m.id and p.status in ('ordered', 'partially_received')), 0)::text`.as('incoming')])
     .orderBy('m.is_active', 'desc').orderBy('m.code').execute();
   return rows.map(r => ({ ...r, stock: qty(r.stock_qty), incoming: qty(r.incoming), reorderLevel: r.reorder_level === null ? null : qty(r.reorder_level),
-    low: r.reorder_level !== null && qty(r.stock_qty) <= qty(r.reorder_level) }));
+    low: r.reorder_level !== null && qty(r.stock_qty) <= qty(r.reorder_level),
+    // How much is missing to be back above the reorder level, counting what is already on order (0 when nothing needs ordering).
+    toOrder: r.reorder_level === null ? 0 : Math.max(0, Math.round((qty(r.reorder_level) - qty(r.stock_qty) - qty(r.incoming)) * 1000) / 1000) }));
 }
 
-export type MaterialInput = { materialId?: string; code?: string; name: string; unit: string; reorderLevel: number | null; notes: string | null };
+export type MaterialInput = { materialId?: string; code?: string; name: string; unit: string; reorderLevel: number | null; notes: string | null;
+  /** set when the item is created; never changed afterwards (its ledger is one history) */ kind?: 'material' | 'packaging';
+  /** undefined = leave as it is; null = none */ vendorId?: string | null; locationId?: string | null };
 export async function saveMaterial(db: Db, actor: StaffPrincipal, input: MaterialInput, ctx: MutationContext) {
   requirePermission(actor, 'procurement.manage');
   return db.transaction().execute(async tx => {
-    const row = { name: input.name, unit: input.unit, reorder_level: input.reorderLevel === null ? null : String(input.reorderLevel), notes: input.notes };
+    const row: { name: string; unit: string; reorder_level: string | null; notes: string | null; vendor_id?: string | null; location_id?: string | null } =
+      { name: input.name, unit: input.unit, reorder_level: input.reorderLevel === null ? null : String(input.reorderLevel), notes: input.notes };
+    if (input.vendorId !== undefined) {
+      if (input.vendorId && !(await tx.selectFrom('vendors').select('id').where('id', '=', input.vendorId).executeTakeFirst())) throw new NotFoundError('Supplier not found.');
+      row.vendor_id = input.vendorId;
+    }
+    if (input.locationId !== undefined) {
+      if (input.locationId && !(await tx.selectFrom('locations').select('id').where('id', '=', input.locationId).executeTakeFirst())) throw new NotFoundError('Location not found.');
+      row.location_id = input.locationId;
+    }
     if (!input.materialId) {
       if (!input.code) throw new DomainError('invalid', 'Enter a material code.');
       if (await tx.selectFrom('materials').select('id').where('code', '=', input.code).executeTakeFirst()) throw new ConflictError(`A material with the code ${input.code} already exists.`);
-      const m = await tx.insertInto('materials').values({ ...row, code: input.code }).returning('id').executeTakeFirstOrThrow();
-      await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'material.create', entityType: 'materials', entityId: m.id, after: { code: input.code, ...row } });
+      const m = await tx.insertInto('materials').values({ ...row, code: input.code, kind: input.kind ?? 'material' }).returning('id').executeTakeFirstOrThrow();
+      await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'material.create', entityType: 'materials', entityId: m.id, after: { code: input.code, kind: input.kind ?? 'material', ...row } });
       return { id: m.id, changed: 1 };
     }
-    const before = await tx.selectFrom('materials').select(['name', 'unit', 'reorder_level', 'notes']).where('id', '=', input.materialId).forUpdate().executeTakeFirst();
+    const before = await tx.selectFrom('materials').select(['name', 'unit', 'reorder_level', 'notes', 'vendor_id', 'location_id']).where('id', '=', input.materialId).forUpdate().executeTakeFirst();
     if (!before) throw new NotFoundError('Material not found.');
-    const b = { ...before, reorder_level: before.reorder_level === null ? null : String(qty(before.reorder_level)) };
+    const b: Record<string, string | null> = { ...before, reorder_level: before.reorder_level === null ? null : String(qty(before.reorder_level)) };
     const changed = (Object.keys(row) as (keyof typeof row)[]).filter(k => b[k] !== row[k]);
     if (!changed.length) return { id: input.materialId, changed: 0 };
     await tx.updateTable('materials').set(row).where('id', '=', input.materialId).execute();
@@ -117,6 +139,38 @@ export async function adjustMaterialStock(db: Db, actor: StaffPrincipal, input: 
     const balance = await materialLedger(tx, input.materialId, input.delta, input.reason, actor.staffId, input.note, null);
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'material.stock_adjust', entityType: 'materials', entityId: input.materialId,
       after: { delta: input.delta, balance }, metadata: { reason: input.reason, note: input.note } });
+    return { balance };
+  });
+}
+
+/** The suppliers and places a material or packaging item can be given (active ones, names only). Reading materials is
+    enough: the form that edits an item must be able to show its choices to staff who cannot open Vendors or Locations. */
+export async function materialPlaces(db: Db, actor: StaffPrincipal) {
+  requirePermission(actor, 'procurement.read');
+  const [vendors, locations] = await Promise.all([
+    db.selectFrom('vendors').select(['id', 'name']).where('is_active', '=', true).orderBy(sql`lower(name)`).execute(),
+    db.selectFrom('locations').select(['id', 'name']).where('is_active', '=', true).orderBy('is_online', 'desc').orderBy('sort_order').orderBy('name').execute(),
+  ]);
+  return { vendors, locations };
+}
+
+/** Packaging used (2026-10-12): staff record how much of a packaging item was used (packing orders, samples…). One ledger
+    row with the existing reason 'consume', through the same function as every other material movement, so stock can never
+    go below zero and two people recording at once cannot lose an update. `expectedStock` is the stock the person saw: if it
+    has changed since (someone else recorded, or this form was sent twice) nothing is recorded and they are told to look
+    again. Only for items of kind 'packaging' that are active. Needs procurement.manage, like every material stock change. */
+export async function recordPackagingUse(db: Db, actor: StaffPrincipal, input: { materialId: string; qty: number; expectedStock: number; note: string }, ctx: MutationContext) {
+  requirePermission(actor, 'procurement.manage');
+  if (!(input.qty > 0)) throw new DomainError('invalid', 'Enter a quantity above zero.');
+  if (!input.note.trim()) throw new DomainError('invalid', 'Say what it was used for.');
+  return db.transaction().execute(async tx => {
+    const m = await tx.selectFrom('materials').select(['id', 'code', 'kind', 'is_active', 'stock_qty']).where('id', '=', input.materialId).forUpdate().executeTakeFirst();
+    if (!m) throw new NotFoundError('Packaging item not found.');
+    if (m.kind !== 'packaging') throw new ConflictError('This is not a packaging item: material used in production is recorded on the production order.');
+    if (!m.is_active) throw new ConflictError('This packaging item is inactive.');
+    if (qty(m.stock_qty) !== input.expectedStock) throw new ConflictError(`The stock of ${m.code} changed to ${qty(m.stock_qty)} since you opened this page. Nothing was recorded: check the figure and record the use again.`);
+    const balance = await materialLedger(tx, m.id, -input.qty, 'consume', actor.staffId, input.note.trim(), null);
+    await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'packaging.use', entityType: 'materials', entityId: m.id, after: { used: input.qty, balance }, metadata: { code: m.code, note: input.note.trim() } });
     return { balance };
   });
 }
