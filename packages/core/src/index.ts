@@ -46,6 +46,12 @@ export { razorpayProvider, type RazorpayConfig } from './payments/razorpay.ts';
 export { productSales, productReviews, productProduction, productActivity } from './product-context.ts';
 // ---------- M8: operations ----------
 export { listCustomers, getCustomer, setCustomerStatus, updateCustomerContact, CUSTOMER_PAGE_SIZE } from './customers.ts';
+// The customer page's record loaders (2026-10-10): each checks its own permission; all read only.
+export { customerOrdersPage, customerRecordCounts, CUSTOMER_ORDERS_PAGE_SIZE, type CustomerPart } from './customers.ts';
+export { customerPayments, CUSTOMER_PAYMENTS_MAX } from './payments-admin.ts';
+export { customerReturnHistory, CUSTOMER_RETURNS_MAX } from './returns.ts';
+export { customerTickets } from './support.ts';
+export { customerEmailLog, CUSTOMER_EMAILS_MAX } from './engagement.ts';
 export {
   listPayments, listPaymentEvents, listPaymentExceptions, getPaymentExceptions, recordManualRefund, cancelledOrderPaymentState, reconcileOrderPayments,
   listOrderPayments, getOrderPayment,

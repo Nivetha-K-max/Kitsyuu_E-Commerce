@@ -13,6 +13,7 @@
    platform with its reference. A refund is never marked done without one of those. */
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
 import { adjustPointsForRefunds } from './loyalty.ts';
+import { customerRef, returnsOwnedBy } from './customers.ts';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type CustomerPrincipal, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
 import type { PaymentProvider } from './payments/provider.ts';
@@ -159,6 +160,29 @@ export async function listReturns(db: Db, actor: StaffPrincipal, query: { q?: st
   const rows = await q.orderBy('r.requested_at', 'desc').limit(RETURN_PAGE_SIZE + 1).offset((query.page - 1) * RETURN_PAGE_SIZE).execute();
   const counts = await db.selectFrom('return_requests').select(['status', sql<number>`count(*)::int`.as('n')]).groupBy('status').execute();
   return { rows: rows.slice(0, RETURN_PAGE_SIZE), hasNext: rows.length > RETURN_PAGE_SIZE, counts: Object.fromEntries(counts.map(c => [c.status, c.n])) as Record<string, number> };
+}
+
+export const CUSTOMER_RETURNS_MAX = 200;
+
+/** Every return of one customer for the customer page (2026-10-10), newest first, whatever the age of the order: found
+    through the return's own customer, not through a list of recent orders. With `lines` (the default) each return has
+    its items and its refunds (refunds.return_id), read in one query each for all the returns. Read only.
+    Needs customers.read and returns.read. */
+export async function customerReturnHistory(db: Db, actor: StaffPrincipal, customerId: string, opts: { lines?: boolean } = {}) {
+  requirePermission(actor, 'customers.read'); requirePermission(actor, 'returns.read');
+  const c = await customerRef(db, customerId);
+  const found = await db.selectFrom('return_requests as r').innerJoin('orders as o', 'o.id', 'r.order_id').innerJoin('return_reasons as rr', 'rr.code', 'r.reason_code')
+    .select(['r.id', 'r.number', 'r.status', 'r.resolution', 'r.refund_amount_paise', 'r.requested_at', 'o.id as order_id', 'o.order_number', 'rr.label as reason'])
+    .where(returnsOwnedBy(c)).orderBy('r.requested_at', 'desc').orderBy('r.id', 'desc').limit(CUSTOMER_RETURNS_MAX + 1).execute();
+  const rows = found.slice(0, CUSTOMER_RETURNS_MAX), ids = rows.map(r => r.id);
+  const [items, refunds] = opts.lines === false || !ids.length ? [[], []] : await Promise.all([
+    db.selectFrom('return_items as i').innerJoin('order_items as oi', 'oi.id', 'i.order_item_id').leftJoin('product_variants as ev', 'ev.id', 'i.exchange_variant_id')
+      .select(['i.id', 'i.return_id', 'oi.name', 'oi.size', 'oi.colour', 'i.qty', 'ev.size as exchange_size']).where('i.return_id', 'in', ids).orderBy('oi.name').orderBy('i.id').execute(),
+    db.selectFrom('refunds as f').select(['f.id', 'f.return_id', 'f.amount_paise', 'f.status', 'f.method', 'f.created_at', 'f.processed_at'])
+      .where('f.return_id', 'in', ids).orderBy('f.created_at').orderBy('f.id').execute(),
+  ]);
+  return { rows: rows.map(r => ({ ...r, items: items.filter(i => i.return_id === r.id), refunds: refunds.filter(f => f.return_id === r.id) })),
+    more: found.length > CUSTOMER_RETURNS_MAX };
 }
 
 /** Money on the order that can still be refunded: captured payments minus refunds that are processed or still pending. */

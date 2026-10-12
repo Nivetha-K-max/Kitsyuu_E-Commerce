@@ -10,6 +10,7 @@ import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
 import { can, requirePermission, type CustomerPrincipal, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { raiseAlertSafely } from './alerts.ts';
+import { customerRef } from './customers.ts';
 import { hello, sendCustomerEmail, storeLink } from './customer-email.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -96,6 +97,16 @@ export async function listTickets(db: Db, actor: StaffPrincipal, query: { q?: st
     .limit(TICKET_PAGE_SIZE + 1).offset((query.page - 1) * TICKET_PAGE_SIZE).execute();
   const counts = await db.selectFrom('support_tickets').select(['status', sql<number>`count(*)::int`.as('n')]).groupBy('status').execute();
   return { rows: rows.slice(0, TICKET_PAGE_SIZE), hasNext: rows.length > TICKET_PAGE_SIZE, counts: Object.fromEntries(counts.map(c => [c.status, c.n])) as Record<string, number> };
+}
+
+/** The tickets of one customer for the customer page (2026-10-10), most recently updated first (the newest 50). A ticket
+    belongs to a customer through its customer_id; one opened by staff for an email address without an account does not.
+    Needs customers.read and support.read. */
+export async function customerTickets(db: Db, actor: StaffPrincipal, customerId: string) {
+  requirePermission(actor, 'customers.read'); requirePermission(actor, 'support.read');
+  const c = await customerRef(db, customerId);
+  return db.selectFrom('support_tickets').select(['id', 'number', 'subject', 'status', 'priority', 'created_at', 'updated_at'])
+    .where('customer_id', '=', c.id).orderBy('updated_at', 'desc').orderBy('id').limit(50).execute();
 }
 
 export async function getTicket(db: Db, actor: StaffPrincipal, ticketId: string) {

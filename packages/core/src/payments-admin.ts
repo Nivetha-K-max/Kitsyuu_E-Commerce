@@ -13,6 +13,7 @@ import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { lockOrder } from './order-state.ts';
 import { orderCodState } from './cod.ts';
+import { customerRef, ordersOwnedBy } from './customers.ts';
 import { listOrderEdits } from './order-edit.ts';
 import type { PaymentProvider } from './payments/provider.ts';
 
@@ -144,6 +145,31 @@ export async function getOrderPayment(db: Db, actor: StaffPrincipal, id: string)
   const refundedPaise = refunds.filter(r => r.status === 'processed').reduce((s, r) => s + r.amount_paise, 0);
   return { order: o, attempts, refunds, events, exceptions, cod, audit, customer, capturedPaise, refundedPaise,
     refundsDue: edits.filter(e => e.refund_due_paise > 0 && !e.refund_id).map(e => ({ editId: e.id, amountPaise: e.refund_due_paise, note: e.note, createdAt: e.created_at as Date })) };
+}
+
+// ---------------------------------------------------------------- payments of one customer (2026-10-10), read only
+export const CUSTOMER_PAYMENTS_MAX = 100;
+
+/** The payment history of one customer for the customer page: every payment attempt (an order can have several: failed,
+    then captured) and every refund of the customer's orders, newest first, each with the order it belongs to. A refund is
+    listed whether or not it came from a return (refunds recorded for a cancelled order or after an order edit have no
+    return). One row per record: every join is to the one order / return a row names. Nothing from the provider payload.
+    The newest CUSTOMER_PAYMENTS_MAX of each; `…More` says when there are older ones. Needs customers.read and billing.read. */
+export async function customerPayments(db: Db, actor: StaffPrincipal, customerId: string) {
+  requirePermission(actor, 'customers.read'); requirePermission(actor, 'billing.read');
+  const c = await customerRef(db, customerId);
+  const [attempts, refunds] = await Promise.all([
+    db.selectFrom('payments as p').innerJoin('orders as o', 'o.id', 'p.order_id')
+      .select(['p.id', 'p.provider', 'p.provider_payment_id', 'p.amount_paise', 'p.currency', 'p.status', 'p.method', 'p.failure_reason', 'p.captured_at', 'p.created_at',
+        'o.id as order_id', 'o.order_number'])
+      .where(ordersOwnedBy(c)).orderBy('p.created_at', 'desc').orderBy('p.id', 'desc').limit(CUSTOMER_PAYMENTS_MAX + 1).execute(),
+    db.selectFrom('refunds as r').innerJoin('orders as o', 'o.id', 'r.order_id').leftJoin('return_requests as rr', 'rr.id', 'r.return_id')
+      .select(['r.id', 'r.payment_id', 'r.amount_paise', 'o.currency', 'r.status', 'r.method', 'r.reference', 'r.provider_refund_id', 'r.failure_reason', 'r.reason',
+        'r.return_id', 'rr.number as return_number', 'r.created_at', 'r.processed_at', 'o.id as order_id', 'o.order_number'])
+      .where(ordersOwnedBy(c)).orderBy('r.created_at', 'desc').orderBy('r.id', 'desc').limit(CUSTOMER_PAYMENTS_MAX + 1).execute(),
+  ]);
+  return { attempts: attempts.slice(0, CUSTOMER_PAYMENTS_MAX), attemptsMore: attempts.length > CUSTOMER_PAYMENTS_MAX,
+    refunds: refunds.slice(0, CUSTOMER_PAYMENTS_MAX), refundsMore: refunds.length > CUSTOMER_PAYMENTS_MAX };
 }
 
 export interface PaymentException {

@@ -16,6 +16,8 @@ export async function launch(port = 9333) {
   // One profile per debugging port: two suites running at once must not share a Chrome profile (the second Chrome would hand
   // over to the first and exit, leaving no debugging port).
   const proc = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${DIR}/chrome-prof-${port}`, '--no-first-run', '--hide-scrollbars', '--disable-gpu', ...OFFLINE, 'about:blank'], {stdio: 'ignore'});
+  // 2026-10-12, proof for an offline run (OFFLINE_PROOF, see tests/offline-guard.cjs): this browser was started with the offline rules.
+  if (process.env.OFFLINE_PROOF) { try { fs.appendFileSync(process.env.OFFLINE_PROOF, `browser-offline port ${port} rules ${OFFLINE.length ? 'on' : 'OFF'}\n`); } catch {} }
   let list;
   for (let i = 0; i < 50; i++) { try { list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); if (list.find(t => t.type === 'page')) break; } catch {} await sleep(200); }
   const target = list?.find(t => t.type === 'page');

@@ -6,7 +6,8 @@
    Customer notes: internal, append-only. Cart and wishlist: read-only view for customer service. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { requirePermission, type Mailer, type MailMessage, type StaffPrincipal } from '@kitsyuu/auth';
+import { can, requirePermission, type Mailer, type MailMessage, type StaffPrincipal } from '@kitsyuu/auth';
+import { customerRef, ordersOwnedBy } from './customers.ts';
 import { getShipment } from './fulfilment.ts';
 import type { MutationContext } from './staff.ts';
 import { emailEnabled, sendTransactionalEmail } from './transactional-email.ts';
@@ -49,6 +50,29 @@ export async function listNotificationLog(db: Db, actor: StaffPrincipal, limit =
   return db.selectFrom('notification_log as n').leftJoin('orders as o', 'o.id', 'n.order_id')
     .select(['n.id', 'n.event', 'n.recipient', 'n.subject', 'n.status', 'n.error', 'n.created_at', 'o.order_number'])
     .orderBy('n.id', 'desc').limit(limit).execute();
+}
+
+export const CUSTOMER_EMAILS_MAX = 100;
+
+/** The customer emails the platform tried to send to one customer, for the customer page (2026-10-10), newest first.
+    notification_log has no customer column, so an email is listed only when it can be tied to this customer for certain:
+    · it is about one of the customer's own orders (order_id); these are what the order page already shows for that order,
+      so they need the same orders.read;
+    · or it is about no order (a support reply, a cart reminder) and was sent to the customer's VERIFIED login email after
+      the account was created. Those come from the email outbox, so they are added only for staff with system.read. An
+      unverified address proves nothing about who received it, so such emails are left out rather than guessed at.
+    What was tried and its result only: no subject, message text, links or provider answer. 'sent' means the mailer accepted
+    the message, not that it arrived. Needs customers.read and orders.read. */
+export async function customerEmailLog(db: Db, actor: StaffPrincipal, customerId: string) {
+  requirePermission(actor, 'customers.read'); requirePermission(actor, 'orders.read');
+  const c = await customerRef(db, customerId);
+  const direct = can(actor, 'system.read') && !!c.emailVerifiedAt;
+  const found = await db.selectFrom('notification_log as n').leftJoin('orders as o', 'o.id', 'n.order_id')
+    .select(['n.id', 'n.event', 'n.recipient', 'n.status', 'n.created_at', 'o.id as order_id', 'o.order_number'])
+    .where(eb => eb.or([sql<boolean>`(n.order_id is not null and ${ordersOwnedBy(c)})`,
+      ...(direct ? [sql<boolean>`(n.order_id is null and lower(btrim(n.recipient)) = ${c.email} and n.created_at >= ${c.createdAt})`] : [])]))
+    .orderBy('n.created_at', 'desc').orderBy('n.id', 'desc').limit(CUSTOMER_EMAILS_MAX + 1).execute();
+  return { rows: found.slice(0, CUSTOMER_EMAILS_MAX).map(r => ({ ...r, id: String(r.id) })), more: found.length > CUSTOMER_EMAILS_MAX, direct };
 }
 
 // ---------------------------------------------------------------- store announcement

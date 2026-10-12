@@ -36,3 +36,10 @@ for (const target of [dns, dns.promises]) {
     return Promise.reject(err);
   };
 }
+
+/* Positive proof that the guard is in a process (2026-10-12): with OFFLINE_PROOF=<file>, every process that loaded this
+   file, and so has the patched connect and lookup above, appends one line: its pid and the script it runs. Kept apart
+   from OFFLINE_LOG, which must stay empty unless something tried to leave the machine. Nothing is contacted. */
+if (process.env.OFFLINE_PROOF && net.Socket.prototype.connect !== connect) {
+  try { fs.appendFileSync(process.env.OFFLINE_PROOF, `guard-loaded pid ${process.pid} ${require('node:path').basename(process.argv[1] || 'node')}\n`); } catch {}
+}

@@ -104,6 +104,108 @@ try {
   ok('customer → Returns tab: empty state when there are none', await exists('[data-state=empty]'));
   await visit(`/customers/${ravi.id}?tab=activity`, '!!document.querySelector("[data-sessions-table]")');
   ok('customer → Activity tab: timeline, sign-in history and audit', (await exists('[data-customer-activity]')) && (await exists('[data-section=audit]')) && !SECRETS.test(await ev('document.documentElement.outerHTML')) && !/10\.9\.9\.9|secret-agent-e2e/.test(await ev('document.documentElement.outerHTML')));
+
+  // ---------- 2026-10-10, Customer Management Phase A: real payment history, invoices, returns of old orders, order pages, emails sent ----------
+  // Rows added here exist only in this LOCAL test database and are removed again below (the email log rows after the support checks).
+  const [asha] = await q(`select id, email from customers where email like 'asha%'`);
+  const tabsOf = () => ev(`[...document.querySelectorAll('[data-entity=customer] [data-entity-tab]')].map(a=>a.dataset.entityTab).join()`);
+  const SEVEN = 'overview,orders,payments,returns,loyalty,support,activity';
+  const o4c = await id('KTS-TEST-0004'), o5c = await id('KTS-TEST-0005');
+  await q(`insert into payments (order_id, provider, provider_payment_id, amount_paise, status, method, failure_reason, raw, created_at)
+    select id, 'razorpay', 'pay_E2EFAIL4', total_paise, 'failed', 'card', 'Declined (e2e)', '{"secret":"hidden-payload-e2e"}', created_at - interval '5 minutes' from orders where id = $1`, [o4c]);
+  const [p5] = await q(`select id from payments where provider_payment_id = 'pay_TEST0005'`);
+  await q(`insert into refunds (payment_id, order_id, amount_paise, reason, status) values ($1, $2, 5000, 'Goodwill (e2e)', 'requested')`, [p5.id, o5c]);
+  // 55 older orders of ravi's (58 in all: three pages), one minute apart; the oldest was paid, returned and refunded.
+  await q(`insert into orders (order_number, user_id, customer_id, status, payment_status, subtotal_paise, total_paise, contact, shipping_address, paid_at, created_at, updated_at)
+    select 'KTS-E2EOLD-' || lpad(g::text, 3, '0'), $1, $1, 'delivered', 'paid', 10000, 10000, $2, '{}', t, t, t
+    from generate_series(1, 55) g, lateral (select timestamptz '2025-03-01 10:00+05:30' + make_interval(mins => g) as t) x`, [ravi.id, JSON.stringify({name: 'Ravi Fixture', email: ravi.email})]);
+  const oldest = (await q(`select id from orders where order_number = 'KTS-E2EOLD-001'`))[0].id;
+  const [oldItem] = await q(`insert into order_items (order_id, product_id, variant_id, sku, name, size, unit_price_paise, qty, line_total_paise)
+    select $1, p.id, v.id, v.sku, p.name, v.size, 10000, 1, 10000 from product_variants v join products p on p.id = v.product_id order by p.id, v.sort_order limit 1 returning id`, [oldest]);
+  const [oldPay] = await q(`insert into payments (order_id, provider, provider_payment_id, amount_paise, status, method, captured_at, created_at) values ($1, 'razorpay', 'pay_E2EOLD1', 10000, 'captured', 'upi', '2025-03-01 10:02+05:30', '2025-03-01 10:02+05:30') returning id`, [oldest]);
+  const [oldRet] = await q(`insert into return_requests (order_id, customer_id, status, resolution, reason_code, refund_amount_paise, requested_at) values ($1, $2, 'refunded', 'refund', 'size_fit', 10000, '2025-03-08 10:00+05:30') returning id, number`, [oldest, ravi.id]);
+  await q(`insert into return_items (return_id, order_item_id, qty) values ($1, $2, 1)`, [oldRet.id, oldItem.id]);
+  await q(`insert into refunds (payment_id, order_id, return_id, amount_paise, reason, status, method, reference, processed_at, created_at) values ($1, $2, $3, 10000, 'Return refund (e2e)', 'processed', 'manual', 'UTR-E2E-OLD', '2025-03-09 10:00+05:30', '2025-03-09 10:00+05:30')`, [oldPay.id, oldest, oldRet.id]);
+  await q(`insert into notification_log (event, order_id, recipient, subject, status, error) values
+    ('order.placed', $1, $2, 'SUBJECT-E2E-HIDDEN', 'sent', null), ('order.shipped', $1, $2, 'SUBJECT-E2E-HIDDEN', 'failed', 'PROVIDER-E2E-HIDDEN'),
+    ('support.reply', null, $2, 'SUBJECT-E2E-HIDDEN', 'sent', null), ('order.placed', $3, $4, 'SUBJECT-E2E-HIDDEN', 'sent', null)`, [o4c, ravi.email, await id('KTS-TEST-0002'), asha.email]);
+
+  // Orders: 25 a page from the server, newest first; the header keeps the true count.
+  await visit(`/customers/${ravi.id}?tab=orders`, '!!document.querySelector("[data-customer-orders]")');
+  const rowsOf = () => ev(`[...document.querySelectorAll('[data-customer-orders] tbody tr')].map(r=>r.dataset.orderRow)`);
+  const page1 = await rowsOf();
+  ok('customer → Orders: page 1 of 3 has 25 orders, the header says 58, "Older" is offered and "Newer" is not', page1.length === 25 && (await text('[data-kpi="Orders"]')) === '58' && /Page 1/.test(await text('[data-page-current]'))
+    && (await exists('[data-page-older]')) && !(await exists('[data-page-newer]')), `${page1.length}`);
+  ok('customer → Orders: the newest orders come first', page1.slice(0, 3).join() === 'KTS-TEST-0004,KTS-TEST-0006,KTS-TEST-0005' && page1[3] === 'KTS-E2EOLD-055', page1.slice(0, 4).join());
+  await ev(`document.querySelector('[data-page-older]').click(),true`);
+  ok('customer → Orders: "Older" opens page 2 in the address', await until(`location.search === '?tab=orders&page=2' && /Page 2/.test(document.querySelector('[data-page-current]')?.innerText ?? '')`, 20000));
+  const page2 = await rowsOf();
+  ok('customer → Orders: page 2 has the next 25, none repeated', page2.length === 25 && page2.every(n => !page1.includes(n)) && page2[0] === 'KTS-E2EOLD-033', page2[0]);
+  await visit(`/customers/${ravi.id}?tab=orders&page=3`, '!!document.querySelector("[data-customer-orders]")');
+  const page3 = await rowsOf();
+  ok('customer → Orders: the last page has the remaining 8 and no "Older"', page3.length === 8 && page3.at(-1) === 'KTS-E2EOLD-001' && !(await exists('[data-page-older]')) && (await exists('[data-page-newer]')), `${page3.length}`);
+  await visit(`/customers/${ravi.id}?tab=orders&page=99`, '!!document.querySelector("[data-tab-panel=orders]")');
+  ok('customer → Orders: a page past the end says so and offers the first page (no error)', (await exists('[data-empty=customer-orders-page]')) && !(await exists('[data-customer-orders]'))
+    && (await ev(`document.querySelector('[data-empty=customer-orders-page] a')?.getAttribute('href')`)) === `/customers/${ravi.id}?tab=orders` && (await tabsOf()) === SEVEN);
+  await visit(`/customers/${ravi.id}?tab=orders&page=abc`, '!!document.querySelector("[data-customer-orders]")');
+  ok('customer → Orders: a page number that is not a number is page 1', (await rowsOf()).join() === page1.join());
+
+  // Payments: the attempts and refunds as recorded, and invoices, inside the same tab.
+  await visit(`/customers/${ravi.id}?tab=payments`, '!!document.querySelector("[data-customer-attempts]")');
+  ok('customer → Payments: still seven tabs; the by-order table is paged like Orders', (await tabsOf()) === SEVEN && (await ev(`document.querySelectorAll('[data-customer-payments] tbody tr').length`)) === 25 && (await exists('[data-tab-panel=payments] [data-page-older]')));
+  ok('customer → Payments: every recorded attempt has its own line (a failed and a captured one for the same order)',
+    (await ev(`[...document.querySelectorAll('[data-customer-attempts] tbody tr')].map(r=>r.dataset.attempt + ':' + r.dataset.attemptStatus).sort().join()`)) === 'pay_E2EFAIL4:failed,pay_E2EOLD1:captured,pay_TEST0004:captured,pay_TEST0005:captured'
+    && /Declined \(e2e\)/.test(await text('[data-attempt="pay_E2EFAIL4"]')) && /KTS-TEST-0004/.test(await text('[data-attempt="pay_E2EFAIL4"]')) && /₹/.test(await text('[data-attempt="pay_TEST0004"]')));
+  ok('customer → Payments: refunds are listed with or without a return',
+    (await ev(`[...document.querySelectorAll('[data-customer-refunds] tbody tr')].map(r=>(r.dataset.refundReturn || 'none') + ':' + r.dataset.refundStatus).sort().join()`)) === [`${oldRet.number}:processed`, 'none:requested'].sort().join()
+    && /Not from a return[\s\S]*Goodwill \(e2e\)/.test(await text('[data-refund-return=""]')) && /UTR-E2E-OLD/.test(await text(`[data-refund-return="${oldRet.number}"]`)));
+  ok('customer → Payments: every attempt and refund opens Order → Payment; the tab has no form; nothing of the provider payload', await ev(`[...document.querySelectorAll('[data-customer-attempts] a.row-link, [data-customer-refunds] a.row-link')].every(a=>/^\\/orders\\/[0-9a-f-]{36}\\?tab=payment$/.test(a.getAttribute('href')))`)
+    && !(await exists('[data-tab-panel] form')) && !/hidden-payload-e2e/.test(await ev('document.documentElement.outerHTML')));
+  ok('customer → Payments: a customer without invoices sees the Invoices section with an empty state', (await exists('[data-section=invoices] [data-empty=customer-invoices]')) && !(await exists('[data-customer-invoices]')));
+  await visit(`/customers/${asha.id}?tab=payments`, '!!document.querySelector("[data-customer-invoices]")');
+  ok('customer → Payments: invoices are a section of the Payments tab (number, order, status, total), not a tab', (await tabsOf()) === SEVEN
+    && /KTS\/\d\d-\d\d\/\d{5}[\s\S]*KTS-TEST-0002[\s\S]*Issued[\s\S]*₹/.test(await text('[data-customer-invoices] [data-invoice-status=issued]')));
+  await ev(`document.querySelector('[data-customer-invoices] a.row-link').click(),true`);
+  ok('customer → invoice → Finance invoice page', await until(`/^\\/finance\\/invoices\\/[0-9a-f-]{36}$/.test(location.pathname) && !!document.querySelector('main') && !document.querySelector('[data-gate=forbidden]')`, 20000));
+
+  // Returns: found through the customer, however old the order (the returned order is the oldest of 58).
+  await visit(`/customers/${ravi.id}?tab=returns`, '!!document.querySelector("[data-customer-returns]")');
+  ok('customer → Returns: the return of an order outside the 50 most recent is listed, with its items and refund', (await exists(`[data-return="${oldRet.number}"]`)) && /KTS-E2EOLD-001/.test(await text(`[data-return="${oldRet.number}"]`))
+    && /size .* × 1/.test(await text(`[data-return="${oldRet.number}"] [data-return-items]`)) && /₹[\s\S]*processed/.test(await text(`[data-return="${oldRet.number}"] [data-return-refund]`))
+    && /1/.test(await text('[data-entity-tab=returns]')));
+  ok('customer → Returns: the row opens the order on its Returns tab', (await ev(`document.querySelector('[data-return="${oldRet.number}"] a.row-link')?.getAttribute('href')`)) === `/orders/${oldest}?tab=returns&return=${oldRet.id}`);
+
+  // Activity: the emails tried for this customer; what was tried and the result, never the message.
+  await visit(`/customers/${ravi.id}?tab=activity`, '!!document.querySelector("[data-customer-emails]")');
+  const mailHtml = await ev('document.documentElement.outerHTML');
+  ok('customer → Activity: "Emails sent" lists the emails of the customer\'s orders, sent and failed, and (for staff who see the outbox) the one to their verified address',
+    (await ev(`[...document.querySelectorAll('[data-customer-emails] tbody tr')].map(r=>r.dataset.email + ':' + r.dataset.emailStatus).sort().join()`)) === 'order.placed:sent,order.shipped:failed,support.reply:sent'
+    && /Order confirmation[\s\S]*KTS-TEST-0004[\s\S]*Sent/.test(await text('[data-email="order.placed"]')) && /Failed/.test(await text('[data-email="order.shipped"]')));
+  ok('customer → Activity: no subject, message or provider answer; nobody else\'s emails; the timeline, sign-in history and audit are still there', !/SUBJECT-E2E-HIDDEN|PROVIDER-E2E-HIDDEN/.test(mailHtml)
+    && !(await text('[data-customer-emails]')).includes(asha.email) && /not that it was delivered/.test(await text('[data-section=emails]'))
+    && (await exists('[data-customer-activity]')) && (await exists('[data-sessions-table]')) && (await exists('[data-section=audit]')) && !SECRETS.test(mailHtml) && !/10\.9\.9\.9|secret-agent-e2e/.test(mailHtml));
+
+  // A customer with no orders at all: empty states, no pager.
+  const [blank] = await q(`insert into customers (email, full_name, email_verified_at) values ('noorders.e2e@test.local', 'No Orders E2E', now()) returning id`);
+  await visit(`/customers/${blank.id}?tab=orders`, '!!document.querySelector("[data-tab-panel=orders]")');
+  ok('customer without orders → Orders: empty state, no pager', (await exists('[data-empty=customer-orders]')) && !(await exists('[data-customer-pager]')));
+  await visit(`/customers/${blank.id}?tab=payments`, '!!document.querySelector("[data-tab-panel=payments]")');
+  ok('customer without orders → Payments: empty states for payments, attempts, refunds and invoices', (await exists('[data-empty=customer-payments]')) && (await exists('[data-empty=customer-attempts]')) && (await exists('[data-empty=customer-refunds]')) && (await exists('[data-empty=customer-invoices]')));
+  await visit(`/customers/${blank.id}?tab=activity`, '!!document.querySelector("[data-tab-panel=activity]")');
+  ok('customer without orders → Activity: no emails', await exists('[data-empty=customer-emails]'));
+
+  // Clean-up: the temporary rows (the three "sent" email log rows stay for the support checks below).
+  await q(`delete from customers where id = $1`, [blank.id]);
+  await q(`delete from notification_log where subject = 'SUBJECT-E2E-HIDDEN' and status = 'failed'`);
+  await q(`delete from refunds where reason in ('Goodwill (e2e)', 'Return refund (e2e)')`);
+  await q(`delete from return_items where return_id = $1`, [oldRet.id]);
+  await q(`delete from return_requests where id = $1`, [oldRet.id]);
+  await q(`delete from payments where provider_payment_id in ('pay_E2EFAIL4', 'pay_E2EOLD1')`);
+  await q(`delete from order_items where order_id = $1`, [oldest]);
+  await q(`delete from orders where order_number like 'KTS-E2EOLD-%'`);
+  await visit(`/customers/${ravi.id}?tab=orders`, '!!document.querySelector("[data-customer-orders]")');
+  ok('after the clean-up the customer has the 3 fixture orders again, on one page', (await rowsOf()).length === 3 && !(await exists('[data-customer-pager]')) && (await text('[data-kpi="Orders"]')) === '3');
+
   await visit(`/customers/${ravi.id}`, '!!document.querySelector("[data-section=profile]")');
   await until(`(()=>{const t=document.querySelector('[data-drawer-open=status]');return !!t && Object.keys(t).some(k=>k.startsWith('__reactProps'))})()`, 20000);
   await ev(`document.querySelector('[data-drawer-open=status]').click(),true`);
@@ -315,6 +417,12 @@ try {
   ok('manager (billing.read, no refunds.create) sees payments', await exists('[data-payments-tabs]'));
   await visit(`/customers/${ravi.id}`, '!!document.querySelector("[data-section=profile]")');
   ok('manager (customers.read) cannot change customers', (await exists('[data-readonly=customer]')) && !(await exists('#customer-status-form')) && !(await exists('[data-drawer-open=status]')) && !(await exists('[data-drawer-open=contact]')));
+  // 2026-10-10: the manager holds billing.read and finance.read (unchanged roles): the payment history and invoices are shown, read only.
+  await visit(`/customers/${asha.id}?tab=payments`, '!!document.querySelector("[data-tab-panel=payments]")');
+  ok('manager (billing.read, finance.read) sees a customer\'s payment attempts and invoices, with no form', (await exists('[data-customer-attempts]')) && (await exists('[data-customer-invoices]')) && !(await exists('[data-tab-panel] form')));
+  await visit(`/customers/${ravi.id}?tab=activity`, '!!document.querySelector("[data-tab-panel=activity]")');
+  ok('manager (no system.read): emails of the customer\'s orders only, not the outbox ones',
+    (await ev(`[...document.querySelectorAll('[data-customer-emails] tbody tr')].map(r=>r.dataset.email).join()`)) === 'order.placed');
 
   // ================= support =================
   ok('support signs in', await signIn('support', 'Support M8'));
@@ -327,6 +435,22 @@ try {
   await visit(`/orders/${o6}`, '!!document.querySelector("[data-section=billing]")');
   ok('support: no payment-exception details on the order page', !(await exists('[data-cancelled-money]')) && !(await exists('[data-order-exceptions]')));
   ok('support can export orders (orders.read)', (await fetchText('/orders/export')).status === 200);
+  // 2026-10-10: support holds customers.read and orders.read but not billing.read, finance.read or system.read. The protected
+  // records are not in the page at all (not merely hidden): the server never reads them for this person.
+  await visit(`/customers/${ravi.id}?tab=payments`, '!!document.querySelector("[data-customer-payments]")');
+  const supportPay = await ev('document.documentElement.outerHTML');
+  ok('support → customer Payments: payments by order only; attempts, refunds and invoices say which permission they need', (await ev(`document.querySelectorAll('[data-tab-panel=payments] [data-state=denied]').length`)) === 2
+    && /billing\.read/.test(await text('[data-tab-panel=payments]')) && /finance\.read/.test(await text('[data-tab-panel=payments]'))
+    && !(await exists('[data-customer-attempts]')) && !(await exists('[data-customer-refunds]')) && !(await exists('[data-customer-invoices]')));
+  ok('support → customer Payments: no payment reference reaches the browser', !/pay_TEST000[0-9]|pay_E2E/.test(supportPay));
+  await visit(`/customers/${asha.id}?tab=payments`, '!!document.querySelector("[data-customer-payments]")');
+  ok('support → customer Payments: no invoice number reaches the browser', !/KTS\/\d\d-\d\d\/\d{5}/.test(await ev('document.documentElement.outerHTML')) && !(await exists('[data-customer-invoices]')));
+  await visit(`/customers/${ravi.id}?tab=activity`, '!!document.querySelector("[data-tab-panel=activity]")');
+  ok('support → customer Activity: the emails of the customer\'s orders, not the outbox ones', (await ev(`[...document.querySelectorAll('[data-customer-emails] tbody tr')].map(r=>r.dataset.email).join()`)) === 'order.placed'
+    && /staff who may see the email outbox/.test(await text('[data-section=emails]')));
+  await visit(`/customers/${ravi.id}?tab=returns`, '!!document.querySelector("[data-tab-panel=returns]")');
+  ok('support (returns.read) → customer Returns opens', (await exists('[data-section=returns]')) && !(await exists('[data-tab-panel=returns] [data-state=denied]')));
+  await q(`delete from notification_log where subject = 'SUBJECT-E2E-HIDDEN'`);   // the last temporary rows of the customer-records checks
 
   // ================= inventory manager: no customers, no orders =================
   ok('inventory manager signs in', await signIn('inventory', 'Inventory M8'));
@@ -358,10 +482,16 @@ try {
   const slip = await text('[data-packing-slip]');
   ok('M10 packing slip: company, order number and items, no prices', /KITSYUU E2E Pvt Ltd/.test(slip) && (await exists('[data-slip-items] tbody tr')) && !/₹/.test(slip), slip.slice(0, 120));
   await b.viewport(390, 844, true);
-  for (const p of ['/customers', `/customers/${ravi.id}`, `/customers/${ravi.id}?tab=orders`, `/customers/${ravi.id}?tab=payments`, `/customers/${ravi.id}?tab=activity`, '/payments', '/payments?view=attempts', '/settings', `/orders/${o2}`, `/orders/${o2}?tab=payment`, `/orders/${o2}?tab=fulfilment`, `/orders/${o2}?tab=returns`, '/dashboard']) {
+  for (const p of ['/customers', `/customers/${ravi.id}`, `/customers/${ravi.id}?tab=orders`, `/customers/${ravi.id}?tab=payments`, `/customers/${ravi.id}?tab=returns`, `/customers/${ravi.id}?tab=activity`, '/payments', '/payments?view=attempts', '/settings', `/orders/${o2}`, `/orders/${o2}?tab=payment`, `/orders/${o2}?tab=fulfilment`, `/orders/${o2}?tab=returns`, '/dashboard']) {
     await visit(p);
     ok(`no horizontal page scroll at 390px: ${p.replace(ravi.id, ':id').replace(o2, ':id')}`, await ev('document.documentElement.scrollWidth <= innerWidth + 1'));
   }
+  // 2026-10-12: Payments with real invoice rows at phone width (asha has the fixture invoice); a wide table scrolls inside its own wrapper.
+  await visit(`/customers/${asha.id}?tab=payments`, '!!document.querySelector("[data-customer-invoices]")');
+  const narrow = await ev(`(()=>{const t=document.querySelector('[data-customer-invoices]'),w=t.closest('.table-wrap').getBoundingClientRect(),r=t.querySelector('tbody tr a.row-link').getBoundingClientRect();
+    return {rows:t.querySelectorAll('tbody tr').length,attempts:document.querySelectorAll('[data-customer-attempts] tbody tr').length,page:document.documentElement.scrollWidth<=innerWidth+1,wrap:w.left>=0&&w.right<=innerWidth+1,link:r.width>0&&r.left>=0&&r.left<innerWidth,vw:innerWidth}})()`);
+  ok('390px: customer Payments with invoice and payment-attempt rows: no horizontal page scroll, tables stay inside the screen, the invoice link is reachable',
+    narrow.vw === 390 && narrow.rows >= 1 && narrow.attempts >= 1 && narrow.page && narrow.wrap && narrow.link && /KTS\/\d\d-\d\d\/\d{5}/.test(await text('[data-customer-invoices]')), JSON.stringify(narrow));
   ok('no page errors during the run', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 } catch (e) {
   ok('run completed', false, e.stack?.split('\n').slice(0, 3).join(' '));

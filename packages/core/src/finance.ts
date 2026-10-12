@@ -13,6 +13,7 @@ import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { companyDetails } from './settings.ts';
+import { customerRef } from './customers.ts';
 import { checkRange, csvCell, type ReportRange } from './reports.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -90,13 +91,18 @@ export function taxSplit(taxPaise: number, sellerState: string | null, placeOfSu
   return { type: 'inter' as const, cgst: 0, sgst: 0, igst: taxPaise, note: null };
 }
 
-export async function listInvoices(db: Db, actor: StaffPrincipal, query: { q?: string; status?: string; page: number }) {
+/** Invoices, newest first, 40 a page. With `customerId` (2026-10-10, the customer page): only the invoices issued to that
+    customer (invoices.customer_id), which also needs customers.read. */
+export async function listInvoices(db: Db, actor: StaffPrincipal, query: { q?: string; status?: string; page: number; customerId?: string }) {
   requirePermission(actor, 'finance.read');
+  if (query.customerId !== undefined) requirePermission(actor, 'customers.read');
+  const customer = query.customerId !== undefined ? await customerRef(db, query.customerId) : null;
   let q = db.selectFrom('invoices as i').leftJoin('orders as o', 'o.id', 'i.order_id')
-    .select(['i.id', 'i.invoice_number', 'i.status', 'i.issued_at', 'i.total_paise', 'i.tax_paise', 'i.place_of_supply', 'o.order_number', 'o.id as order_id']);
+    .select(['i.id', 'i.invoice_number', 'i.status', 'i.issued_at', 'i.total_paise', 'i.tax_paise', 'i.currency', 'i.place_of_supply', 'o.order_number', 'o.id as order_id']);
+  if (customer) q = q.where('i.customer_id', '=', customer.id);
   if (query.status && query.status !== 'all') q = q.where('i.status', '=', query.status as 'issued');
   if (query.q) { const l = `%${query.q.replace(/[%_\\]/g, m => '\\' + m)}%`; q = q.where(eb => eb.or([eb('i.invoice_number', 'ilike', l), eb('o.order_number', 'ilike', l)])); }
-  const rows = await q.orderBy('i.created_at', 'desc').limit(41).offset((query.page - 1) * 40).execute();
+  const rows = await q.orderBy('i.created_at', 'desc').orderBy('i.id').limit(41).offset((query.page - 1) * 40).execute();
   return { rows: rows.slice(0, 40), hasNext: rows.length > 40 };
 }
 

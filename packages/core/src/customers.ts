@@ -4,7 +4,7 @@
    Disabling an account reuses the customer-auth rules (M6): sessions are ended with revokeAllCustomerSessions and a
    disabled account cannot log in or use a session. Every change is audited with the staff member and a reason. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
-import { ConflictError, NotFoundError, type CustomerListQuery, type SetCustomerStatusInput, type UpdateCustomerContactInput } from '@kitsyuu/contracts';
+import { ConflictError, NotFoundError, uuid, type CustomerListQuery, type SetCustomerStatusInput, type UpdateCustomerContactInput } from '@kitsyuu/contracts';
 import { can, requirePermission, revokeAllCustomerSessions, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 
@@ -67,8 +67,66 @@ export async function listCustomers(db: Db, actor: StaffPrincipal, query: Custom
 const ownedBy = (id: string, legacy: string | null) => (eb: any) => eb.or([eb('customer_id', '=', id),
   ...(legacy ? [eb.and([eb('customer_id', 'is', null), eb('user_id', '=', legacy)])] : [])]);
 
-export async function getCustomer(db: Db, actor: StaffPrincipal, customerId: string) {
+/* ---- one customer's records (2026-10-10): the loaders of the customer page. Each checks its own permission and that the
+   customer exists; pages call these and never query the database themselves. The helpers below are shared with the
+   services that own the records (payments-admin, returns, finance, support, engagement). */
+export interface CustomerRef { id: string; email: string; legacy: string | null; emailVerifiedAt: Date | null; createdAt: Date }
+
+/** The customer a record loader was asked about. NotFoundError for an id that is not a customer (or not an id at all). */
+export async function customerRef(q: Queryable, customerId: string): Promise<CustomerRef> {
+  if (!uuid.safeParse(customerId).success) throw new NotFoundError('Customer not found.');
+  const c = await q.selectFrom('customers').select(['id', 'email', 'legacy_auth_user_id', 'email_verified_at', 'created_at']).where('id', '=', customerId).executeTakeFirst();
+  if (!c) throw new NotFoundError('Customer not found.');
+  return { id: c.id, email: c.email, legacy: c.legacy_auth_user_id, emailVerifiedAt: c.email_verified_at as Date | null, createdAt: c.created_at as Date };
+}
+/** ownedBy for a query that joins the orders table as `o` (payments, refunds, emails of the customer's orders). */
+export const ordersOwnedBy = (c: Pick<CustomerRef, 'id' | 'legacy'>) => (c.legacy
+  ? sql<boolean>`(o.customer_id = ${c.id} or (o.customer_id is null and o.user_id = ${c.legacy}))` : sql<boolean>`(o.customer_id = ${c.id})`);
+/** The customer's returns, for a query with return_requests as `r` and its order as `o`: the return names the customer,
+    or (a return opened on an order from before M6) names nobody and belongs to one of the customer's orders. */
+export const returnsOwnedBy = (c: Pick<CustomerRef, 'id' | 'legacy'>) => sql<boolean>`(r.customer_id = ${c.id} or (r.customer_id is null and ${ordersOwnedBy(c)}))`;
+
+export const CUSTOMER_ORDERS_PAGE_SIZE = 25;
+const packingStateSql = sql<string | null>`(select sh.packing_state from public.shipments sh where sh.order_id = o.id order by sh.created_at desc limit 1)`;
+
+/** One page of a customer's orders, newest first (the order id breaks ties, so pages never overlap), each with how it is
+    paid and its packing state. A page past the end is empty. Needs customers.read and orders.read. */
+export async function customerOrdersPage(db: Db, actor: StaffPrincipal, customerId: string, query: { page?: number } = {}) {
+  requirePermission(actor, 'customers.read'); requirePermission(actor, 'orders.read');
+  const c = await customerRef(db, customerId);
+  const page = Number.isInteger(query.page) && query.page! >= 1 ? Math.min(query.page!, 10_000) : 1;
+  const rows = await db.selectFrom('orders as o')
+    .select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.channel', 'o.pos_number',
+      'o.payment_method', 'o.cod_status', 'o.paid_at', packingStateSql.as('packing_state')])
+    .where(ordersOwnedBy(c)).orderBy('o.created_at', 'desc').orderBy('o.id', 'desc')
+    .limit(CUSTOMER_ORDERS_PAGE_SIZE + 1).offset((page - 1) * CUSTOMER_ORDERS_PAGE_SIZE).execute();
+  return { rows: rows.slice(0, CUSTOMER_ORDERS_PAGE_SIZE), page, pageSize: CUSTOMER_ORDERS_PAGE_SIZE, hasNext: rows.length > CUSTOMER_ORDERS_PAGE_SIZE };
+}
+
+/** How many returns and support tickets the customer has (the counts on the page's tabs); null where the staff member
+    may not see that kind of record. */
+export async function customerRecordCounts(db: Db, actor: StaffPrincipal, customerId: string) {
   requirePermission(actor, 'customers.read');
+  const c = await customerRef(db, customerId);
+  const [returns, tickets] = await Promise.all([
+    can(actor, 'returns.read') ? db.selectFrom('return_requests as r').innerJoin('orders as o', 'o.id', 'r.order_id').select(sql<number>`count(*)::int`.as('n'))
+      .where(returnsOwnedBy(c)).executeTakeFirstOrThrow().then(r => r.n) : null,
+    can(actor, 'support.read') ? db.selectFrom('support_tickets').select(sql<number>`count(*)::int`.as('n')).where('customer_id', '=', c.id).executeTakeFirstOrThrow().then(r => r.n) : null,
+  ]);
+  return { returns, tickets };
+}
+
+export type CustomerPart = 'orders' | 'addresses' | 'sessions' | 'audit';
+const CUSTOMER_PARTS: readonly CustomerPart[] = ['orders', 'addresses', 'sessions', 'audit'];
+
+/** The customer, their order figures and the parts asked for (all of them unless `parts` names fewer: a tab of the
+    customer page reads only what it shows). A part that was not asked for comes back empty (audit: undefined).
+    `orders` are the 50 most recent, for the overview and the timeline; the Orders tab pages through all of them
+    (customerOrdersPage). */
+export async function getCustomer(db: Db, actor: StaffPrincipal, customerId: string, opts: { parts?: readonly CustomerPart[] } = {}) {
+  requirePermission(actor, 'customers.read');
+  const want = (p: CustomerPart) => (opts.parts ?? CUSTOMER_PARTS).includes(p);
+  const part = <T>(p: CustomerPart, run: () => Promise<T[]>): Promise<T[]> => (want(p) ? run() : Promise.resolve([]));
   const c = await db.selectFrom('customers')
     .select(['id', 'email', 'full_name', 'phone', 'status', 'email_verified_at', 'last_login_at', 'password_changed_at', 'legacy_auth_user_id', 'created_at', 'updated_at'])
     .where('id', '=', customerId).executeTakeFirst();
@@ -77,30 +135,36 @@ export async function getCustomer(db: Db, actor: StaffPrincipal, customerId: str
     .where('customer_id', '=', c.id).executeTakeFirstOrThrow();
   const legacy = c.legacy_auth_user_id;
   const [orders, addresses, sessions, attempts] = await Promise.all([
-    db.selectFrom('orders').select(['id', 'order_number', 'status', 'payment_status', 'total_paise', 'currency', 'created_at', 'channel', 'pos_number'])
-      .where(ownedBy(c.id, legacy)).orderBy('created_at', 'desc').limit(50).execute(),
-    db.selectFrom('addresses').select(['id', 'full_name', 'phone', 'line1', 'line2', 'city', 'state', 'pin', 'country', 'is_default', 'created_at'])
-      .where(ownedBy(c.id, legacy)).orderBy('is_default', 'desc').orderBy('created_at').execute(),
+    // With how each is paid and its packing state, so the page asks for nothing more about them.
+    part('orders', () => db.selectFrom('orders as o').select(['o.id', 'o.order_number', 'o.status', 'o.payment_status', 'o.total_paise', 'o.currency', 'o.created_at', 'o.channel', 'o.pos_number',
+      'o.payment_method', 'o.cod_status', 'o.paid_at', packingStateSql.as('packing_state')])
+      .where(ordersOwnedBy({ id: c.id, legacy })).orderBy('o.created_at', 'desc').orderBy('o.id', 'desc').limit(50).execute()),
+    part('addresses', () => db.selectFrom('addresses').select(['id', 'full_name', 'phone', 'line1', 'line2', 'city', 'state', 'pin', 'country', 'is_default', 'created_at'])
+      .where(ownedBy(c.id, legacy)).orderBy('is_default', 'desc').orderBy('created_at').execute()),
     // Safe metadata only: no token hash, no IP address, no user agent.
-    db.selectFrom('customer_sessions').select(['id', 'created_at', 'last_seen_at', 'idle_expires_at', 'expires_at', 'revoked_at'])
-      .where('customer_id', '=', c.id).orderBy('created_at', 'desc').limit(20).execute(),
-    db.selectFrom('auth_attempts').select(['attempted_at', 'succeeded', 'failure_reason'])
-      .where('realm', '=', 'customer').where('email', '=', c.email).orderBy('attempted_at', 'desc').limit(10).execute(),
+    part('sessions', () => db.selectFrom('customer_sessions').select(['id', 'created_at', 'last_seen_at', 'idle_expires_at', 'expires_at', 'revoked_at'])
+      .where('customer_id', '=', c.id).orderBy('created_at', 'desc').limit(20).execute()),
+    part('sessions', () => db.selectFrom('auth_attempts').select(['attempted_at', 'succeeded', 'failure_reason'])
+      .where('realm', '=', 'customer').where('email', '=', c.email).orderBy('attempted_at', 'desc').limit(10).execute()),
   ]);
+  // How an order is paid and packed is order detail: as before 2026-10-10, only staff with orders.read get it (the page
+  // then shows no cash-to-collect line and no packing stage); the order's number, status and total stay with customers.read.
+  const seeOrderDetail = can(actor, 'orders.read');
+  const shownOrders = seeOrderDetail ? orders : orders.map(o => ({ ...o, payment_method: null, cod_status: null, paid_at: null, packing_state: null }));
   const now = Date.now();
-  const audit = can(actor, 'audit.read')
+  const audit = can(actor, 'audit.read') && want('audit')
     ? await db.selectFrom('audit_logs as a').leftJoin('staff_users as s', 's.id', 'a.staff_id')
         .select(['a.id', 'a.occurred_at', 'a.actor_type', 'a.action', 'a.entity_type', 'a.entity_id', 's.email as staff_email'])
         .where(eb => eb.or([eb('a.customer_id', '=', c.id), eb.and([eb('a.entity_type', '=', 'customers'), eb('a.entity_id', '=', c.id)])]))
         .orderBy('a.occurred_at', 'desc').orderBy('a.id', 'desc').limit(25).execute()
-    : undefined;                                                      // undefined = not permitted
+    : undefined;                                                      // undefined = not permitted (or not asked for)
   return {
     customer: { id: c.id, email: c.email, fullName: c.full_name, phone: c.phone, status: c.status, emailVerifiedAt: c.email_verified_at as Date | null,
       lastLoginAt: c.last_login_at as Date | null, passwordChangedAt: c.password_changed_at as Date | null, createdAt: c.created_at as Date,
       updatedAt: c.updated_at as Date, platformLogin: !legacy },
     summary: { ordersCount: summary.orders_count, paidOrdersCount: summary.paid_orders_count, lifetimeValuePaise: Number(summary.lifetime_value_paise),
       lastOrderAt: summary.last_order_at as Date | null },
-    orders, addresses,
+    orders: shownOrders, addresses,
     sessions: sessions.map(s => ({ id: s.id, createdAt: s.created_at as Date, lastSeenAt: s.last_seen_at as Date, expiresAt: s.expires_at as Date,
       revokedAt: s.revoked_at as Date | null,
       active: !s.revoked_at && (s.expires_at as Date).getTime() > now && (s.idle_expires_at as Date).getTime() > now })),

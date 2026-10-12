@@ -85,6 +85,8 @@ try {
       // purchasing-production-integrity.test.mjs (Phase 9): product receipts go to a branch; 8 + 10 passed pieces enter the online stock.
       : f === 'purchasing-production-integrity.test.mjs' ? {units: 1118, everySizeTen: false}
       : f === 'customer.test.mjs' ? {customers: 5, orders: 2}
+      // customer-records.test.mjs (2026-10-10): the 8 fixture orders (11 units taken) plus 60 older orders, one order from before customer accounts and one walk-in sale, all written without stock; 2 customers + 1 unverified account.
+      : f === 'customer-records.test.mjs' ? {customers: 3, orders: 70, units: 1100 - 11}
       : f === 'm12-reviews.test.mjs' ? {customers: 2, orders: 4}                   // M12: review fixtures (no stock moved)
       : f === 'm14-production.test.mjs' ? {units: 1108}                            // M14: 8 passed pieces added through the ledger
       : f === 'm15-stock.test.mjs' ? {units: 1100, everySizeTen: false}           // M15: count differences (+2 / −1) and a write-off (−1)
@@ -239,6 +241,21 @@ try {
   // POS browser tests: 3 counter sales at two branches (one voided) and 1 customer; branch stock only, never the online stock.
   // Purchasing & Production browser tests (Phase 9): receipts go to a branch; 3 passed pieces of one production order enter the online stock (+3).
   if (!(await dbCheck('after all browser tests', env, {orders: 13, customers: 4, units: 1100 - 11 + 3 + 6 - 3 + 4 + 3, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
+  /* 2026-10-12: an offline run (KITSYUU_TEST_OFFLINE=1 with OFFLINE_PROOF=<file>) must PROVE the guard was in every process it
+     started, not only that nothing was logged as refused: each guarded process and each test browser writes one line to the
+     proof file (apps/website/tests/offline-guard.cjs, cdp.mjs). Every script this run started must be there. */
+  if (process.env.KITSYUU_TEST_OFFLINE === '1' && process.env.OFFLINE_PROOF) {
+    const lines = fs.existsSync(process.env.OFFLINE_PROOF) ? fs.readFileSync(process.env.OFFLINE_PROOF, 'utf8').split(/\r?\n/).filter(Boolean) : [];
+    const loaded = new Set(lines.filter(l => l.startsWith('guard-loaded ')).map(l => l.split(' ').slice(3).join(' ')));
+    const browsers = lines.filter(l => l.startsWith('browser-offline '));
+    const suites = fs.readdirSync(path.join(ADMIN, 'tests')).filter(f => /^[a-z0-9-]+\.mjs$/.test(f) && !['run-e2e.mjs', 'local-only.mjs', 'serve-local.mjs'].includes(f) && (!process.env.ONLY || f === `${process.env.ONLY}.mjs`));
+    const expected = ['run-e2e.mjs', 'test-db.mjs', 'next', 'create-staff.mjs', 'order-fixtures.mjs', ...(process.env.SKIP_CORE ? [] : coreFiles), ...suites];
+    const missing = expected.filter(s => !loaded.has(s));
+    const open = browsers.filter(l => !l.endsWith('rules on'));
+    const good = missing.length === 0 && browsers.length >= suites.length && open.length === 0;
+    console.log(`\n== offline guard proof: ${good ? 'OK' : 'MISSING'} ${JSON.stringify({processes: lines.filter(l => l.startsWith('guard-loaded ')).length, scripts: loaded.size, expected: expected.length, missing, browsers: browsers.length, browsersWithoutRules: open.length})}`);
+    if (!good) failed = true;
+  }
 } catch (e) {
   console.error('ERROR:', e.message); failed = true;
 } finally {

@@ -181,7 +181,7 @@ stateDiagram-v2
 | staff | Move fulfilment forward. Cancel unpaid orders (their stock is returned, attributed to the staff member). |
 | customer | Cancel their own unpaid order. |
 
-There are no returns or refunds (all sales are final), so the workflow has no return or refund path.
+Returns and refunds are **off by default** (the business decision is that all sales are final), so the order workflow itself has no return or refund path. A separate returns workflow exists since ERP module 3 (`packages/core/src/returns.ts`, migration `20260930003200`): it only takes effect once the business sets `returns.enabled` and `returns.window_days`.
 
 ## ERP operations (M8, local only)
 
@@ -189,7 +189,7 @@ Everything below is built and tested locally only (branch `m8-operations`, not c
 
 | Module | Core | Permissions | What it does |
 |---|---|---|---|
-| Customers | `customers.ts` | `customers.read`, `customers.manage` | List (search, status, verified, with/without orders; order count, paid orders, lifetime value, last order from `v_customer_summary`) and detail (profile, addresses, orders, sessions and login attempts as times and states only, audit). Disable/enable with a reason: disabling ends every session through `revokeAllCustomerSessions`, and the M6 login already refuses disabled accounts. Contact correction (name, mobile); the email is the login and is not edited. |
+| Customers | `customers.ts` | `customers.read`, `customers.manage` | List (search, status, verified, with/without orders; order count, paid orders, lifetime value, last order from `v_customer_summary`) and detail (profile, addresses, orders, sessions and login attempts as times and states only, audit). Disable/enable with a reason: disabling ends every session through `revokeAllCustomerSessions`, and the M6 login already refuses disabled accounts. Contact correction (name, mobile); the email is the login and is not edited. **2026-10-10:** the customer page reads everything through core loaders that each check their own permission and the customer (the page queries nothing itself), and a tab reads only what it shows: `customerOrdersPage` (25 orders a page, `orders.read`), `customerPayments` (payment attempts and refunds, `billing.read`), `listInvoices` with `customerId` (`finance.read`), `customerReturnHistory` (every return of the customer with items and refunds, `returns.read`), `customerTickets` (`support.read`), `customerEmailLog` (emails of the customer's orders, `orders.read`; emails about no order only for `system.read` and a verified address) and `customerRecordCounts`. All read only. |
 | Payments | `payments-admin.ts` | `billing.read`, `refunds.create` | Payment attempts, provider notifications (no payload shown), and the exceptions queue. Exceptions are derived from existing records by one SQL rule, never stored as new payment states. `recordManualRefund` records a `requested` row in `refunds` for money received on a cancelled order, once per payment; no provider is called. `reconcileOrderPayments` compares `PaymentProvider.listPayments()` with the records, read-only (core only; there is no provider to call in the admin yet). |
 | Fulfilment | `fulfilment.ts`, `fulfilment/carrier.ts` | `orders.update_status` | One `shipments` row per order. Packing state is edited only while processing. Marking shipped or delivered goes through `updateOrderStatus` → `applyOrderTransition`, and the shipment row is written in the same transaction. Courier: `manualCarrier` behind the `CarrierProvider` interface; a real carrier is another entry in the registry. Tracking is optional ("Tracking not provided"). |
 | Settings | `settings.ts` | `settings.read`, `settings.manage` | A typed registry (key, type, range, description, permission, editable or locked with a reason). Only `inventory.low_stock_threshold` is editable. The hold time, currency, time zone, tax, and account-security values are locked. No free-form editor; unknown keys are refused. |
@@ -198,7 +198,7 @@ Everything below is built and tested locally only (branch `m8-operations`, not c
 
 **Customer secrets and the admin role (migration 1800).** Migration 1100 gave `kitsyuu_admin` SELECT on every table. 1800 replaces that for `customers` and `customer_sessions` with column lists that leave out `password_hash` and `token_hash`, and limits the admin's `auth_tokens` policy to staff tokens. A bug or an injected query in the admin therefore cannot read customer password hashes, session tokens or email-link tokens.
 
-Left out on purpose: internal order notes and "resend confirmation email" (no approved design or email content yet), reports, a reconciliation screen (no live provider), courier APIs, and any returns or refunds workflow.
+Left out on purpose: internal order notes and "resend confirmation email" (no approved design or email content yet), reports, a reconciliation screen (no live provider), courier APIs, and any returns or refunds workflow. (This list describes M8 as it was built; reports, returns and refunds, support, finance and the other ERP modules were added later, see `database/README.md` → Migrations.)
 
 ## Providers and configuration
 

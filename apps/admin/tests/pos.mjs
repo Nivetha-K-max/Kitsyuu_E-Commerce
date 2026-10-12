@@ -117,6 +117,9 @@ try {
   ok('total = 2 × price (tax inclusive, no delivery)', total === 2 * p, `${total} vs ${2 * p}`);
 
   // ---------- cash payment ----------
+  // 2026-10-12, anonymous counter sale (regression check for Customer Management Phase A): this sale is made with NO customer.
+  const [before] = await q(`select (select count(*)::int from customers) customers, (select count(*)::int from loyalty_transactions) points`);
+  ok('anonymous sale: no customer is chosen at the counter and none is asked for', (await exists('[data-pos-customer-search]')) && !(await exists('[data-pos-customer-clear]')), await text('[data-pos-customer]'));
   ok('charge disabled until cash ≥ total', await ev('document.querySelector("[data-pos-charge]").disabled'));
   await fill('[data-pos-tendered]', String(total / 100 + 100));
   ok('change preview', /₹100\.00/.test(await text('[data-pos-change-preview]')));
@@ -126,6 +129,10 @@ try {
   const [sale1] = await q(`select o.id, o.pos_number, o.channel, o.status, o.payment_status, o.payment_method, o.total_paise, l.code from orders o join locations l on l.id = o.location_id where pos_number is not null order by o.created_at desc limit 1`);
   ok('order: retail at Store 1, delivered, paid in cash', sale1?.channel === 'retail' && sale1.code === 'POS-S1' && sale1.status === 'delivered' && sale1.payment_status === 'paid' && sale1.payment_method === 'cash' && sale1.total_paise === total);
   ok('stock taken from Store 1 only (Store 2 unchanged)', await locQty('POS-S1', 'KTS-TOP-003-M') === 0 && await locQty('POS-S2', 'KTS-TOP-003-M') === 3);
+  const [anon] = await q(`select o.order_number, o.customer_id, o.user_id, coalesce(o.contact->>'email', '') as email, (select count(*)::int from payments p where p.order_id = o.id and p.status = 'captured') as paid,
+    (select count(*)::int from customers) as customers, (select count(*)::int from loyalty_transactions) as points from orders o where o.id = $1`, [sale1.id]);
+  ok('anonymous sale: completed and paid with no customer; the order names nobody; no customer account and no points were created',
+    anon.customer_id === null && anon.user_id === null && anon.email === '' && anon.paid === 1 && anon.customers === before.customers && anon.points === before.points, JSON.stringify(anon));
   ok('print link opens the bill', (await ev('document.querySelector("[data-pos-print]").getAttribute("href")')) === `/pos/sale/${sale1.id}?print=1`);
   await visit(`/pos/sale/${sale1.id}`, '!!document.querySelector("[data-pos-receipt]")');
   const receipt = await text('[data-pos-receipt]');
@@ -150,6 +157,19 @@ try {
   const [sale2] = await q(`select o.id, o.customer_id, p.method, p.raw->>'reference' ref from orders o join payments p on p.order_id = o.id where o.pos_number is not null order by o.created_at desc limit 1`);
   const [kavya] = await q(`select id from customers where email = 'pos.kavya@test.local'`);
   ok('UPI sale: customer and reference stored', sale2.customer_id === kavya.id && sale2.method === 'upi' && sale2.ref === 'UTR 5566 7788 99');
+  // 2026-10-12: the anonymous sale belongs to no customer anywhere in Customer Management; the sale with a customer is hers alone.
+  const [named] = await q(`select order_number from orders where id = $1`, [sale2.id]);
+  await visit(`/customers/${kavya.id}?tab=orders`, '!!document.querySelector("[data-customer-orders]")');
+  const hers = await ev(`[...document.querySelectorAll('[data-customer-orders] tbody tr')].map(r=>r.dataset.orderRow).join()`);
+  ok('customer page: the customer who bought at the counter has that sale only, not the anonymous one', hers === named.order_number && (await text('[data-kpi="Orders"]')) === '1'
+    && !(await ev('document.documentElement.outerHTML')).includes(anon.order_number), hers);
+  await visit('/customers', '!!document.querySelector("[data-customers-table]")');
+  ok('customers list: the anonymous sale added no customer and is counted for nobody', (await ev(`document.querySelectorAll('[data-customer-row]').length`)) === before.customers
+    && (await ev(`[...document.querySelectorAll('[data-customer-row] [data-orders-count]')].reduce((n,e)=>n+Number(e.innerText),0)`)) === (await q(`select count(*)::int n from orders where customer_id is not null`))[0].n);
+  ok('anonymous sale: still in the POS sales and Orders, with no customer', (await q(`select count(*)::int n from orders where id = $1 and pos_number is not null and customer_id is null`, [sale1.id]))[0].n === 1);
+  await visit(`/orders/${sale1.id}`, '!!document.querySelector("[data-entity=order]")');
+  ok('anonymous sale: its order page opens and links no customer account', (await exists('[data-entity=order]')) && !(await exists('[data-customer-link]')));
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
 
   // ---------- manager: own session at Store 2, discount; void the cashier's sale ----------
   ok('manager signs in', await signIn('manager', 'POS Manager'));
