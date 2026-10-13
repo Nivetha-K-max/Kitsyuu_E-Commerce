@@ -2154,3 +2154,6 @@ details.pos-pad{padding:8px 10px;border-radius:12px}
 .pos-charge{min-height:50px;font-size:16px;margin-top:14px}
 .pos-foot .btn{min-height:36px;font-size:13px}
 @media (max-width:640px){.pos-key{min-height:48px}}
+/* Sidebar (2026-10-13, owner): items are plain; only the selected module carries a fill */
+.nav a{background:transparent;margin-bottom:2px}
+.nav a:hover{background:var(--surface-3);box-shadow:none}
