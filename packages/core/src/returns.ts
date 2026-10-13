@@ -63,7 +63,7 @@ const listedTwice = (items: { orderItemId: string }[]) => new Set(items.map(i =>
 const LISTED_TWICE = 'An item is listed twice. Choose each item once, with the quantity being returned.';
 
 /** Units of each order line already in other (not rejected / cancelled) return requests. */
-async function alreadyReturned(q: Queryable, orderId: string, exceptReturnId?: string) {
+export async function alreadyReturned(q: Queryable, orderId: string, exceptReturnId?: string) {
   let query = q.selectFrom('return_items as i').innerJoin('return_requests as r', 'r.id', 'i.return_id')
     .select(['i.order_item_id', sql<number>`sum(i.qty)::int`.as('qty')]).where('r.order_id', '=', orderId).where('r.status', 'not in', ['rejected', 'cancelled'])
     .groupBy('i.order_item_id');

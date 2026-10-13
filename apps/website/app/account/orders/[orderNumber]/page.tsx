@@ -12,7 +12,7 @@ import { formatDate, formatDateTime, NEXT_STEP, ORDER_STATUS_LABEL, PAYMENT_STAT
 import { RETURN_STATUS_LABEL } from '@/lib/erp-format';
 
 export const metadata: Metadata = { title: 'Order' };
-const IN_STORE: Record<string, string> = { cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
+const IN_STORE: Record<string, string> = { cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store', split: 'Paid in store (more than one way)', store_credit: 'Store credit', credit: 'Credit bill (to be paid)' };
 /* Delivery steps the customer follows (packing is part of processing; it shows once staff mark the parcel packed). */
 const STEPS = [['processing', 'Processing'], ['packed', 'Packed'], ['shipped', 'Shipped'], ['delivered', 'Delivered']] as const;
 const SHIPMENT_LABEL: Record<string, string> = { shipped: 'Shipped', in_transit: 'On the way', delivered: 'Delivered', failed_delivery: 'Delivery attempt failed', cancelled: 'Cancelled', packed: 'Packed', processing: 'Processing', pending: 'Pending' };

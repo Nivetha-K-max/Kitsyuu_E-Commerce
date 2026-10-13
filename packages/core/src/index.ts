@@ -211,4 +211,7 @@ export { adjustPointsForRefunds, loyaltyTotals } from './loyalty.ts';
 
 // POS billing at a branch (2026-10-02): counter sales on the existing order / stock / payment / returns engine.
 export { posContext, openPosSession, closePosSession, posSessionSummary, listPosSessions, searchPosProducts, listPosBranchStock, quotePosSale, completePosSale, getPosSale, listPosSales,
-  voidPosSale, posReport, findPosCustomers, setVariantBarcode, POS_PAYMENT_METHODS, type PosPaymentMethod, type PosSaleInput, type PosLineInput, type PosProduct, type PosVariant } from './pos.ts';
+  voidPosSale, posReport, findPosCustomers, posCustomerProfile, findPosOrders, setVariantBarcode, POS_PAYMENT_METHODS, POS_TENDER_METHODS, TENDER_LABEL, type PosTender, type PosTenderMethod, type PosPaymentMethod, type PosSaleInput, type PosLineInput, type PosProduct, type PosVariant } from './pos.ts';
+export { adjustStoreCredit, reverseStoreCreditEntry, getStoreCredit, storeCreditBalance, storeCreditReport, storeCreditReconciliation, STORE_CREDIT_KIND_LABELS } from './store-credit.ts';
+export { setCreditAccount, repayCreditBill, getCustomerCredit, getCreditBill, creditReport, creditReconciliation, CREDIT_REPAY_METHODS, type CreditRepayMethod } from './credit-bills.ts';
+export { getOrderForCounter, quoteCounterExchange, settleCounterExchange, type CounterExchangeInput, type ExchangeOutcome, type ExchangeReturnLine } from './pos-exchange.ts';

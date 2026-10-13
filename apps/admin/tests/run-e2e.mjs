@@ -118,6 +118,8 @@ try {
       : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false}
       // pos.test.mjs (2026-10-02): 11 POS sales at two branches (one voided), 1 customer; the online stock is never touched.
       : f === 'pos.test.mjs' ? {customers: 1, orders: 11, units: 1100}
+      // pos-phase2.test.mjs (2026-10-13): 2 customers; 22 orders (split, store-credit and credit sales, replacement bills of exchanges, 2 website-order fixtures); the online stock is never touched.
+      : f === 'pos-phase2.test.mjs' ? {customers: 2, orders: 22, units: 1100}
       // Commerce workflows: 4 customers; 3 orders (the one that won the last unit, a staff-created online order, an offline
       // branch order); online stock moved by sales, corrections and restocks, all through the ledger (branch stock too).
       : f === 'commerce-workflows.test.mjs' ? {customers: 4, orders: 3, units: 1087, everySizeTen: false}
@@ -259,7 +261,8 @@ try {
   // POS browser tests: 3 counter sales at two branches (one voided) and 1 customer; branch stock only, never the online stock.
   // POS browser tests (2026-10-12): one more counter sale, with a coupon and loyalty points (branch stock only).
   // Purchasing & Production browser tests (Phase 9): receipts go to a branch; 3 passed pieces of one production order enter the online stock (+3).
-  if (!(await dbCheck('after all browser tests', env, {orders: 15, customers: 5,   // +1 order and +1 customer: the refund fixture of leads-studio.mjs
+  // 2026-10-13: +3 orders from the POS phase 2 checks in pos.mjs (a split sale, a credit sale, the replacement bill of an exchange)
+  if (!(await dbCheck('after all browser tests', env, {orders: 18, customers: 5,   // +1 order and +1 customer: the refund fixture of leads-studio.mjs
      units: 1100 - 11 + 3 + 6 - 3 + 4 + 3, products: 23, variants: 111, images: 23, everySizeTen: false}))) failed = true;
   /* 2026-10-12: an offline run (KITSYUU_TEST_OFFLINE=1 with OFFLINE_PROOF=<file>) must PROVE the guard was in every process it
      started, not only that nothing was logged as refused: each guarded process and each test browser writes one line to the

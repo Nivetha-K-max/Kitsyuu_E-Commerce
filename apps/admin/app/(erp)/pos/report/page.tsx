@@ -44,6 +44,16 @@ export default async function PosReportPage({ searchParams }: { searchParams: SP
           <tbody>{r.methods.map(m => <tr key={m.method} data-method={m.method}><td>{m.label}</td><td className="num">{m.count}</td><td className="num">{formatPaise(m.amountPaise)}</td></tr>)}</tbody>
         </table></div>
         <p className="note">Voided sales: {r.voided} ({formatPaise(r.voidRefundsPaise)} returned at the counter). Refunds of returns: {formatPaise(r.returnRefundsPaise)}.</p>
+        <div className="table-wrap"><table data-pos-settled>
+          <thead><tr><th>How the sales of this period were settled</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            <tr data-settled="money"><td>Money received at the sale (cash, card, UPI)</td><td className="num">{formatPaise(r.moneyReceivedPaise)}</td></tr>
+            <tr data-settled="store_credit"><td>Paid with store credit (the shop already owed it: not new money)</td><td className="num">{formatPaise(r.storeCreditPaise)}</td></tr>
+            <tr data-settled="exchange"><td>Covered by goods handed back in an exchange</td><td className="num">{formatPaise(r.exchangeValuePaise)}</td></tr>
+            <tr data-settled="credit"><td>Sold on credit (not yet received)</td><td className="num">{formatPaise(r.onCreditPaise)}</td></tr>
+          </tbody>
+        </table></div>
+        <p className="note" data-pos-repayments>Credit repayments received in this period: {formatPaise(r.repaymentsPaise)} (money for earlier credit bills; not counted as new sales). Details under <a href="/pos/credit">Credit and store credit</a>.</p>
       </section>
       <div className="pos-grid2">
         {(['byCashier', 'byLocation'] as const).map(k => (

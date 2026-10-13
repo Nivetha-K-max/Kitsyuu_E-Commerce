@@ -7,7 +7,7 @@
    the sale is completed on the server only for the total the cashier saw. */
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { posCompleteAction, posCustomersAction, posQuoteAction, posSearchAction, posStockAction } from './actions';
+import { posCompleteAction, posCustomersAction, posProfileAction, posQuoteAction, posSearchAction, posStockAction, type TenderInput } from './actions';
 
 type Variant = { variantId: string; sku: string; barcode: string | null; size: string; colour: string | null; colourLabel: string | null; unitPaise: number; stock: number };
 type Product = { productId: string; name: string; image: string | null; category: string | null; variants: Variant[] };
@@ -15,7 +15,13 @@ type Line = { variantId: string; qty: number; image: string | null; name: string
 type Customer = { id: string; email: string; full_name: string | null; phone: string | null };
 type Quote = NonNullable<Extract<Awaited<ReturnType<typeof posQuoteAction>>, { ok: true }>['data']>;
 type Method = 'cash' | 'upi' | 'card';
-type Done = { orderId: string; posNumber: string; totalPaise: number; changePaise: number };
+type Done = { orderId: string; posNumber: string; totalPaise: number; changePaise: number; creditDueOn?: string | null };
+type Profile = NonNullable<Extract<Awaited<ReturnType<typeof posProfileAction>>, { ok: true }>['data']>;
+/* 2026-10-13: more than one way of paying a bill. Each row is an amount in rupees as typed; the server checks that they add
+   up to the bill and that each one is allowed. Store credit and credit need a customer on the bill. */
+type SplitKey = 'cash' | 'upi' | 'card' | 'store_credit' | 'credit';
+const SPLIT_LABEL: Record<SplitKey, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', store_credit: 'Store credit', credit: 'On credit (pay later)' };
+const toPaise = (v: string) => Math.round((Number(String(v).replace(/[,₹\s]/g, '')) || 0) * 100);
 
 const inr = (p: number) => '₹' + (p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const newKey = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, '');
@@ -42,6 +48,10 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   const [error, setError] = useState(''); const [done, setDone] = useState<Done | null>(null);
   const [key, setKey] = useState(newKey);
   const [paying, startPay] = useTransition();
+  const [profile, setProfile] = useState<Profile | null>(null); const [profileMsg, setProfileMsg] = useState('');
+  const [splitOn, setSplitOn] = useState(false);
+  const [split, setSplit] = useState<Record<SplitKey, string>>({ cash: '', upi: '', card: '', store_credit: '', credit: '' });
+  const [splitRef, setSplitRef] = useState<{ upi: string; card: string }>({ upi: '', card: '' });
   const searchRef = useRef<HTMLInputElement>(null);
   // The branch's stock, shown while nothing is searched; and the store the cashier asked for, when it is not this session's.
   const [stock, setStock] = useState<Product[]>([]); const [stockMore, setStockMore] = useState(false); const [stockState, setStockState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -101,6 +111,15 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   const quoteKey = JSON.stringify([lines.map(l => [l.variantId, l.qty]), customer?.id ?? null, discountPercent, couponCode, usePoints]);
   // Points belong to the customer on the bill: changing or removing the customer starts again without them.
   useEffect(() => { setUsePoints(false); }, [customer?.id]);
+  // The chosen customer's history and balances (orders from the website and every branch, store credit, credit owed).
+  useEffect(() => {
+    setProfile(null); setProfileMsg(''); setSplit(s => ({ ...s, store_credit: '', credit: '' }));
+    if (!customer) return;
+    let live = true; setProfileMsg('Loading this customer…');
+    posProfileAction(customer.id).then(r => { if (!live) return; if (r.ok) { setProfile(r.data); setProfileMsg(''); } else setProfileMsg(r.message); })
+      .catch(() => { if (live) setProfileMsg('This customer’s history could not be loaded. The sale can still be made.'); });
+    return () => { live = false; };
+  }, [customer?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!lines.length) { setQuote(null); setQuoteErr(''); return; }
     let live = true;
@@ -128,8 +147,11 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   const total = quote?.totals.totalPaise ?? 0;
   const tenderedPaise = Math.round((Number(tendered.replace(/[,₹\s]/g, '')) || 0) * 100);
   const change = method === 'cash' ? tenderedPaise - total : 0;
+  const splitRows = (Object.keys(split) as SplitKey[]).filter(k => toPaise(split[k]) > 0);
+  const splitSum = splitRows.reduce((n, k) => n + toPaise(split[k]), 0), splitLeft = total - splitSum;
+  const splitOk = splitRows.length > 0 && splitLeft === 0 && splitRows.every(k => (k !== 'upi' && k !== 'card') || splitRef[k].trim().length >= 4);
   const ready = !!quote && !quoteErr && lines.length > 0 && !paying
-    && (method === 'cash' ? tenderedPaise >= total : reference.trim().length >= 4)
+    && (splitOn ? splitOk : method === 'cash' ? tenderedPaise >= total : reference.trim().length >= 4)
     && (discountPercent === 0 || reason.trim().length >= 3)
     // A coupon or points that the server did not apply must be taken off the bill before payment (the server refuses the sale otherwise).
     && (!couponCode || !!quote.coupon?.applied) && (!usePoints || (quote.loyalty?.usedPoints ?? 0) > 0);
@@ -142,7 +164,8 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
       try {
         r = await posCompleteAction({ sessionId: session.id, idempotencyKey: key, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
           contactName, contactPhone, discountPercent, discountReason: reason, method, tendered, reference, expectedTotalPaise: quote.totals.totalPaise,
-          couponCode, usePoints: usePoints && !!customer });
+          couponCode, usePoints: usePoints && !!customer,
+          tenders: splitOn ? splitRows.map((k): TenderInput => ({ method: k, amount: split[k], reference: k === 'upi' || k === 'card' ? splitRef[k] : undefined })) : undefined });
       } catch {
         // The request did not come back (connection dropped, timeout). The sale may or may not have been saved. The bill and
         // its key are kept exactly as they are: pressing Charge again asks the server, which never saves the same bill twice.
@@ -150,12 +173,13 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
         return;
       }
       if (!r.ok) { setError(r.message); return; }
-      setDone({ orderId: r.data.orderId, posNumber: r.data.posNumber, totalPaise: r.data.totalPaise, changePaise: r.data.changePaise });
+      setDone({ orderId: r.data.orderId, posNumber: r.data.posNumber, totalPaise: r.data.totalPaise, changePaise: r.data.changePaise, creditDueOn: r.data.creditDueOn ?? null });
     });
   }
   function newSale() {
     setLines([]); setQuote(null); setCustomer(null); setCustQ(''); setContactName(''); setContactPhone(''); setDiscount(''); setReason(''); setCoupon(''); setUsePoints(false);
     setMethod('cash'); setTendered(''); setReference(''); setError(''); setDone(null); setKey(newKey()); setQ(''); setResults([]);
+    setSplitOn(false); setSplit({ cash: '', upi: '', card: '', store_credit: '', credit: '' }); setSplitRef({ upi: '', card: '' });
     void loadStock();                                   // the sale just made changed what is left at this branch
     setTimeout(() => searchRef.current?.focus(), 0);
   }
@@ -197,7 +221,8 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
 
   if (done) return (
     <section className="pos-done card" data-pos-done aria-live="polite">
-      <h2>Payment received · {done.posNumber}</h2>
+      <h2>{done.creditDueOn ? 'Sale saved' : 'Payment received'} · {done.posNumber}</h2>
+      {done.creditDueOn && <p className="pos-change" data-pos-credit-due>Part of this bill is on credit: due by <b>{done.creditDueOn}</b>.</p>}
       <p className="pos-done-total">{inr(done.totalPaise)}</p>
       {done.changePaise > 0 && <p className="pos-change" data-pos-change>Change to give: <b>{inr(done.changePaise)}</b></p>}
       <div className="pos-done-actions">
@@ -292,7 +317,29 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
 
         <div className="pos-customer" data-pos-customer>
           {customer ? (
+            <>
             <p>Customer: <b>{customer.full_name ?? customer.email}</b> · {customer.phone ?? customer.email} <button type="button" className="btn ghost" onClick={() => setCustomer(null)} data-pos-customer-clear>Change</button></p>
+            {profileMsg && <p className="note" data-pos-profile-msg>{profileMsg}</p>}
+            {profile && (
+              <details className="pos-profile" data-pos-profile open>
+                <summary>History and balances</summary>
+                <dl className="pos-profile-figures">
+                  <div><dt>Store credit</dt><dd data-pos-profile-store-credit={profile.storeCreditPaise}>{inr(profile.storeCreditPaise)}</dd></div>
+                  <div><dt>Owes on credit</dt><dd data-pos-profile-owed={profile.credit.owedPaise}>{profile.credit.account ? inr(profile.credit.owedPaise) : 'No credit account'}</dd></div>
+                  <div><dt>Loyalty points</dt><dd>{profile.points}</dd></div>
+                  {profile.counts && <div><dt>Orders</dt><dd>{profile.counts.online} website · {profile.counts.retail} in store</dd></div>}
+                </dl>
+                {profile.credit.account && <p className="note">Credit: {profile.credit.account.status === 'active' ? `${inr(profile.credit.availablePaise)} of ${inr(profile.credit.account.limit_paise)} available` : 'switched off'}{profile.credit.nextDueOn ? ` · next due ${String(profile.credit.nextDueOn).slice(0, 10)}` : ''}</p>}
+                {profile.orders && (profile.orders.length === 0 ? <p className="note">No earlier orders.</p> : (
+                  <ul className="pos-profile-orders" data-pos-profile-orders>{profile.orders.slice(0, 5).map(o => (
+                    <li key={o.id}><Link href={o.pos_number ? `/pos/sale/${o.id}` : `/orders/${o.id}`} target="_blank">{o.pos_number ?? o.order_number}</Link>
+                      <span>{o.channel === 'online' ? 'Website' : o.location_name ?? 'Branch'} · {new Date(o.created_at as unknown as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {String(o.status).replace(/_/g, ' ')}</span><b>{inr(o.total_paise)}</b></li>
+                  ))}</ul>
+                ))}
+                {profile.returns && profile.returns.length > 0 && <p className="note" data-pos-profile-returns>Open returns: {profile.returns.map(r => `${r.number} (${r.status.replace(/_/g, ' ')})`).join(', ')}</p>}
+              </details>
+            )}
+            </>
           ) : (
             <>
               <label htmlFor="pos-cust">Customer (optional)</label>
@@ -349,6 +396,24 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
         {quoteErr && <p className="msg error" role="alert" data-pos-quote-error>{quoteErr}</p>}
 
         <div className="pos-pay" data-pos-pay>
+          <label className="pos-split-toggle"><input type="checkbox" checked={splitOn} onChange={e => setSplitOn(e.target.checked)} data-pos-split-toggle /> More than one way of paying, store credit or credit</label>
+          {splitOn && (
+            <div className="pos-split" data-pos-split>
+              {(Object.keys(SPLIT_LABEL) as SplitKey[]).filter(k => k === 'cash' || k === 'upi' || k === 'card'
+                || (k === 'store_credit' && !!profile && profile.can.storeCredit && profile.storeCreditPaise > 0)
+                || (k === 'credit' && !!profile && profile.can.creditSale && profile.credit.account?.status === 'active')).map(k => (
+                <div key={k} className="pos-split-row">
+                  <label>{SPLIT_LABEL[k]}{k === 'store_credit' ? ` (has ${inr(profile!.storeCreditPaise)})` : k === 'credit' ? ` (${inr(profile!.credit.availablePaise)} available)` : ''}
+                    <input value={split[k]} onChange={e => setSplit(s => ({ ...s, [k]: e.target.value.replace(/[^0-9.]/g, '') }))} inputMode="decimal" placeholder="0" data-pos-split-amount={k} /></label>
+                  {(k === 'upi' || k === 'card') && toPaise(split[k]) > 0 && <label>Reference<input value={splitRef[k]} onChange={e => setSplitRef(s => ({ ...s, [k]: e.target.value }))} autoComplete="off" data-pos-split-ref={k} /></label>}
+                  <button type="button" className="btn ghost" onClick={() => setSplit(s => ({ ...s, [k]: String(Math.max(0, (toPaise(s[k]) + splitLeft)) / 100) }))} disabled={splitLeft === 0} data-pos-split-rest={k}>Rest</button>
+                </div>
+              ))}
+              <p className={splitLeft === 0 ? 'note' : 'msg'} role="status" data-pos-split-left={splitLeft}>{splitLeft === 0 ? 'The payments add up to the bill.' : splitLeft > 0 ? `${inr(splitLeft)} still to be paid.` : `${inr(-splitLeft)} too much: reduce one of the amounts.`}</p>
+              {!customer && <p className="note">Store credit and credit bills need a customer on the bill.</p>}
+            </div>
+          )}
+          {!splitOn && <>
           <div className="pos-methods" role="radiogroup" aria-label="Payment method">
             {(['cash', 'upi', 'card'] as Method[]).map(m => (
               <button key={m} type="button" role="radio" aria-checked={method === m} className={`btn pos-method${method === m ? ' active' : ''}`} onClick={() => setMethod(m)} data-pos-method={m}>
@@ -366,6 +431,7 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
             <label>{method === 'upi' ? 'UPI transaction reference (UTR) — after the customer’s payment succeeds' : 'Card approval / transaction reference — from the terminal slip'}
               <input value={reference} onChange={e => setReference(e.target.value)} autoComplete="off" data-pos-reference /></label>
           )}
+          </>}
           {error && <p className="msg error" role="alert" data-pos-error>{error}</p>}
           {lines.length > 0 && <details className="pos-pad" data-pos-pad open>
             <summary>Keypad</summary>
@@ -386,7 +452,7 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
             {paying ? 'Recording payment…' : quote ? `Charge ${inr(total)} (F9)` : 'Charge'}
           </button>
           <div className="pos-foot">
-            <Link className="btn ghost" href="/pos/sessions" data-pos-sales-link>Sessions &amp; sales</Link>
+            <Link className="btn ghost" href="/pos/orders" data-pos-orders-link>Find order · return</Link>
             <Link className="btn ghost" href="/pos/sessions#close" data-pos-end-link>End session</Link>
           </div>
         </div>

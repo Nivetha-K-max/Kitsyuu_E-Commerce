@@ -156,7 +156,7 @@ export interface CustomerOrderDetail extends CustomerOrderSummary {
   /** Client change request: null when billing is the delivery address. */
   billing: { name: string | null; line1: string | null; line2: string | null; city: string | null; state: string | null; pin: string | null } | null;
   /** Second pass: cash on delivery (to collect / collected / refused) and its fee; loyalty points used on the order. */
-  paymentMethod: 'online' | 'cod' | 'cash' | 'card' | 'upi'; codStatus: 'to_collect' | 'collected' | 'refused' | null; codFeePaise: number;
+  paymentMethod: 'online' | 'cod' | 'cash' | 'card' | 'upi' | 'split' | 'store_credit' | 'credit'; codStatus: 'to_collect' | 'collected' | 'refused' | null; codFeePaise: number;
   pointsUsed: number; pointsDiscountPaise: number;
   history: { status: OrderStatus; at: Date }[];
   /** 2026-10-01: where the order came from (online, or offline at a branch) and a discount given by staff (with its reason). */

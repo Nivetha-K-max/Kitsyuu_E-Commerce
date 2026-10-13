@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { DomainError, type ActionState } from '@kitsyuu/contracts';
 import { closePosSession, completePosSale, setVariantBarcode, createInvoiceForOrder, notifyInvoiceIssued, createStaffReturn, findPosCustomers, openPosSession, quotePosSale, searchPosProducts, voidPosSale,
-  listPosBranchStock, type PosLineInput, type PosPaymentMethod } from '@kitsyuu/core';
+  listPosBranchStock, posCustomerProfile, findPosOrders, quoteCounterExchange, settleCounterExchange, repayCreditBill, setCreditAccount, adjustStoreCredit,
+  type PosLineInput, type PosPaymentMethod, type PosTender, type PosTenderMethod, type ExchangeReturnLine, type CreditRepayMethod } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, mailer, productImageUrl, requestContext, requireActor } from '@/lib/server';
 
@@ -21,6 +22,17 @@ async function json<T>(run: () => Promise<T>): Promise<Json<T>> {
 }
 const rupees = (v: unknown) => { const n = Number(String(v ?? '').replace(/[,₹\s]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : NaN; };
 const uuid = z.string().regex(/^[0-9a-f-]{36}$/i, 'Not valid.');
+/** A tender as the counter sends it (rupees as typed); amounts are turned into paise here and checked again in the core. */
+export type TenderInput = { method: PosTenderMethod; amount: string; reference?: string; tendered?: string };
+function toTenders(list: TenderInput[] | undefined | null): PosTender[] | null {
+  if (!list?.length) return null;
+  return list.map(t => {
+    const amountPaise = rupees(t.amount);
+    if (!Number.isInteger(amountPaise)) throw new DomainError('invalid', 'Enter each payment amount in rupees.');
+    const tenderedPaise = t.method === 'cash' && String(t.tendered ?? '').trim() ? rupees(t.tendered) : null;
+    return { method: t.method, amountPaise, reference: t.reference?.trim() || null, tenderedPaise: Number.isInteger(tenderedPaise) ? tenderedPaise : null };
+  });
+}
 
 // ---------------------------------------------------------------- counter (JSON)
 export async function posSearchAction(locationId: string, q: string) {
@@ -63,20 +75,87 @@ export async function posQuoteAction(input: { locationId: string; lines: PosLine
 }
 
 export async function posCompleteAction(input: { sessionId: string; idempotencyKey: string; lines: PosLineInput[]; customerId: string | null; contactName: string; contactPhone: string;
-  discountPercent: number; discountReason: string; method: PosPaymentMethod; tendered: string; reference: string; expectedTotalPaise: number; couponCode?: string; usePoints?: boolean }) {
+  discountPercent: number; discountReason: string; method: PosPaymentMethod; tendered: string; reference: string; expectedTotalPaise: number; couponCode?: string; usePoints?: boolean;
+  /** 2026-10-13: several ways of paying one bill (cash, card, UPI, store credit, on credit). When given, `method` is ignored. */
+  tenders?: TenderInput[] }) {
   const actor = await requireActor();
   const r = await json(async () => {
-    const tenderedPaise = input.method === 'cash' ? rupees(input.tendered) : null;
-    if (input.method === 'cash' && !Number.isInteger(tenderedPaise)) throw new DomainError('invalid', 'Enter the cash received.');
+    const tenders = toTenders(input.tenders);
+    const tenderedPaise = !tenders && input.method === 'cash' ? rupees(input.tendered) : null;
+    if (!tenders && input.method === 'cash' && !Number.isInteger(tenderedPaise)) throw new DomainError('invalid', 'Enter the cash received.');
     return completePosSale(db(), actor, {
       sessionId: input.sessionId, idempotencyKey: input.idempotencyKey, lines: input.lines, customerId: input.customerId,
       contact: { name: input.contactName, phone: input.contactPhone },
       discount: input.discountPercent > 0 ? { percent: input.discountPercent, reason: input.discountReason } : null,
       couponCode: input.couponCode ?? null, usePoints: !!input.usePoints,
-      payment: { method: input.method, tenderedPaise, reference: input.reference }, expectedTotalPaise: input.expectedTotalPaise,
+      payment: { method: input.method, tenderedPaise, reference: input.reference }, tenders, expectedTotalPaise: input.expectedTotalPaise,
     }, await requestContext());
   });
   if (r.ok) { revalidatePath('/pos', 'layout'); revalidatePath('/orders'); }
+  return r;
+}
+
+// ---------------------------------------------------------------- customer profile, order lookup, exchange (JSON)
+export async function posProfileAction(customerId: string) {
+  const actor = await requireActor();
+  return json(() => posCustomerProfile(db(), actor, String(customerId ?? '')));
+}
+
+export async function posOrdersAction(term: string) {
+  const actor = await requireActor();
+  return json(() => findPosOrders(db(), actor, String(term ?? '')));
+}
+
+export async function posExchangeQuoteAction(input: { orderId: string; locationId: string; items: ExchangeReturnLine[]; replacements: PosLineInput[] }) {
+  const actor = await requireActor();
+  return json(() => quoteCounterExchange(db(), actor, input));
+}
+
+export async function posExchangeSettleAction(input: { sessionId: string; orderId: string; items: ExchangeReturnLine[]; reasonCode: string; note: string; replacements: PosLineInput[];
+  surplus: 'store_credit' | 'refund'; tenders?: TenderInput[]; expected: { returnValuePaise: number; replacementPaise: number }; key: string }) {
+  const actor = await requireActor();
+  const r = await json(async () => settleCounterExchange(db(), actor, { sessionId: input.sessionId, orderId: input.orderId, items: input.items, reasonCode: input.reasonCode, note: input.note || null,
+    replacements: input.replacements, surplus: input.surplus, tenders: toTenders(input.tenders), expected: input.expected, key: input.key }, await requestContext()));
+  if (r.ok) { revalidatePath('/pos', 'layout'); revalidatePath('/orders'); revalidatePath('/returns'); }
+  return r;
+}
+
+// ---------------------------------------------------------------- credit and store credit (forms)
+const money = z.string().trim().min(1, 'Enter an amount.');
+export async function repayCreditAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  let done = '';
+  const r = await handle(z.object({ billId: uuid, amount: money, method: z.enum(['cash', 'card', 'upi']), reference: z.string().trim().max(64).optional(), sessionId: uuid.optional().or(z.literal('')), key: z.string().min(8).max(100) }), form, async input => {
+    const amountPaise = rupees(input.amount);
+    if (!Number.isInteger(amountPaise)) throw new DomainError('invalid', 'Enter the amount received in rupees.');
+    const res = await repayCreditBill(db(), actor, { billId: input.billId, amountPaise, method: input.method as CreditRepayMethod, reference: input.reference || null, sessionId: input.sessionId || null, key: input.key }, await requestContext());
+    done = res.paidOff ? `Repayment ${res.number} recorded. This credit bill is now fully repaid.` : `Repayment ${res.number} recorded. ₹${(res.outstandingPaise / 100).toFixed(2)} is still owed on this bill.`;
+  });
+  if (r.ok) { revalidatePath('/pos', 'layout'); revalidatePath('/customers', 'layout'); return { ok: true, message: done }; }
+  return r;
+}
+
+export async function setCreditAccountAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(z.object({ customerId: uuid, limit: money, dueDays: z.coerce.number().int('Enter whole days.'), active: z.enum(['yes', 'no']), note: z.string().trim().max(500).optional() }), form, async input => {
+    const limitPaise = rupees(input.limit);
+    if (!Number.isInteger(limitPaise)) throw new DomainError('invalid', 'Enter the credit limit in rupees.');
+    await setCreditAccount(db(), actor, { customerId: input.customerId, limitPaise, dueDays: input.dueDays, active: input.active === 'yes', note: input.note || null }, await requestContext());
+  });
+  if (r.ok) { revalidatePath('/customers', 'layout'); return { ok: true, message: 'Credit account saved. Bills already made keep the terms they were sold on.' }; }
+  return r;
+}
+
+export async function adjustStoreCreditAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  let done = '';
+  const r = await handle(z.object({ customerId: uuid, amount: z.string().trim().min(1, 'Enter an amount.'), reason: z.string().trim().min(3, 'Enter the reason.').max(300), key: z.string().min(8).max(100) }), form, async input => {
+    const amountPaise = rupees(input.amount);
+    if (!Number.isInteger(amountPaise) || amountPaise === 0) throw new DomainError('invalid', 'Enter an amount in rupees, other than 0 (a minus sign takes credit away).');
+    const res = await adjustStoreCredit(db(), actor, { customerId: input.customerId, amountPaise, reason: input.reason, key: input.key }, await requestContext());
+    done = `Store credit ${amountPaise > 0 ? 'added' : 'removed'}. The balance is now ₹${(res.balancePaise / 100).toFixed(2)}.`;
+  });
+  if (r.ok) { revalidatePath('/customers', 'layout'); return { ok: true, message: done }; }
   return r;
 }
 

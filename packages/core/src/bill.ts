@@ -104,5 +104,5 @@ export function billFromOrder(o: StoredBill, opts: { taxSplit?: { type?: string;
 }
 
 /** How a bill is paid, in words (one wording for the receipt, the invoice and the invoice email). */
-export const PAYMENT_METHOD_LABEL: Record<string, string> = { online: 'Online payment', cod: 'Cash on delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
+export const PAYMENT_METHOD_LABEL: Record<string, string> = { online: 'Online payment', cod: 'Cash on delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store', split: 'Several payments in store', store_credit: 'Store credit', credit: 'Credit bill (not yet paid)' };
 export const paymentMethodLabel = (m: string | null | undefined) => (m ? PAYMENT_METHOD_LABEL[m] ?? m : 'Online payment');

@@ -561,7 +561,7 @@ export interface Database {
 }
 
 // ============================== client change request, second pass (migration 20261002003800) ==============================
-export type PaymentMethod = 'online' | 'cod' | 'cash' | 'card' | 'upi';   // cash, card, upi: offline orders paid in a branch (migration 20261005004100)
+export type PaymentMethod = 'online' | 'cod' | 'cash' | 'card' | 'upi' | 'split' | 'store_credit' | 'credit';   // cash, card, upi: offline orders paid in a branch (migration 20261005004100)
 export type CodStatus = 'to_collect' | 'collected' | 'refused';
 export interface OrdersTable {
   payment_method: ColumnType<PaymentMethod, PaymentMethod | undefined, never>; cod_status: CodStatus | null;
@@ -708,3 +708,29 @@ export interface ContentIdeasTable {
   created_by: string | null; created_at: Generated<Timestamp>; updated_at: Generated<Timestamp>;
 }
 export interface Database { leads: LeadsTable; lead_events: LeadEventsTable; content_pieces: ContentPiecesTable; content_ideas: ContentIdeasTable }
+
+// ============================== POS phase 2: store credit, credit bills, exchanges (migration 20261013004900, local only until reviewed) ==============================
+export type StoreCreditKind = 'return' | 'adjustment' | 'redeem' | 'reversal';
+export interface StoreCreditAccountsTable { customer_id: string; balance_paise: Generated<number>; updated_at: Generated<Timestamp> }
+export interface StoreCreditEntriesTable {
+  id: Generated<string>; customer_id: string; amount_paise: number; balance_after: number; kind: StoreCreditKind; order_id: string | null; return_id: string | null;
+  reverses_id: string | null; staff_id: string | null; reason: string; idempotency_key: string; created_at: Generated<Timestamp>;
+}
+export interface CreditAccountsTable {
+  customer_id: string; limit_paise: number; due_days: number; status: Generated<'active' | 'inactive'>; outstanding_paise: Generated<number>;
+  approved_by: string; approved_at: Generated<Timestamp>; note: string | null; updated_at: Generated<Timestamp>;
+}
+export interface CreditBillsTable {
+  id: Generated<string>; order_id: string; customer_id: string; amount_paise: number; outstanding_paise: number; limit_paise_at_sale: number; due_days_at_sale: number;
+  due_on: ColumnType<Date, string, never>; status: Generated<'open' | 'paid' | 'cancelled'>; created_by: string; created_at: Generated<Timestamp>; closed_at: Timestamp | null;
+}
+export interface CreditRepaymentsTable {
+  id: Generated<string>; bill_id: string; number: string; amount_paise: number; method: 'cash' | 'card' | 'upi'; reference: string | null; payment_id: string;
+  pos_session_id: string | null; staff_id: string; outstanding_after: number; idempotency_key: string; created_at: Generated<Timestamp>;
+}
+export interface ReturnRequestsTable { settlement: 'collect' | 'store_credit' | 'refund' | 'even' | null; settlement_paise: number | null; exchange_order_id: string | null; idempotency_key: string | null }
+export interface OrdersTable { exchange_return_id: ColumnType<string | null, string | null | undefined, never> }
+export interface Database {
+  store_credit_accounts: StoreCreditAccountsTable; store_credit_entries: StoreCreditEntriesTable;
+  credit_accounts: CreditAccountsTable; credit_bills: CreditBillsTable; credit_repayments: CreditRepaymentsTable;
+}

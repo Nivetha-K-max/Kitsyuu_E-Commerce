@@ -242,6 +242,7 @@ test('settings: typed registry, locked business rules, audited edits of safe set
     // client change request, second pass (cash on delivery and loyalty points: off / empty until the business decides)
     'payments.cod_enabled', 'payments.cod_discount', 'payments.cod_min_order', 'payments.cod_max_order', 'loyalty.enabled', 'loyalty.earn_points_per_100',
     'loyalty.earn_when', 'loyalty.point_value_paise', 'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months',
+    'loyalty.tier_silver_points', 'loyalty.tier_gold_points', 'loyalty.tier_diamond_points',   // 2026-10-13: tier labels by points balance (empty until the business sets them)
     // commerce workflows (2026-10-01): staff discount limit, order emails, automatic cart reminder and its wording
     'discounts.staff_max_percent', 'notifications.order_tracking', 'notifications.order_packed', 'notifications.payment_request', 'notifications.abandoned_cart_auto',   // order_tracking: Phase 6 (2026-10-08)
     'emails.cart_reminder_subject', 'emails.cart_reminder_intro',

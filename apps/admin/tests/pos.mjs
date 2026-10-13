@@ -318,6 +318,136 @@ try {
   const [{bad}] = await q(`select count(*)::int bad from location_stock s where s.qty <> (select coalesce(sum(m.delta), 0) from inventory_movements m
     where m.variant_id = s.variant_id and coalesce(m.location_id, (select id from locations where is_online)) = s.location_id)`);
   ok('branch stock equals the ledger', bad === 0);
+  {   // its own scope: the names below do not meet the ones used earlier in this suite
+  // ---------- POS phase 2 (2026-10-13): customer panel, several tenders, store credit, credit bill and repayment, order lookup, exchange ----------
+  // Fixtures (local test DB, owner connection): stock for the manager's till, ₹500 of store credit for Kavya (ledger + balance
+  // together, as the service writes them), returns switched on. Credit permissions are NOT given to a manager by the
+  // migration; the business grants them, which is what the two inserts further down stand for.
+  const LOC = (await q(`select l.code from pos_sessions s join locations l on l.id = s.location_id join staff_users u on u.id = s.staff_id where u.email = 'pos.manager@test.local' and s.status = 'open'`))[0]?.code ?? 'POS-S1';
+  for (const [sku, n] of [['KTS-TOP-003-L', 8], ['KTS-TOP-003-M', 8], ['KTS-BTM-003-M', 6]])
+    await q(`select public.adjust_location_stock((select id from product_variants where sku = $1), (select id from locations where code = '${LOC}'), $2, 'restock', null, 'POS phase 2 e2e stock')`, [sku, n]);
+  const [kavya] = await q(`select id from customers where email = 'pos.kavya@test.local'`);
+  await q(`insert into store_credit_accounts (customer_id, balance_paise) values ($1, 50000) on conflict (customer_id) do update set balance_paise = 50000`, [kavya.id]);
+  await q(`insert into store_credit_entries (customer_id, amount_paise, balance_after, kind, reason, idempotency_key) values ($1, 50000, 50000, 'adjustment', 'E2E opening store credit', 'e2e-fixture-kavya-0001')`, [kavya.id]);
+  await q(`insert into settings (key, value) values ('returns.enabled', '"on"'), ('returns.window_days', '7') on conflict (key) do update set value = excluded.value`);
+  ok('manager signs in for phase 2', await signIn('manager', 'POS Manager'));
+  await visit('/pos', '!!document.querySelector("#pos-open-form") || !!document.querySelector("[data-pos]")');
+  if (await exists('#pos-open-form')) { await fill('#pos-open-form select[name=locationId]', (await q(`select id from locations where code = '${LOC}'`))[0].id); await fill('#pos-open-form input[name=openingCash]', '0'); await submit('#pos-open-form'); }
+  ok('phase 2: the manager has an open session at the counter', await until(`!!document.querySelector('[data-pos]')`, 20000));
+  const pickKavya = async () => { await fill('[data-pos-customer-search]', 'Kavya'); await until(`!!document.querySelector('[data-pos-customer-pick="pos.kavya@test.local"]')`); await click('[data-pos-customer-pick="pos.kavya@test.local"]'); return until(`!!document.querySelector('[data-pos-profile]')`, 10000); };
+
+  // 1. customer panel: three separate balances and the earlier counter purchase
+  ok('customer panel opens for the chosen customer', await pickKavya());
+  ok('customer panel: store credit ₹500, no credit account, earlier orders listed', (await ev(`document.querySelector('[data-pos-profile-store-credit]').dataset.posProfileStoreCredit`)) === '50000'
+    && /No credit account/.test(await text('[data-pos-profile]')) && (await ev(`document.querySelectorAll('[data-pos-profile-orders] li').length`)) >= 1, await text('[data-pos-profile]'));
+
+  // 2. store credit + cash on one bill
+  ok('phase 2: item added', await addBySearch('KTS-TOP-003', 'KTS-TOP-003-L'));
+  await until(`!!document.querySelector('[data-pos-total]')`);
+  const total1 = Number(await ev(`document.querySelector('[data-pos-total]').dataset.posTotal`));
+  await click('[data-pos-split-toggle]');
+  ok('several ways of paying: store credit is offered for this customer, credit is not (no account)', await until(`!!document.querySelector('[data-pos-split-amount=store_credit]')`) && !(await exists('[data-pos-split-amount=credit]')));
+  await fill('[data-pos-split-amount=store_credit]', '500');
+  ok('the screen says what is still to be paid, and Charge waits', await until(`document.querySelector('[data-pos-split-left]')?.dataset.posSplitLeft === '${total1 - 50000}'`) && (await ev(`document.querySelector('[data-pos-charge]').disabled`)) === true);
+  await click('[data-pos-split-rest=cash]');
+  ok('Rest fills cash with the remainder; the payments add up', await until(`document.querySelector('[data-pos-split-left]')?.dataset.posSplitLeft === '0'`) && await chargeReady());
+  await click('[data-pos-charge]');
+  ok('split sale completes', await until(`!!document.querySelector('[data-pos-done]')`, 15000), await text('[data-pos-error]'));
+  const [sale1] = await q(`select o.id, o.pos_number, o.payment_method, o.payment_status from orders o where o.customer_id = $1 order by o.created_at desc limit 1`, [kavya.id]);
+  const pay1 = await q(`select provider, method, amount_paise from payments where order_id = $1 order by provider`, [sale1.id]);
+  ok('split sale stored: one bill, a cash row and a store-credit row; the balance is spent', sale1.payment_method === 'split' && sale1.payment_status === 'paid' && pay1.length === 2
+    && pay1.some(p => p.provider === 'store_credit' && p.amount_paise === 50000) && pay1.some(p => p.provider === 'pos' && p.method === 'cash' && p.amount_paise === total1 - 50000)
+    && (await q(`select balance_paise from store_credit_accounts where customer_id = $1`, [kavya.id]))[0].balance_paise === 0, JSON.stringify(pay1));
+  await visit(`/pos/sale/${sale1.id}`, '!!document.querySelector("[data-pos-receipt]")');
+  ok('bill: each tender on its own line, with share buttons', (await exists('[data-receipt-tender=store_credit]')) && (await exists('[data-receipt-tender=cash]')) && /wa\.me/.test(await ev(`document.querySelector('[data-receipt-share=whatsapp]').href`))
+    && /^mailto:pos\.kavya@test\.local/.test(await ev(`document.querySelector('[data-receipt-share=email]').href`)));
+
+  // 3. credit bill: refused until the business approves an account and grants the permission
+  await q(`insert into role_permissions (role_id, permission_code) select id, 'pos.credit_sell' from roles where code = 'manager' on conflict do nothing`);
+  await q(`insert into credit_accounts (customer_id, limit_paise, due_days, approved_by) values ($1, 1000000, 15, (select id from staff_users where email = 'pos.manager@test.local'))`, [kavya.id]);
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
+  await pickKavya();
+  await addBySearch('KTS-BTM-003', 'KTS-BTM-003-M');
+  await until(`!!document.querySelector('[data-pos-total]')`);
+  const total2 = Number(await ev(`document.querySelector('[data-pos-total]').dataset.posTotal`));
+  await click('[data-pos-split-toggle]');
+  ok('credit is now offered, with what is available', await until(`!!document.querySelector('[data-pos-split-amount=credit]')`) && /10,000\.00 available/.test(await text('[data-pos-split]')));
+  await click('[data-pos-split-rest=credit]');
+  await chargeReady(); await click('[data-pos-charge]');
+  ok('credit sale: saved, and the screen says when it is due', await until(`!!document.querySelector('[data-pos-credit-due]')`, 15000), await text('[data-pos-error]'));
+  const [bill] = await q(`select b.id, b.order_id, b.amount_paise, b.outstanding_paise, b.status, o.payment_status, (b.due_on - (now() at time zone 'Asia/Kolkata')::date) days from credit_bills b join orders o on o.id = b.order_id where b.customer_id = $1`, [kavya.id]);
+  ok('credit sale stored: a receivable due in 15 days, the order unpaid, no payment row', bill?.amount_paise === total2 && bill.outstanding_paise === total2 && bill.payment_status === 'unpaid' && bill.days === 15
+    && (await q(`select count(*)::int n from payments where order_id = $1`, [bill.order_id]))[0].n === 0, JSON.stringify(bill));
+  await visit(`/pos/sale/${bill.order_id}`, '!!document.querySelector("[data-pos-receipt]")');
+  ok('bill: says TO PAY and by when', /TO PAY by \d{4}-\d{2}-\d{2}/.test(await text('[data-receipt-credit]')), await text('[data-receipt-credit]'));
+  await visit('/pos/credit', '!!document.querySelector("[data-section=credit-bills]")');
+  ok('credit page: the open bill and the outstanding total', (await ev(`document.querySelectorAll('[data-credit-bills] tbody tr').length`)) === 1 && (await text('[data-credit-outstanding]')).replace(/[^0-9.]/g, '') === (total2 / 100).toFixed(2), await text('[data-credit-outstanding]'));
+  await visit(`/pos/credit/${bill.id}`, '!!document.querySelector("[data-credit-statement]")');
+  ok('repayment needs its own permission: a manager without it gets no form', !(await exists('#credit-repay-form')) && /credit: repay/.test(await ev(`document.querySelector('main').innerText`)));
+  await q(`insert into role_permissions (role_id, permission_code) select id, 'credit.repay' from roles where code = 'manager' on conflict do nothing`);
+  await visit(`/pos/credit/${bill.id}`, '!!document.querySelector("#credit-repay-form")');
+  await autoConfirm();
+  await fill('#credit-repay-form input[name=amount]', String(total2 / 100 + 1));
+  await submit('#credit-repay-form');
+  ok('a repayment above what is owed is refused', /is owed on this bill/.test(await message('#credit-repay-form')), await message('#credit-repay-form'));
+  await fill('#credit-repay-form input[name=amount]', '1000');
+  await submit('#credit-repay-form');
+  ok('part repayment recorded; the statement shows what is left', await until(`document.querySelector('[data-credit-owed]')?.dataset.creditOwed === '${total2 - 100000}'`, 15000) && (await ev(`document.querySelectorAll('[data-credit-repayment]').length`)) === 1, await message('#credit-repay-form'));
+  await visit(`/pos/credit/${bill.id}`, '!!document.querySelector("#credit-repay-form")');
+  await autoConfirm();
+  await fill('#credit-repay-form input[name=amount]', String((total2 - 100000) / 100));
+  await submit('#credit-repay-form');
+  ok('full repayment: the bill is paid in full and the order is paid', await until(`document.querySelector('[data-credit-owed]')?.dataset.creditOwed === '0'`, 15000)
+    && (await q(`select o.payment_status from orders o where o.id = $1`, [bill.order_id]))[0].payment_status === 'paid' && (await q(`select outstanding_paise from credit_accounts where customer_id = $1`, [kavya.id]))[0].outstanding_paise === 0);
+
+  // 4. order lookup → exchange for another size of equal value
+  await visit(`/pos/orders?q=${encodeURIComponent(sale1.pos_number)}`, '!!document.querySelector("[data-pos-order-results]") || !!document.querySelector("[data-pos-order-search]")');
+  ok('order lookup finds the bill by its number and offers a return', (await ev(`document.querySelectorAll('[data-pos-order-results] tbody tr').length`)) === 1 && await exists('[data-pos-order-exchange]'));
+  await visit(`/pos/exchange/${sale1.id}`, '!!document.querySelector("[data-exchange]")');
+  const before = [await locQty(LOC, 'KTS-TOP-003-L'), await locQty(LOC, 'KTS-TOP-003-M')];
+  await click('[data-exchange-line="KTS-TOP-003-L"] [data-exchange-plus]');
+  ok('exchange: the value of the return is shown, and store credit is the default for a return only', await until(`document.querySelector('[data-exchange-return-value]')?.dataset.exchangeReturnValue === '${total1}'`, 10000)
+    && /Issue store credit/.test(await text('[data-exchange-outcome-label]')), await text('[data-exchange-outcome-label]'));
+  await fill('[data-exchange-search]', 'KTS-TOP-003');
+  await until(`!!document.querySelector('[data-exchange-variant="KTS-TOP-003-M"]')`);
+  await click('[data-exchange-variant="KTS-TOP-003-M"]');
+  ok('exchange: another size of the same price is Even', await until(`/Even/.test(document.querySelector('[data-exchange-outcome-label]')?.innerText ?? '')`, 10000), await text('[data-exchange-totals]'));
+  await click('[data-exchange-confirm]');
+  ok('exchange saved', await until(`!!document.querySelector('[data-exchange-done]')`, 15000) && (await ev(`document.querySelector('[data-exchange-outcome]').dataset.exchangeOutcome`)) === 'even', await text('[data-exchange-error]'));
+  const [ret] = await q(`select r.status, r.settlement, r.exchange_order_id, x.pos_number, x.exchange_return_id = r.id linked from return_requests r left join orders x on x.id = r.exchange_order_id where r.order_id = $1`, [sale1.id]);
+  ok('exchange stored: return completed, linked replacement bill, one size back and one out', ret?.status === 'completed' && ret.settlement === 'even' && ret.linked === true
+    && (await locQty(LOC, 'KTS-TOP-003-L')) === before[0] + 1 && (await locQty(LOC, 'KTS-TOP-003-M')) === before[1] - 1, JSON.stringify(ret));
+  await visit(`/pos/exchange/${sale1.id}`, '!!document.querySelector("[data-exchange-nothing]") || !!document.querySelector("[data-exchange]")');
+  ok('what was returned cannot be returned again', await exists('[data-exchange-nothing]'));
+  await visit(`/pos/sale/${ret.exchange_order_id}`, '!!document.querySelector("[data-pos-receipt]")');
+  ok('replacement bill names the original bill and the return', new RegExp(sale1.pos_number.replace(/[/]/g, '\\/')).test(await text('[data-receipt-exchange-of]')));
+
+  // a damaged piece comes back with no replacement: store credit for its value, and it does NOT go back on sale
+  await visit(`/pos/exchange/${bill.order_id}`, '!!document.querySelector("[data-exchange]")');
+  const shelf = await locQty(LOC, 'KTS-BTM-003-M');
+  await click('[data-exchange-line="KTS-BTM-003-M"] [data-exchange-plus]');
+  await until(`!!document.querySelector('[data-exchange-damaged]')`);
+  await click('[data-exchange-damaged]');
+  await until(`/Issue store credit/.test(document.querySelector('[data-exchange-outcome-label]')?.innerText ?? '')`, 10000);
+  await click('[data-exchange-confirm]');
+  ok('damaged return: saved as store credit', await until(`!!document.querySelector('[data-exchange-done]')`, 15000) && (await ev(`document.querySelector('[data-exchange-outcome]').dataset.exchangeOutcome`)) === 'store_credit', await text('[data-exchange-error]'));
+  ok('damaged return stored: not restocked, store credit equals what was paid, the ledger agrees with the balance', (await locQty(LOC, 'KTS-BTM-003-M')) === shelf
+    && (await q(`select balance_paise from store_credit_accounts where customer_id = $1`, [kavya.id]))[0].balance_paise === total2
+    && (await q(`select (select coalesce(sum(amount_paise), 0) from store_credit_entries where customer_id = $1)::int n`, [kavya.id]))[0].n === total2
+    && (await q(`select i.restock, i.restocked_qty from return_items i join return_requests r on r.id = i.return_id where r.order_id = $1`, [bill.order_id]))[0].restocked_qty === 0);
+
+  // 5. reports and the customer record keep the three things apart
+  await visit('/pos/report', '!!document.querySelector("[data-pos-settled]")');
+  ok('POS report: money, store credit, exchange value and credit on separate lines', (await text('[data-settled=store_credit]')).includes('500.00') && (await text('[data-settled=credit]')).replace(/[^0-9.]/g, '').endsWith((total2 / 100).toFixed(2))
+    && (await text('[data-pos-repayments]')).replace(/,/g, '').includes((total2 / 100).toFixed(2)), await text('[data-pos-settled]'));
+  await visit(`/customers/${kavya.id}?tab=payments`, '!!document.querySelector("[data-section=store-credit]")');
+  ok('customer record: store credit and the credit account shown apart; a manager gets no adjustment or terms form', (await exists('[data-store-credit-balance]')) && (await exists('[data-credit-owed]'))
+    && !(await exists('#store-credit-adjust-form')) && !(await exists('#credit-account-form')));
+  await b.viewport(390, 844, true);
+  await visit('/pos', '!!document.querySelector("[data-pos]")');
+  ok('phone width: the new counter has no sideways scrolling', (await ev('document.documentElement.scrollWidth - document.documentElement.clientWidth')) <= 1);
+  await b.viewport(1440, 900);
+  }
   // Phone width: the counter stacks, no sideways scrolling.
   await b.viewport(390, 844, true);
   await visit('/pos/sessions');

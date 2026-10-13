@@ -24,11 +24,22 @@ import { earnForOrder, lockLoyaltyAccount, redeemForOrder, reverseOrderPoints } 
 import { counterDiscounts, couponCodeOf, recordDiscountRedemptions } from './discounts.ts';
 import { billFromTotals } from './bill.ts';
 import { markPaymentRefunded } from './returns.ts';
+import { moveStoreCredit, storeCreditBalance } from './store-credit.ts';
+import { cancelCreditBillForVoid, getCustomerCredit, openCreditBill } from './credit-bills.ts';
+import { loyaltyBalance } from './loyalty.ts';
 import type { MutationContext } from './staff.ts';
 
 export const POS_PAYMENT_METHODS = ['cash', 'card', 'upi'] as const;
 export type PosPaymentMethod = typeof POS_PAYMENT_METHODS[number];
 const METHOD_LABEL: Record<PosPaymentMethod, string> = { cash: 'Cash', card: 'Card', upi: 'UPI' };
+/* 2026-10-13: one bill may be settled by several tenders. cash / card / upi are money received now; store_credit spends the
+   customer's store-credit balance (the shop already owed it: not money received); credit puts the amount on a credit bill
+   (nothing received yet). 'exchange' is set by the exchange workflow only: the value of the goods handed back. */
+export const POS_TENDER_METHODS = ['cash', 'card', 'upi', 'store_credit', 'credit'] as const;
+export type PosTenderMethod = typeof POS_TENDER_METHODS[number];
+export type PosTender = { method: PosTenderMethod; amountPaise: number; reference?: string | null; tenderedPaise?: number | null };
+export const TENDER_LABEL: Record<PosTenderMethod | 'exchange', string> = { cash: 'Cash', card: 'Card', upi: 'UPI', store_credit: 'Store credit', credit: 'On credit', exchange: 'Exchange value' };
+const REF_OK = /^[A-Za-z0-9 /_-]{4,64}$/;
 const auditCtx = (c: MutationContext) => ({ ip: c.ip ?? null, userAgent: c.userAgent ?? null, requestId: c.requestId ?? null });
 const staffAudit = (actor: StaffPrincipal, ctx: MutationContext) => ({ actorType: 'staff' as const, staffId: actor.staffId, ...auditCtx(ctx) });
 const inr = (paise: number) => `${paise < 0 ? '−' : ''}₹${(Math.abs(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -93,13 +104,26 @@ export async function posSessionSummary(q: Queryable, sessionId: string) {
   const byMethod: Record<PosPaymentMethod, { count: number; amountPaise: number; voidedPaise: number }> = { cash: { count: 0, amountPaise: 0, voidedPaise: 0 }, card: { count: 0, amountPaise: 0, voidedPaise: 0 }, upi: { count: 0, amountPaise: 0, voidedPaise: 0 } };
   for (const r of sales) { const m = byMethod[r.method as PosPaymentMethod]; if (m) { m.count++; m.amountPaise += r.amount_paise; } }
   for (const v of voids) { const m = byMethod[v.method as PosPaymentMethod]; if (m) m.voidedPaise += v.n; }
-  const valid = sales.filter(x => x.status !== 'cancelled');
+  // 2026-10-13: a bill with several tenders is still ONE bill (it used to be counted once per payment row). Money received is
+  // the sum of the money tenders; store credit spent, amounts put on credit and credit repayments are reported on their own.
+  const bills = await q.selectFrom('orders').select(['id', 'status', 'total_paise', 'discount_paise']).where('pos_session_id', '=', sessionId).execute();
+  const valid = bills.filter(x => x.status !== 'cancelled');
+  const other = await q.selectFrom('payments as p').innerJoin('orders as o', 'o.id', 'p.order_id').select(['p.provider', sql<number>`coalesce(sum(p.amount_paise), 0)::int`.as('n')])
+    .where('o.pos_session_id', '=', sessionId).where('o.status', '!=', 'cancelled').where('p.provider', 'in', ['store_credit', 'exchange']).groupBy('p.provider').execute();
+  const onCredit = await q.selectFrom('credit_bills as b').innerJoin('orders as o', 'o.id', 'b.order_id').select(sql<number>`coalesce(sum(b.amount_paise), 0)::int`.as('n'))
+    .where('o.pos_session_id', '=', sessionId).where('b.status', '!=', 'cancelled').executeTakeFirstOrThrow();
+  const repaid = await q.selectFrom('credit_repayments').select(['method', sql<number>`coalesce(sum(amount_paise), 0)::int`.as('n')]).where('pos_session_id', '=', sessionId).groupBy('method').execute();
+  const repaidCash = repaid.find(r => r.method === 'cash')?.n ?? 0;
+  const money = sales.reduce((n, x) => n + x.amount_paise, 0);
   return {
-    session: s, transactions: sales.length, voidedTransactions: sales.length - valid.length,
-    grossPaise: sales.reduce((n, x) => n + x.total_paise, 0), discountPaise: valid.reduce((n, x) => n + x.discount_paise, 0),
-    netPaise: sales.reduce((n, x) => n + x.total_paise, 0) - voids.reduce((n, x) => n + x.n, 0), byMethod,
+    session: s, transactions: bills.length, voidedTransactions: bills.length - valid.length,
+    grossPaise: bills.reduce((n, x) => n + x.total_paise, 0), discountPaise: valid.reduce((n, x) => n + x.discount_paise, 0),
+    netPaise: bills.reduce((n, x) => n + x.total_paise, 0) - bills.filter(x => x.status === 'cancelled').reduce((n, x) => n + x.total_paise, 0), byMethod,
+    moneyReceivedPaise: money - voids.reduce((n, x) => n + x.n, 0),
+    storeCreditPaise: other.find(x => x.provider === 'store_credit')?.n ?? 0, exchangeValuePaise: other.find(x => x.provider === 'exchange')?.n ?? 0,
+    onCreditPaise: onCredit.n, repaymentsPaise: repaid.reduce((n, r) => n + r.n, 0), repaymentsCashPaise: repaidCash,
     cashSalesPaise: byMethod.cash.amountPaise - byMethod.cash.voidedPaise,
-    expectedCashPaise: s.opening_cash_paise + byMethod.cash.amountPaise - byMethod.cash.voidedPaise,
+    expectedCashPaise: s.opening_cash_paise + byMethod.cash.amountPaise - byMethod.cash.voidedPaise + repaidCash,
   };
 }
 
@@ -258,6 +282,8 @@ export interface PosSaleInput {
       decides whether either applies and what it takes off; a coupon or points that do not apply refuse the sale. */
   couponCode?: string | null; usePoints?: boolean;
   payment: { method: PosPaymentMethod; tenderedPaise?: number | null; reference?: string | null };
+  /** 2026-10-13: several tenders instead of `payment`. Their amounts must add up to the bill exactly. */
+  tenders?: PosTender[] | null;
   /** The total the cashier showed the customer; the sale is refused if the server's total differs. */
   expectedTotalPaise: number;
 }
@@ -268,25 +294,42 @@ export interface PosSaleInput {
 function billFingerprint(input: PosSaleInput): string {
   const lines = [...input.lines].map(l => `${l.variantId}:${l.qty}`).sort().join(',');
   return createHash('sha256').update(JSON.stringify([lines, input.customerId ?? null, input.discount && input.discount.percent > 0 ? input.discount.percent : 0,
-    (input.couponCode ?? '').trim().toUpperCase(), !!input.usePoints, input.payment.method, input.expectedTotalPaise])).digest('hex').slice(0, 32);
+    (input.couponCode ?? '').trim().toUpperCase(), !!input.usePoints, input.tenders?.length ? [...input.tenders].map(t => `${t.method}:${t.amountPaise}`).sort().join(',') : input.payment.method,
+    input.expectedTotalPaise])).digest('hex').slice(0, 32);
 }
 
-export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosSaleInput, ctx: MutationContext)
-  : Promise<{ orderId: string; orderNumber: string; posNumber: string; totalPaise: number; changePaise: number; replay: boolean }> {
+export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosSaleInput, ctx: MutationContext,
+  /** Internal (the exchange workflow): run inside its transaction, with the value of the returned goods as a tender. */
+  inner?: { tx: Tx; exchange: { returnId: string; valuePaise: number } })
+  : Promise<{ orderId: string; orderNumber: string; posNumber: string; totalPaise: number; changePaise: number; replay: boolean; creditDueOn?: string | null }> {
   requirePermission(actor, 'pos.sell');
+  const split = Array.isArray(input.tenders) && input.tenders.length > 0;
+  if (split) {
+    const ts = input.tenders!;
+    if (ts.length > 4) throw new DomainError('invalid', 'At most four ways of paying on one bill.');
+    if (new Set(ts.map(t => t.method)).size !== ts.length) throw new DomainError('invalid', 'Each way of paying can be used once on a bill.');
+    for (const t of ts) {
+      if (!(POS_TENDER_METHODS as readonly string[]).includes(t?.method)) throw new DomainError('invalid', 'One of the payments is not a way of paying this shop accepts.');
+      if (!Number.isInteger(t.amountPaise) || t.amountPaise <= 0) throw new DomainError('invalid', `Enter the ${TENDER_LABEL[t.method].toLowerCase()} amount, above ₹0.`);
+      if ((t.method === 'card' || t.method === 'upi') && !REF_OK.test(t.reference?.trim() ?? '')) throw new DomainError('invalid', `Enter the ${t.method === 'upi' ? 'UPI transaction reference (UTR)' : 'card approval / transaction reference'} shown when the payment succeeded.`);
+    }
+    if (ts.some(t => t.method === 'store_credit')) requirePermission(actor, 'store_credit.redeem');
+    if (ts.some(t => t.method === 'credit')) requirePermission(actor, 'pos.credit_sell');
+    if (ts.some(t => t.method === 'store_credit' || t.method === 'credit') && !input.customerId) throw new DomainError('invalid', 'Store credit and credit bills need a customer on the bill.');
+  }
   if (!/^[A-Za-z0-9_-]{16,60}$/.test(input.idempotencyKey ?? '')) throw new DomainError('invalid', 'Missing sale key: reload the POS screen.');
-  if (!(POS_PAYMENT_METHODS as readonly string[]).includes(input.payment?.method)) throw new DomainError('invalid', 'Choose the payment method: cash, card or UPI.');
+  if (!split && !(POS_PAYMENT_METHODS as readonly string[]).includes(input.payment?.method)) throw new DomainError('invalid', 'Choose the payment method: cash, card or UPI.');
   const discount = input.discount && input.discount.percent > 0 ? input.discount : null;
   if (discount) {
     requirePermission(actor, 'orders.discount');
     if (!discount.reason || discount.reason.trim().length < 3) throw new DomainError('invalid', 'Enter the reason for the discount.');
   }
-  const reference = input.payment.reference?.trim() || null;
-  if (input.payment.method !== 'cash' && (!reference || !/^[A-Za-z0-9 /_-]{4,64}$/.test(reference)))
+  const reference = (split ? input.tenders!.find(t => t.method === 'card' || t.method === 'upi')?.reference : input.payment.reference)?.trim() || null;
+  if (!split && input.payment.method !== 'cash' && (!reference || !REF_OK.test(reference)))
     throw new DomainError('invalid', `Enter the ${input.payment.method === 'upi' ? 'UPI transaction reference (UTR)' : 'card approval / transaction reference'} shown when the payment succeeded.`);
   const key = `pos-${input.idempotencyKey}`.slice(0, 64);
   try {
-    return await db.transaction().execute(async tx => {
+    const run = async (tx: Tx) => {
       // The session row is locked for the whole sale: sales of one till are one at a time, and a double-submitted bill
       // finds the first one (idempotency key) instead of charging twice.
       const s = await tx.selectFrom('pos_sessions as s').innerJoin('locations as l', 'l.id', 's.location_id')
@@ -327,24 +370,37 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
       if (bad) throw new ConflictError(bad.problem === 'unavailable' ? `${lineLabel(bad)} is not offered.` : `Only ${bad.branchStock} of ${lineLabel(bad)} ${bad.branchStock === 1 ? 'is' : 'are'} in stock at ${s.location_name}.`);
       const t = bill.totals;
       if (t.totalPaise !== input.expectedTotalPaise) throw new ConflictError(`The total changed to ${inr(t.totalPaise)} (prices or stock changed). Check the bill and take payment again.`);
+      // What settles the bill. An exchange brings the value of the returned goods (never more than the bill); the rest is
+      // the cashier's tenders, which must add up to exactly what is left.
+      const exchangePaise = inner ? Math.min(inner.exchange.valuePaise, t.totalPaise) : 0, duePaise = t.totalPaise - exchangePaise;
+      const tenders: PosTender[] = split ? input.tenders!.map(x => ({ method: x.method, amountPaise: x.amountPaise, reference: x.reference?.trim() || null, tenderedPaise: x.tenderedPaise ?? null }))
+        : duePaise > 0 || !inner ? [{ method: input.payment.method, amountPaise: duePaise, reference, tenderedPaise: input.payment.tenderedPaise ?? null }] : [];
+      const tendered = tenders.reduce((n, x) => n + x.amountPaise, 0);
+      if (tendered !== duePaise) throw new ConflictError(`The payments add up to ${inr(tendered)} but ${inr(duePaise)} is due. Correct the amounts and take payment again.`);
       let changePaise = 0, tenderedPaise: number | null = null;
-      if (input.payment.method === 'cash') {
-        tenderedPaise = Number(input.payment.tenderedPaise);
-        if (!Number.isInteger(tenderedPaise) || tenderedPaise < t.totalPaise) throw new DomainError('invalid', `Enter the cash received: at least ${inr(t.totalPaise)}.`);
-        changePaise = tenderedPaise - t.totalPaise;
+      const cash = tenders.find(x => x.method === 'cash');
+      if (cash) {
+        tenderedPaise = split && cash.tenderedPaise == null ? cash.amountPaise : Number(cash.tenderedPaise);
+        if (!Number.isInteger(tenderedPaise) || tenderedPaise < cash.amountPaise) throw new DomainError('invalid', `Enter the cash received: at least ${inr(cash.amountPaise)}.`);
+        changePaise = tenderedPaise - cash.amountPaise;
       }
+      const onCredit = tenders.find(x => x.method === 'credit')?.amountPaise ?? 0, fromStoreCredit = tenders.find(x => x.method === 'store_credit')?.amountPaise ?? 0;
+      const methodCode = tenders.length === 1 ? tenders[0]!.method : 'split' as const;
+      const payText = [...(exchangePaise ? [`${TENDER_LABEL.exchange} ${inr(exchangePaise)}`] : []), ...tenders.map(x => `${TENDER_LABEL[x.method]} ${inr(x.amountPaise)}${x.reference ? ` (ref ${x.reference})` : ''}`)].join(' + ') || 'nothing to pay';
       const staffDiscount = t.discounts.find(x => x.code === 'STAFF')?.amountPaise ?? 0;
       const posNumber = (await sql<{ n: string }>`select public.next_document_number('pos_sale', 'POS') as n`.execute(tx)).rows[0].n;
-      const pos = { number: posNumber, session: s.number, cashier: actor.email, method: input.payment.method, reference, tenderedPaise, changePaise, fingerprint: billFingerprint(input) };
+      const pos = { number: posNumber, session: s.number, cashier: actor.email, method: methodCode, reference, tenderedPaise, changePaise, fingerprint: billFingerprint(input),
+        tenders: [...(exchangePaise ? [{ method: 'exchange', amountPaise: exchangePaise }] : []), ...tenders.map(x => ({ method: x.method, amountPaise: x.amountPaise, reference: x.reference ?? null }))],
+        ...(onCredit ? { onCreditPaise: onCredit } : {}), ...(inner ? { exchangeOfReturn: inner.exchange.returnId } : {}) };
 
       const order = await tx.insertInto('orders').values({
         customer_id: input.customerId ?? null, cart_id: null, idempotency_key: key,
-        status: 'delivered', payment_status: 'paid', currency: 'INR',
+        status: 'delivered', payment_status: onCredit ? 'unpaid' : 'paid', currency: 'INR',
         subtotal_paise: t.subtotalPaise, discount_paise: t.discountPaise, shipping_paise: t.shippingPaise, tax_paise: t.taxPaise,
         total_paise: t.totalPaise, prices_include_tax: t.pricesIncludeTax,
         pricing: JSON.stringify({ tax: t.tax, shipping: t.shipping, discounts: t.discounts, ...(couponCode ? { coupon: couponCode } : {}), source: { pos: posNumber }, pos }),
         loyalty_points_used: pointsUsed, loyalty_discount_paise: pointsValue,
-        payment_method: input.payment.method, cod_status: null, cod_fee_paise: 0,
+        payment_method: methodCode, cod_status: null, cod_fee_paise: 0, exchange_return_id: inner?.exchange.returnId ?? null,
         contact: JSON.stringify(contact),
         // A counter sale has no delivery: its address is the branch (shown on bills and invoices as the place of sale).
         shipping_address: JSON.stringify({ name: contact.name ?? 'Walk-in customer', phone: contact.phone, line1: s.location_name, line2: s.location_address, city: '', state: '', pin: '', country: 'India' }),
@@ -353,33 +409,52 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
         pos_session_id: s.id, pos_number: posNumber,
         staff_discount_paise: staffDiscount, staff_discount_bp: staffDiscount ? bill.discountBp : null,
         staff_discount_reason: staffDiscount ? discount!.reason!.trim().slice(0, 200) : null, staff_discount_by: staffDiscount ? actor.staffId : null,
-        paid_at: sql<Date>`now()`, payment_expires_at: null,
+        paid_at: onCredit ? null : sql<Date>`now()`, payment_expires_at: null,
       }).returning(['id', 'order_number']).executeTakeFirstOrThrow();
       await tx.insertInto('order_items').values(bill.lines.map(l => ({
         order_id: order.id, product_id: l.productId, variant_id: l.variantId, sku: l.sku, name: l.name, size: l.size, colour: l.colourLabel,
         image_path: l.imagePath, unit_price_paise: l.unitPaise, qty: l.qty, line_total_paise: l.lineTotalPaise,
       }))).execute();
       await tx.insertInto('order_status_history').values([
-        { order_id: order.id, from_status: null, to_status: 'paid', note: `POS ${posNumber}: paid by ${METHOD_LABEL[input.payment.method]}${reference ? ` (ref ${reference})` : ''} at ${s.location_name}, cashier ${actor.email}` },
+        { order_id: order.id, from_status: null, to_status: 'paid', note: `POS ${posNumber}: ${payText} at ${s.location_name}, cashier ${actor.email}`.slice(0, 1000) },
         { order_id: order.id, from_status: 'paid', to_status: 'delivered', note: `Handed over at the counter, ${s.location_name}` },
       ]).execute();
       // Stock from THIS branch only, through the ledger (reason retail_sale, linked to the order; never below zero).
       await sql`select public.sell_order_at_location(${order.id}::uuid, ${actor.staffId}::uuid)`.execute(tx);
-      await tx.insertInto('payments').values({
-        order_id: order.id, provider: 'pos', provider_order_id: s.number, provider_payment_id: posNumber, amount_paise: t.totalPaise, currency: 'INR',
-        status: 'captured', method: input.payment.method, captured_at: sql<Date>`now()`,
-        raw: JSON.stringify({ reference, tendered_paise: tenderedPaise, change_paise: changePaise, cashier_id: actor.staffId, session: s.number, location_id: s.location_id }),
-      }).execute();
+      // One payments row per tender that settles something now. Money (cash / card / UPI) is provider 'pos'; store credit
+      // and the exchange value have their own provider names, so no report mistakes them for money received. A credit
+      // tender has no payments row at all: it becomes a credit bill.
+      const rawBase = { cashier_id: actor.staffId, session: s.number, location_id: s.location_id };
+      let posRows = 0;
+      if (exchangePaise) await tx.insertInto('payments').values({ order_id: order.id, provider: 'exchange', provider_order_id: s.number, provider_payment_id: posNumber, amount_paise: exchangePaise, currency: 'INR',
+        status: 'captured', method: 'exchange', captured_at: sql<Date>`now()`, raw: JSON.stringify({ ...rawBase, return_id: inner!.exchange.returnId }) }).execute();
+      for (const x of tenders) {
+        if (x.method === 'credit') continue;
+        const money = x.method !== 'store_credit';
+        await tx.insertInto('payments').values({
+          order_id: order.id, provider: money ? 'pos' : 'store_credit', provider_order_id: s.number, provider_payment_id: money && posRows++ > 0 ? `${posNumber}/${posRows}` : posNumber, amount_paise: x.amountPaise, currency: 'INR',
+          status: 'captured', method: x.method, captured_at: sql<Date>`now()`,
+          raw: JSON.stringify({ ...rawBase, reference: x.reference ?? null, ...(x.method === 'cash' ? { tendered_paise: tenderedPaise, change_paise: changePaise } : {}) }),
+        }).execute();
+        // The customer's balance row is locked and debited here: two tills cannot spend the same store credit, and a sale that
+        // fails after this point rolls the debit back with everything else.
+        if (!money) await moveStoreCredit(tx, { customerId: input.customerId!, amountPaise: -x.amountPaise, kind: 'redeem', reason: `Spent on ${posNumber}`, key: `pos:${key}`, orderId: order.id, staffId: actor.staffId });
+      }
+      if (tenders.length === 0 && !exchangePaise) throw new DomainError('invalid', 'Choose how this bill is paid.');
+      const credit = onCredit ? await openCreditBill(tx, actor, { customerId: input.customerId!, orderId: order.id, amountPaise: onCredit }) : null;
       // The coupon's use is recorded (and its limits re-checked under a lock) and the points are taken, in this same transaction.
       await recordDiscountRedemptions(tx, order.id, input.customerId ?? null, t.discounts);
       if (pointsUsed > 0) await redeemForOrder(tx, input.customerId!, order.id, pointsUsed, order.order_number);
-      if (input.customerId) { await earnForOrder(tx, order.id, 'paid'); await earnForOrder(tx, order.id, 'delivered'); }
+      // Points are earned on money received: a bill with an amount on credit earns when that credit bill is fully repaid.
+      if (input.customerId && !onCredit) { await earnForOrder(tx, order.id, 'paid'); await earnForOrder(tx, order.id, 'delivered'); }
       await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'pos.sale', entityType: 'orders', entityId: order.id,
-        after: { pos_number: posNumber, order_number: order.order_number, location_id: s.location_id, payment_method: input.payment.method, total_paise: t.totalPaise,
+        after: { pos_number: posNumber, order_number: order.order_number, location_id: s.location_id, payment_method: methodCode, total_paise: t.totalPaise,
           staff_discount_paise: staffDiscount, customer_id: input.customerId ?? null, discount_paise: t.discountPaise, coupon: couponCode, loyalty_points_used: pointsUsed },
-        metadata: { session: s.number, reference, units: t.units, ...(staffDiscount ? { discount_bp: bill.discountBp, discount_reason: discount!.reason } : {}) } });
-      return { orderId: order.id, orderNumber: order.order_number, posNumber, totalPaise: t.totalPaise, changePaise, replay: false };
-    });
+        metadata: { session: s.number, reference, units: t.units, tenders: pos.tenders, ...(credit ? { credit_bill_id: credit.billId, due_on: credit.dueOn } : {}),
+          ...(staffDiscount ? { discount_bp: bill.discountBp, discount_reason: discount!.reason } : {}) } });
+      return { orderId: order.id, orderNumber: order.order_number, posNumber, totalPaise: t.totalPaise, changePaise, replay: false, creditDueOn: credit?.dueOn ?? null };
+    };
+    return inner ? await run(inner.tx) : await db.transaction().execute(run);
   } catch (e) {
     // location_stock never goes below zero (a check constraint): another till sold the last unit first.
     if ((e as { code?: string })?.code === '23514') throw new ConflictError('Part of this bill just sold out at this branch. Check the stock and try again.');
@@ -402,10 +477,20 @@ export async function getPosSale(db: Db, actor: StaffPrincipal, orderId: string)
     db.selectFrom('order_items').select(['id', 'name', 'sku', 'size', 'colour', 'qty', 'unit_price_paise', 'line_total_paise']).where('order_id', '=', o.id).orderBy('name').execute(),
     db.selectFrom('payments').select(['id', 'method', 'amount_paise', 'status', 'raw', 'captured_at']).where('order_id', '=', o.id).where('provider', '=', 'pos').executeTakeFirst(),
     db.selectFrom('invoices').select(['id', 'invoice_number']).where('order_id', '=', o.id).where('status', '=', 'issued').executeTakeFirst(),
-    db.selectFrom('return_requests').select(['id', 'number', 'status']).where('order_id', '=', o.id).execute(),
+    db.selectFrom('return_requests').select(['id', 'number', 'status', 'settlement', 'settlement_paise', 'exchange_order_id']).where('order_id', '=', o.id).execute(),
+  ]);
+  // 2026-10-13: every tender of the bill, its credit bill (if part of it was sold on credit) and its place in an exchange.
+  const [tenders, creditBill, exchangeOf, replacements] = await Promise.all([
+    db.selectFrom('payments').select(['provider', 'method', 'amount_paise', 'status', 'raw']).where('order_id', '=', o.id).where('provider', 'in', ['pos', 'store_credit', 'exchange']).orderBy('created_at').orderBy('provider_payment_id').execute(),
+    db.selectFrom('credit_bills').select(['id', 'amount_paise', 'outstanding_paise', 'due_on', 'status']).where('order_id', '=', o.id).executeTakeFirst(),
+    db.selectFrom('orders as x').innerJoin('return_requests as r', 'r.id', 'x.exchange_return_id').innerJoin('orders as orig', 'orig.id', 'r.order_id')
+      .select(['r.id as return_id', 'r.number as return_number', 'orig.id as order_id', 'orig.order_number', 'orig.pos_number']).where('x.id', '=', o.id).executeTakeFirst(),
+    db.selectFrom('return_requests as r').innerJoin('orders as x', 'x.id', 'r.exchange_order_id').select(['r.number as return_number', 'x.id as order_id', 'x.pos_number']).where('r.order_id', '=', o.id).execute(),
   ]);
   const pricing = (o.pricing ?? {}) as { tax?: { configured?: boolean; label?: string; rateBp?: number; inclusive?: boolean }; pos?: { reference?: string | null; tenderedPaise?: number | null; changePaise?: number } };
   return { sale: o, items, payment, invoice: invoice ?? null, returns, tax: pricing.tax ?? null, pos: pricing.pos ?? null,
+    tenders: tenders.map(t => ({ method: t.method ?? t.provider, amountPaise: t.amount_paise, status: t.status, reference: ((t.raw ?? {}) as { reference?: string | null }).reference ?? null })),
+    creditBill: creditBill ?? null, exchangeOf: exchangeOf ?? null, replacements,
     canVoid: can(actor, 'pos.void') && o.status !== 'cancelled' && o.session_status === 'open' && !returns.some(r => !['rejected', 'cancelled'].includes(r.status)) };
 }
 
@@ -451,22 +536,34 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
     }
     // 2026-10-12: points used on the voided bill go back to the customer, and points it earned are taken back (once each).
     await reverseOrderPoints(tx, o.id, `POS sale ${o.pos_number} voided`);
-    const pay = await tx.selectFrom('payments').select(['id', 'amount_paise']).where('order_id', '=', o.id).where('provider', '=', 'pos').where('status', '=', 'captured').executeTakeFirst();
-    if (pay && pay.amount_paise > 0) {
-      await tx.insertInto('refunds').values({ payment_id: pay.id, order_id: o.id, amount_paise: pay.amount_paise, reason: `POS void: ${reason}`.slice(0, 500), status: 'processed',
-        method: 'manual', reference: `VOID ${o.pos_number}`, requested_by: actor.staffId, processed_at: sql<Date>`now()`, processed_by: actor.staffId } as never).execute();
-      await markPaymentRefunded(tx, o.id, pay.id);
-    } else if (pay) {
-      // 2026-10-13: a bill fully covered by a coupon or points took no money, so there is nothing to refund (a refund of ₹0
-      // is not a valid row and used to make the whole void fail). The payment and the order are still marked as returned.
-      await tx.updateTable('payments').set({ status: 'refunded' }).where('id', '=', pay.id).execute();
-      await tx.updateTable('orders').set({ payment_status: 'refunded' }).where('id', '=', o.id).execute();
+    if (await tx.selectFrom('payments').select('id').where('order_id', '=', o.id).where('provider', '=', 'exchange').executeTakeFirst())
+      throw new ConflictError(`${o.pos_number} is the replacement bill of an exchange: it cannot be voided. Use Returns & refunds.`);
+    // 2026-10-13: a credit bill with nothing repaid is cancelled with the sale (the customer no longer owes it); store credit
+    // spent on the sale goes back to the customer through a reversal entry; each money tender gets its own refund row below.
+    await cancelCreditBillForVoid(tx, o.id);
+    let refundedMoney = 0;
+    const spent = await tx.selectFrom('payments').select(['id', 'amount_paise']).where('order_id', '=', o.id).where('provider', '=', 'store_credit').where('status', '=', 'captured').executeTakeFirst();
+    if (spent) {
+      const e = await tx.selectFrom('store_credit_entries').select(['id', 'customer_id']).where('order_id', '=', o.id).where('kind', '=', 'redeem').executeTakeFirstOrThrow();
+      await moveStoreCredit(tx, { customerId: e.customer_id, amountPaise: spent.amount_paise, kind: 'reversal', reason: `POS sale ${o.pos_number} voided`, key: `void:${o.id}`, reversesId: e.id, orderId: o.id, staffId: actor.staffId });
+      await tx.updateTable('payments').set({ status: 'refunded' }).where('id', '=', spent.id).execute();
     }
+    const pays = await tx.selectFrom('payments').select(['id', 'amount_paise']).where('order_id', '=', o.id).where('provider', '=', 'pos').where('status', '=', 'captured').orderBy('created_at').orderBy('id').execute();
+    for (const p of pays.filter(x => x.amount_paise > 0)) {
+      await tx.insertInto('refunds').values({ payment_id: p.id, order_id: o.id, amount_paise: p.amount_paise, reason: `POS void: ${reason}`.slice(0, 500), status: 'processed',
+        method: 'manual', reference: `VOID ${o.pos_number}`, requested_by: actor.staffId, processed_at: sql<Date>`now()`, processed_by: actor.staffId } as never).execute();
+      await markPaymentRefunded(tx, o.id, p.id);
+      refundedMoney += p.amount_paise;
+    }
+    // A bill that took no money (fully covered by a coupon or points) has nothing to refund: its payment row is closed.
+    for (const p of pays.filter(x => x.amount_paise === 0)) await tx.updateTable('payments').set({ status: 'refunded' }).where('id', '=', p.id).execute();
+    // every tender has been undone above: whatever the mix was, the bill is now fully returned
+    await tx.updateTable('orders').set({ payment_status: 'refunded' }).where('id', '=', o.id).execute();
     await tx.updateTable('orders').set({ status: 'cancelled' }).where('id', '=', o.id).execute();
     await tx.insertInto('order_status_history').values({ order_id: o.id, from_status: o.status, to_status: 'cancelled', note: `POS sale voided by ${actor.email}: ${reason}`.slice(0, 1000) }).execute();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'pos.void', entityType: 'orders', entityId: o.id, before: { status: o.status }, after: { status: 'cancelled', payment_status: 'refunded' },
       metadata: { pos_number: o.pos_number, reason, total_paise: o.total_paise, units: items.reduce((n, i) => n + i.qty, 0) } });
-    return { posNumber: o.pos_number, refundedPaise: pay?.amount_paise ?? 0 };
+    return { posNumber: o.pos_number, refundedPaise: refundedMoney };
   });
 }
 
@@ -487,7 +584,17 @@ export async function posReport(db: Db, actor: StaffPrincipal, range: { from: st
   const refunds = await refundQ.execute();
   const sum = (xs: { total_paise: number }[]) => xs.reduce((n, x) => n + x.total_paise, 0);
   // 2026-10-13: voided sales are left out here, as they are in the by-cashier and by-branch tables (they were counted here only).
-  const methods = POS_PAYMENT_METHODS.map(m => { const xs = sales.filter(s => s.payment_method === m && s.status !== 'cancelled'); return { method: m, label: METHOD_LABEL[m], count: xs.length, amountPaise: sum(xs) }; });
+  // (2026-10-13, later the same day) taken from the payment rows, so each tender of a split bill is under its own method.
+  const live = new Set(sales.filter(s => s.status !== 'cancelled').map(s => s.id));
+  const tenderRows = live.size ? (await db.selectFrom('payments').select(['order_id', 'provider', 'method', 'amount_paise']).where('order_id', 'in', [...live]).where('provider', 'in', ['pos', 'store_credit', 'exchange']).execute()) : [];
+  const methods = POS_PAYMENT_METHODS.map(m => { const xs = tenderRows.filter(r => r.provider === 'pos' && r.method === m); return { method: m, label: METHOD_LABEL[m], count: xs.length, amountPaise: xs.reduce((n, x) => n + x.amount_paise, 0) }; });
+  const storeCreditPaise = tenderRows.filter(r => r.provider === 'store_credit').reduce((n, x) => n + x.amount_paise, 0), exchangeValuePaise = tenderRows.filter(r => r.provider === 'exchange').reduce((n, x) => n + x.amount_paise, 0);
+  const creditRows = live.size ? (await db.selectFrom('credit_bills').select(['amount_paise']).where('order_id', 'in', [...live]).where('status', '!=', 'cancelled').execute()) : [];
+  const onCreditPaise = creditRows.reduce((n, x) => n + x.amount_paise, 0);
+  let repayQ = db.selectFrom('credit_repayments as r').innerJoin('credit_bills as b', 'b.id', 'r.bill_id').innerJoin('orders as o', 'o.id', 'b.order_id').select(['r.method', 'r.amount_paise'])
+    .where(sql<boolean>`(r.created_at at time zone 'Asia/Kolkata')::date between ${range.from}::date and ${range.to}::date`);
+  if (range.locationId) repayQ = repayQ.where('o.location_id', '=', range.locationId);
+  const repaymentsPaise = (await repayQ.execute()).reduce((n, x) => n + x.amount_paise, 0);
   const group = (key: 'cashier' | 'location') => Object.values(sales.reduce<Record<string, { name: string; count: number; amountPaise: number; voided: number }>>((acc, s) => {
     const k = s[key] ?? '—'; const g = acc[k] ??= { name: k, count: 0, amountPaise: 0, voided: 0 };
     if (s.status === 'cancelled') g.voided++; else { g.count++; g.amountPaise += s.total_paise; }
@@ -502,10 +609,53 @@ export async function posReport(db: Db, actor: StaffPrincipal, range: { from: st
     taxPaise: sales.filter(s => s.status !== 'cancelled').reduce((n, s) => n + s.tax_paise, 0),
     voidRefundsPaise: voidRefunds, returnRefundsPaise: returnRefunds, netPaise: grossPaise - voidRefunds - returnRefunds,
     methods, byCashier: group('cashier'), byLocation: group('location'),
+    // not money received at the sale: reported apart from the payment methods above
+    moneyReceivedPaise: methods.reduce((n, m) => n + m.amountPaise, 0), storeCreditPaise, exchangeValuePaise, onCreditPaise, repaymentsPaise,
   };
 }
 
 // ---------------------------------------------------------------- customers at the counter
+/** What the counter shows about a chosen customer (2026-10-13): their latest orders from the website and from every branch,
+    open returns, and three separate balances: loyalty points, store credit (the shop owes them), credit owed (they owe the
+    shop). Each part appears only when the staff member's role may see it. Never more than the latest ten orders. */
+export async function posCustomerProfile(db: Db, actor: StaffPrincipal, customerId: string) {
+  requirePermission(actor, 'pos.access');
+  const c = await db.selectFrom('customers').select(['id', 'email', 'full_name', 'phone', 'status', 'created_at']).where('id', '=', customerId).executeTakeFirst();
+  if (!c) throw new NotFoundError('Customer not found.');
+  const seeOrders = can(actor, 'orders.read'), seeReturns = can(actor, 'returns.read');
+  const [orders, counts, returns, points, storeCreditPaise, credit] = await Promise.all([
+    seeOrders ? db.selectFrom('orders as o').leftJoin('locations as l', 'l.id', 'o.location_id')
+      .select(['o.id', 'o.order_number', 'o.pos_number', 'o.channel', 'o.created_at', 'o.total_paise', 'o.status', 'o.payment_status', 'o.payment_method', 'l.name as location_name'])
+      .where('o.customer_id', '=', c.id).orderBy('o.created_at', 'desc').limit(10).execute() : Promise.resolve(null),
+    seeOrders ? db.selectFrom('orders').select([sql<number>`count(*) filter (where channel = 'online')::int`.as('online'), sql<number>`count(*) filter (where channel = 'retail')::int`.as('retail')]).where('customer_id', '=', c.id).executeTakeFirstOrThrow() : Promise.resolve(null),
+    seeReturns ? db.selectFrom('return_requests as r').innerJoin('orders as o', 'o.id', 'r.order_id').select(['r.id', 'r.number', 'r.status', 'r.resolution', 'r.requested_at', 'o.order_number', 'o.pos_number'])
+      .where('r.customer_id', '=', c.id).where('r.status', 'not in', ['completed', 'cancelled', 'rejected']).orderBy('r.requested_at', 'desc').limit(10).execute() : Promise.resolve(null),
+    loyaltyBalance(db, c.id), storeCreditBalance(db, c.id), getCustomerCredit(db, actor, c.id),
+  ]);
+  const open = credit.bills.filter(b => b.status === 'open');
+  return { customer: c, orders, counts, returns, points, storeCreditPaise,
+    credit: { account: credit.account, availablePaise: credit.availablePaise, owedPaise: credit.account?.outstanding_paise ?? 0, openBills: open, nextDueOn: open.length ? open.map(b => String(b.due_on)).sort()[0]! : null },
+    can: { storeCredit: can(actor, 'store_credit.redeem'), creditSale: can(actor, 'pos.credit_sell'), repay: can(actor, 'credit.repay') } };
+}
+
+/** Find an order from the counter (2026-10-13): by order number, POS bill number, the customer's phone or email. Website and
+    branch orders alike. Needs orders.read as well as POS access; at most 20, newest first. */
+export async function findPosOrders(db: Db, actor: StaffPrincipal, term: string) {
+  requirePermission(actor, 'pos.access'); requirePermission(actor, 'orders.read');
+  const t = term.trim();
+  if (t.length < 3) return [];
+  const low = t.toLowerCase(), digits = t.replace(/\D/g, ''), like = `%${low.replace(/[%_\\]/g, m => '\\' + m)}%`;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t);
+  const rows = await db.selectFrom('orders as o').leftJoin('locations as l', 'l.id', 'o.location_id').leftJoin('customers as c', 'c.id', 'o.customer_id')
+    .select(['o.id', 'o.order_number', 'o.pos_number', 'o.channel', 'o.created_at', 'o.total_paise', 'o.status', 'o.payment_status', 'o.payment_method', 'l.name as location_name',
+      'c.full_name as customer_name', sql<string | null>`o.contact->>'name'`.as('contact_name'),
+      sql<number>`(select count(*) from public.return_requests r where r.order_id = o.id and r.status not in ('rejected', 'cancelled'))::int`.as('returns')])
+    .where(eb => eb.or([sql<boolean>`lower(o.order_number) like ${like}`, sql<boolean>`lower(coalesce(o.pos_number, '')) like ${like}`, sql<boolean>`lower(coalesce(c.email, '')) = ${low}`, sql<boolean>`lower(coalesce(o.contact->>'email', '')) = ${low}`,
+      ...(digits.length >= 6 ? [sql<boolean>`regexp_replace(coalesce(o.contact->>'phone', ''), '\D', '', 'g') like ${'%' + digits}`, sql<boolean>`regexp_replace(coalesce(c.phone, ''), '\D', '', 'g') like ${'%' + digits}`] : []),
+      ...(uuid ? [eb('o.customer_id', '=', t), eb('o.id', '=', t)] : [])]))
+    .orderBy('o.created_at', 'desc').limit(20).execute();
+  return rows;
+}
 export async function findPosCustomers(db: Db, actor: StaffPrincipal, term: string) {
   requirePermission(actor, 'pos.access');
   const t = term.trim().toLowerCase();

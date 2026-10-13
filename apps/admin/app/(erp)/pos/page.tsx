@@ -19,7 +19,9 @@ export default async function PosPage() {
   const c = await posContext(db(), actor);
   const nav = (
     <div className="pos-nav">
+      {can(actor, 'orders.read') && <Link className="btn ghost" href="/pos/orders" data-pos-nav="orders">Find order · return</Link>}
       <Link className="btn ghost" href="/pos/sessions">Sessions</Link>
+      {c.can.reports && <Link className="btn ghost" href="/pos/credit" data-pos-nav="credit">Credit</Link>}
       {c.can.reports && <Link className="btn ghost" href="/pos/report">POS report</Link>}
     </div>
   );

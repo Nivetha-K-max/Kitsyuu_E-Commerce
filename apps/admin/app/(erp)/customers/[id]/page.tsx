@@ -29,6 +29,7 @@ import { pageOf } from '@/lib/erp';
 import { formatDateTime, formatNumber, formatPaise } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { adjustPointsAction } from '../../loyalty/actions';
+import CustomerMoney from '@/components/CustomerMoney';
 import { StagePill } from '../../orders/order-ui';
 import { methodLabel, PaymentPill, providerLabel } from '../../payments/payment-ui';
 import { addCustomerNoteAction, setCustomerStatusAction, updateCustomerContactAction } from '../actions';
@@ -322,6 +323,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
       </>)}
 
       {tab === 'payments' && <>
+        <CustomerMoney actor={actor} customerId={id} />
         {!canOrders ? denied('orders.read', 'Payments by order') : (
         <Section id="pay-h" title="Payments" name="payments" wide meta={formatNumber(d.summary.ordersCount)} hint="One line per order: how it is paid and where the money stands. A row opens the order on its Payment tab, where payments are handled.">
           {!orderPage || orderPage.rows.length === 0 ? (page > 1 ? pastEnd('payments') : <StateBlock title="No payments" name="customer-payments">A payment appears here for every order this customer places.</StateBlock>) : (

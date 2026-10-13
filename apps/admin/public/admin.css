@@ -2157,3 +2157,33 @@ details.pos-pad{padding:8px 10px;border-radius:12px}
 /* Sidebar (2026-10-13, owner): items are plain; only the selected module carries a fill */
 .nav a{background:transparent;margin-bottom:2px}
 .nav a:hover{background:var(--surface-3);box-shadow:none}
+
+/* POS phase 2 (2026-10-13): customer panel, several ways of paying, exchange screen */
+.pos-profile{margin-top:8px;border:1px solid var(--border);border-radius:12px;padding:8px 12px;background:var(--surface)}
+.pos-profile>summary{font-size:12.5px;font-weight:500;color:var(--text-2);cursor:pointer}
+.pos-profile-figures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:10px 0 6px}
+.pos-profile-figures dt{font-size:11.5px;color:var(--muted)}.pos-profile-figures dd{margin:0;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.pos-profile-orders{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.pos-profile-orders li{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:baseline;font-size:12.5px}
+.pos-profile-orders span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pos-profile-orders b{font-variant-numeric:tabular-nums}
+.pos-split-toggle{display:flex!important;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2);margin-bottom:8px;cursor:pointer}
+.pos-split-toggle input{width:auto!important;height:auto!important}
+.pos-split{display:grid;gap:8px}
+.pos-split-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;gap:8px;align-items:end}
+.pos-split-row .btn{height:38px;min-height:0;padding:0 10px;font-size:12.5px}
+.pos-exchange .pos-left .card{padding:16px}.pos-exchange .pos-left h2{font-size:15px;margin:0 0 10px}
+.pos-exchange .pos-search{width:100%}
+.pos-damaged{display:flex!important;align-items:center;gap:6px;font-size:12px;color:var(--text-2);margin-top:4px}.pos-damaged input{width:auto!important;height:auto!important}
+.pos-outcome{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:var(--text);color:var(--bg);font-size:15px;font-weight:600;text-align:center}
+.pos-choice{display:flex!important;align-items:center;gap:8px;font-size:13px!important;color:var(--text)!important;padding:6px 0}.pos-choice input{width:auto!important;height:auto!important}
+/* POS at narrow widths (2026-10-13): these must come after the layout rules above, which they override */
+@media (max-width:1100px){.pos{grid-template-columns:minmax(0,1fr)}.pos-right{position:static;max-height:none;overflow:visible}}
+@media (max-width:640px){
+  .pos-bar{grid-template-columns:minmax(0,1fr)}
+  .pos-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .pos-split-row{grid-template-columns:minmax(0,1fr) auto}
+  .pos-split-row label{min-width:0}
+  .pos-profile-figures{grid-template-columns:minmax(0,1fr)}
+  .pos-foot{grid-template-columns:minmax(0,1fr)}
+  .pos-nav{flex-wrap:wrap}
+}

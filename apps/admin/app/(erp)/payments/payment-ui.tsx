@@ -11,9 +11,9 @@ export interface PaymentState {
   /** One short line of context under the badge. */ note: string | null;
 }
 
-export const METHOD_LABEL: Record<string, string> = { online: 'Online', cod: 'COD', cash: 'Cash', card: 'Card', upi: 'UPI' };
+export const METHOD_LABEL: Record<string, string> = { online: 'Online', cod: 'COD', cash: 'Cash', card: 'Card', upi: 'UPI', split: 'Split', store_credit: 'Store credit', credit: 'Credit bill' };
 /** Method as a sentence part: "cash on delivery", "card in store". */
-export const METHOD_LONG: Record<string, string> = { online: 'Online payment', cod: 'Cash on delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store' };
+export const METHOD_LONG: Record<string, string> = { online: 'Online payment', cod: 'Cash on delivery', cash: 'Cash in store', card: 'Card in store', upi: 'UPI in store', split: 'Several payments in store', store_credit: 'Store credit', credit: 'Credit bill (not yet paid)' };
 export const PROVIDER_LABEL: Record<string, string> = { razorpay: 'Razorpay', test: 'Test provider', cod: 'Cash on delivery', pos: 'POS counter' };
 export const methodLabel = (m: string | null) => METHOD_LABEL[m ?? 'online'] ?? m ?? 'Online';
 export const providerLabel = (p: string | null) => (p ? PROVIDER_LABEL[p] ?? p : '—');
@@ -26,7 +26,7 @@ export function paymentState({ method, paymentStatus, codStatus, orderStatus }: 
     if (orderStatus === 'cancelled') return { code: 'cod_none', cls: 'draft', label: 'COD · Nothing to collect', note: 'order cancelled' };
     return { code: 'cod_to_collect', cls: 'pending', label: 'COD · To collect', note: 'cash due on delivery' };
   }
-  const store = method === 'cash' || method === 'card' || method === 'upi';
+  const store = method === 'cash' || method === 'card' || method === 'upi' || method === 'split' || method === 'store_credit' || method === 'credit';
   switch (paymentStatus) {
     case 'paid': return { code: 'paid', cls: 'paid', label: 'Paid', note: store ? METHOD_LONG[method!].toLowerCase() : null };
     case 'pending': return { code: 'pending', cls: 'pending', label: 'Payment pending', note: 'waiting for the customer' };
