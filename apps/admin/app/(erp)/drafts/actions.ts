@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { draftAddressesInput, draftConfirmInput, draftCreateInput, draftDiscountInput, draftIdInput, draftItemInput, draftNoteInput, type ActionState } from '@kitsyuu/contracts';
+import { draftAddressesInput, draftConfirmInput, draftCreateInput, draftDiscountInput, draftIdInput, draftItemInput, draftNoteInput, ForbiddenError, type ActionState } from '@kitsyuu/contracts';
 import { cancelDraftOrder, confirmDraftOrder, createDraftOrder, notifyPaymentRequest, sendOrderPlacedEmail, setDraftAddresses, setDraftDiscount, setDraftItem, setDraftNote, settingsShipping } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { db, mailer, requestContext, requireActor } from '@/lib/server';
@@ -19,6 +19,8 @@ export async function createDraftAction(_: ActionState, form: FormData): Promise
     // Staff can also find the customer by email.
     const email = String(form.get('customerEmail') ?? '').trim().toLowerCase();
     if (!customerId && email) {
+      // 2026-10-13: the permission first. Without it this lookup answered "is this email a customer?" to any signed-in staff.
+      if (!actor.permissions.has('orders.create')) throw new ForbiddenError();
       const c = await db().selectFrom('customers').select('id').where('email', '=', email).executeTakeFirst();
       if (!c) return { ok: false, fieldErrors: { customerEmail: 'No customer account uses this email.' }, message: 'Check the highlighted fields.' };
       customerId = c.id;

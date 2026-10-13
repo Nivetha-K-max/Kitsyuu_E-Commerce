@@ -69,6 +69,17 @@ export async function limited(name: RateLimitName, identity: string | null | und
   const r = await rateLimiter().check(name, identity, RATE_LIMITS[name]);
   return r.allowed ? null : `Too many attempts. Please try again ${retryAfterText(r.retryAfterSeconds)}.`;
 }
+/** For the help window's guest features (2026-10-13): as limited(), and ALSO refused while a configured limiter cannot count
+    the request (it cannot be reached, or the request has no address to count by). Everything else keeps the limiter's
+    "allow on failure" default; these two forms answer questions about orders to people who are not signed in, so an
+    uncounted request is not let through. With no limiter configured at all, guestHelpAllowed() decides. */
+export const GUEST_UNCOUNTED = 'This is not available right now. Please try again in a few minutes, or sign in to your account.';
+export async function limitedStrict(name: RateLimitName, identity: string | null | undefined): Promise<string | null> {
+  const limiter = rateLimiter();
+  const r = await limiter.check(name, identity, RATE_LIMITS[name]);
+  if (!r.allowed) return `Too many attempts. Please try again ${retryAfterText(r.retryAfterSeconds)}.`;
+  return limiter.enabled && r.state !== 'counted' ? GUEST_UNCOUNTED : null;
+}
 /** The same, counted per requesting address. */
 export async function limitedByAddress(name: RateLimitName): Promise<string | null> {
   return limited(name, (await requestContext()).ip);

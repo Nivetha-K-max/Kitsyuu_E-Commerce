@@ -10,9 +10,12 @@ import { db } from '@/lib/server';
 export const dynamic = 'force-dynamic';
 
 function authorised(req: NextRequest): boolean {
-  const given = req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
-  return [process.env.CRON_SECRET, process.env.JOBS_SECRET].some(secret =>
-    !!secret && secret.length >= 32 && given.length === secret.length && timingSafeEqual(Buffer.from(given), Buffer.from(secret)));
+  const given = /^Bearer (\S+)$/.exec(req.headers.get('authorization') ?? '')?.[1] ?? '';
+  return [process.env.CRON_SECRET, process.env.JOBS_SECRET].some(secret => {
+    if (!secret || secret.length < 32) return false;
+    const a = Buffer.from(given), b = Buffer.from(secret);
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
 }
 
 async function run(req: NextRequest) {

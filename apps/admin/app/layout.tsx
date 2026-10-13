@@ -22,9 +22,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        {/* The brand faces (the store's own files): the text face and the title face are needed for the first paint. */}
-        <link rel="preload" href="/assets/fonts/dm-sans-400.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
-        <link rel="preload" href="/assets/fonts/barlow-condensed-600.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        {/* The ERP's one typeface (Inter, variable weight), served from this app: needed for the first paint. */}
+        <link rel="preload" href="/assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="stylesheet" href="/admin.css" />
       </head>
       <body>

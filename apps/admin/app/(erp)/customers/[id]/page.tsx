@@ -19,7 +19,7 @@ import type { ReactNode } from 'react';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, uuid } from '@kitsyuu/contracts';
 import { customerBasket, customerEmailLog, customerOrdersPage, customerOrderWorkflows, customerPayments, customerRecordCounts, customerReturnHistory, customerTickets,
-  getCustomer, getCustomerLoyalty, listCustomerNotes, listInvoices, LOYALTY_KIND_LABELS, type CustomerPart } from '@kitsyuu/core';
+  getCustomer, getCustomerLoyalty, listCustomerNotes, listInvoices, LOYALTY_KIND_LABELS, LOYALTY_TIER_LABELS, type CustomerPart } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, TextArea } from '@/components/forms';
 import { Entity, Facts, Figures, Section, StateBlock } from '@/components/frame';
 import { FilterLink, NavLink } from '@/components/NavFrame';
@@ -431,6 +431,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         <Section id="loy-h" title="Loyalty points" name="loyalty" hint={<>The same balance and history as <Link href="/loyalty">Customers → Loyalty</Link>, where the rules are shown.</>}>
           <Figures items={[
             { label: 'Available', value: <span data-loyalty-balance>{formatNumber(loyalty.balance)}</span>, note: 'points' },
+            ...(loyalty.tiers ? [{ label: 'Tier', value: <span data-loyalty-tier>{loyalty.tier ? LOYALTY_TIER_LABELS[loyalty.tier] : 'No tier'}</span>, note: loyalty.next ? `${formatNumber(loyalty.next.points)} points to ${LOYALTY_TIER_LABELS[loyalty.next.tier]}` : 'top tier' }] : []),
             { label: 'Earned', value: formatNumber(loyalty.totals.earned) }, { label: 'Used', value: formatNumber(loyalty.totals.used) }, { label: 'Expired', value: formatNumber(loyalty.totals.expired) },
             ...(loyalty.totals.reversed ? [{ label: 'Taken back', value: formatNumber(loyalty.totals.reversed) }] : []),
           ]} />

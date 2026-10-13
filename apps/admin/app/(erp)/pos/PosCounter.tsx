@@ -10,8 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { posCompleteAction, posCustomersAction, posQuoteAction, posSearchAction, posStockAction } from './actions';
 
 type Variant = { variantId: string; sku: string; barcode: string | null; size: string; colour: string | null; colourLabel: string | null; unitPaise: number; stock: number };
-type Product = { productId: string; name: string; image: string | null; variants: Variant[] };
-type Line = { variantId: string; qty: number; name: string; sku: string; size: string; colourLabel: string | null; unitPaise: number; stock: number };
+type Product = { productId: string; name: string; image: string | null; category: string | null; variants: Variant[] };
+type Line = { variantId: string; qty: number; image: string | null; name: string; sku: string; size: string; colourLabel: string | null; unitPaise: number; stock: number };
 type Customer = { id: string; email: string; full_name: string | null; phone: string | null };
 type Quote = NonNullable<Extract<Awaited<ReturnType<typeof posQuoteAction>>, { ok: true }>['data']>;
 type Method = 'cash' | 'upi' | 'card';
@@ -20,6 +20,10 @@ type Done = { orderId: string; posNumber: string; totalPaise: number; changePais
 const inr = (p: number) => '₹' + (p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const newKey = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, '');
 const MAX = 10;
+/* The keypad (2026-10-13) types into ONE thing at a time: the quantity of the selected line, the cash received, or the
+   staff discount %. It is a second way to enter what the fields already take; nothing is priced here. */
+type Pad = 'qty' | 'cash' | 'discount';
+const PAD_KEYS = ['7', '8', '9', 'C', '4', '5', '6', '⌫', '1', '2', '3', '+', '.', '0', '00', '−'] as const;
 
 export default function PosCounter({ session, locations, maxDiscountBp, canDiscount }: {
   session: { id: string; number: string; location_id: string; location_name: string };
@@ -42,6 +46,8 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   // The branch's stock, shown while nothing is searched; and the store the cashier asked for, when it is not this session's.
   const [stock, setStock] = useState<Product[]>([]); const [stockMore, setStockMore] = useState(false); const [stockState, setStockState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [otherStore, setOtherStore] = useState('');
+  const [cat, setCat] = useState('');                 // category chip ('' = all); applies to the branch's stock list
+  const [pad, setPad] = useState<Pad>('qty'); const [sel, setSel] = useState('');   // keypad target; the bill line it works on
   const loadStock = useCallback(async () => {
     const r = await posStockAction(session.location_id);
     if (!r.ok) { setStockState('error'); return; }
@@ -53,9 +59,14 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   const discountPercent = offerDiscount ? Math.max(0, Number(discount) || 0) : 0;
 
   // ---------- search (debounced); Enter adds an exact barcode / SKU match
+  const searchSeq = useRef(0);
   const runSearch = useCallback(async (term: string, addExact: boolean) => {
+    const mine = ++searchSeq.current;
     if (!term.trim()) { setResults([]); setSearchMsg(''); return; }
-    const r = await posSearchAction(session.location_id, term);
+    let r: Awaited<ReturnType<typeof posSearchAction>>;
+    try { r = await posSearchAction(session.location_id, term); }
+    catch { if (mine === searchSeq.current) setSearchMsg('Search could not reach the server. Check the connection and try again.'); return; }
+    if (mine !== searchSeq.current) return;                       // a newer search has been sent since: its answer is the one shown
     if (!r.ok) { setSearchMsg(r.message); return; }
     setResults(r.data.products);
     setSearchMsg(r.data.products.length ? '' : 'No product matches.');
@@ -64,15 +75,15 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
   }, [session.location_id]);
   useEffect(() => { const t = setTimeout(() => void runSearch(q, false), 200); return () => clearTimeout(t); }, [q, runSearch]);
 
-  function add(v: Variant, name: string) {
-    setError(''); setDone(null);
+  function add(v: Variant, name: string, image: string | null = null) {
+    setError(''); setDone(null); setSel(v.variantId);
     setLines(ls => {
       const at = ls.find(l => l.variantId === v.variantId);
       const next = (at?.qty ?? 0) + 1;
       if (next > v.stock) { setError(`Only ${v.stock} of ${name} ${v.colourLabel ? v.colourLabel + ', ' : ''}size ${v.size} in stock at ${session.location_name}.`); return ls; }
       if (next > MAX) { setError(`At most ${MAX} of one size per bill.`); return ls; }
       return at ? ls.map(l => l.variantId === v.variantId ? { ...l, qty: next, stock: v.stock } : l)
-        : [...ls, { variantId: v.variantId, qty: 1, name, sku: v.sku, size: v.size, colourLabel: v.colourLabel, unitPaise: v.unitPaise, stock: v.stock }];
+        : [...ls, { variantId: v.variantId, qty: 1, image, name, sku: v.sku, size: v.size, colourLabel: v.colourLabel, unitPaise: v.unitPaise, stock: v.stock }];
     });
   }
   function setQty(id: string, qty: number) {
@@ -94,8 +105,11 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
     if (!lines.length) { setQuote(null); setQuoteErr(''); return; }
     let live = true;
     const t = setTimeout(async () => {
-      const r = await posQuoteAction({ locationId: session.location_id, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
-        discountPercent, discountReason: reason, couponCode, usePoints: usePoints && !!customer });
+      let r: Awaited<ReturnType<typeof posQuoteAction>>;
+      try {
+        r = await posQuoteAction({ locationId: session.location_id, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
+          discountPercent, discountReason: reason, couponCode, usePoints: usePoints && !!customer });
+      } catch { if (live) { setQuote(null); setQuoteErr('The total could not be worked out: the server could not be reached. Check the connection.'); } return; }
       if (!live) return;
       if (r.ok && r.data) { setQuote(r.data); setQuoteErr(r.data.problems.join(' ')); setLines(ls => ls.map(l => { const x = r.data!.lines.find(y => y.variantId === l.variantId); return x ? { ...l, stock: x.stock, unitPaise: x.unitPaise } : l; })); }
       else if (!r.ok) { setQuote(null); setQuoteErr(r.message); }
@@ -124,9 +138,17 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
     if (!ready || !quote) return;
     setError('');
     startPay(async () => {
-      const r = await posCompleteAction({ sessionId: session.id, idempotencyKey: key, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
-        contactName, contactPhone, discountPercent, discountReason: reason, method, tendered, reference, expectedTotalPaise: quote.totals.totalPaise,
-        couponCode, usePoints: usePoints && !!customer });
+      let r: Awaited<ReturnType<typeof posCompleteAction>>;
+      try {
+        r = await posCompleteAction({ sessionId: session.id, idempotencyKey: key, lines: lines.map(l => ({ variantId: l.variantId, qty: l.qty })), customerId: customer?.id ?? null,
+          contactName, contactPhone, discountPercent, discountReason: reason, method, tendered, reference, expectedTotalPaise: quote.totals.totalPaise,
+          couponCode, usePoints: usePoints && !!customer });
+      } catch {
+        // The request did not come back (connection dropped, timeout). The sale may or may not have been saved. The bill and
+        // its key are kept exactly as they are: pressing Charge again asks the server, which never saves the same bill twice.
+        setError('The server did not answer, so it is not known yet whether this sale was saved. Do not change the bill: press Charge again. The same bill is never charged twice.');
+        return;
+      }
       if (!r.ok) { setError(r.message); return; }
       setDone({ orderId: r.data.orderId, posNumber: r.data.posNumber, totalPaise: r.data.totalPaise, changePaise: r.data.changePaise });
     });
@@ -147,6 +169,30 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
     addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey);
   });
 
+  // ---------- category chips: the categories of what is in stock at this branch, with how many products each holds
+  const cats = useMemo(() => { const m = new Map<string, number>(); for (const p of stock) if (p.category) m.set(p.category, (m.get(p.category) ?? 0) + 1); return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])); }, [stock]);
+  const searching = !!q.trim();
+  const shown = searching ? results : cat ? stock.filter(p => p.category === cat) : stock;
+  const selected = lines.find(l => l.variantId === sel) ?? lines[lines.length - 1] ?? null;
+
+  // ---------- keypad
+  const typeInto = (cur: string, k: string, decimals: boolean) => k === 'C' ? '' : k === '⌫' ? cur.slice(0, -1) : k === '.' ? (decimals && !cur.includes('.') ? (cur || '0') + '.' : cur) : (cur + k).slice(0, 9);
+  function press(k: typeof PAD_KEYS[number]) {
+    if (pad === 'qty') {
+      if (!selected) { setError('Add a product first, then set its quantity.'); return; }
+      if (k === '+') setQty(selected.variantId, selected.qty + 1);
+      else if (k === '−') setQty(selected.variantId, selected.qty - 1);
+      else if (k === 'C' || k === '⌫') setQty(selected.variantId, 1);
+      else if (/^[1-9]$/.test(k)) setQty(selected.variantId, Number(k));
+      return;
+    }
+    if (k === '+' || k === '−') return;
+    if (pad === 'cash') setTendered(t => typeInto(t, k, true));
+    else setDiscount(d => typeInto(d, k, true));
+  }
+  const padOn = (p: Pad) => p === 'qty' || (p === 'cash' ? method === 'cash' : offerDiscount);
+  useEffect(() => { if (!padOn(pad)) setPad('qty'); });
+
   const quick = useMemo(() => { if (!total) return []; const r = Math.ceil(total / 10000) * 10000; return [...new Set([total, r, Math.ceil(total / 50000) * 50000, Math.ceil(total / 100000) * 100000])].slice(0, 4); }, [total]);
 
   if (done) return (
@@ -164,7 +210,8 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
 
   return (
     <div className="pos" data-pos>
-      <section className="pos-left card" aria-label="Products">
+      <section className="pos-left" aria-label="Products">
+       <div className="pos-bar card">
         <div className="pos-store" data-pos-store>
           <label htmlFor="pos-store">Store / branch</label>
           <select id="pos-store" className="input" value={otherStore || session.location_id} onChange={e => setOtherStore(e.target.value === session.location_id ? '' : e.target.value)} data-pos-store-select>
@@ -179,10 +226,19 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
             <button type="button" className="btn ghost" onClick={() => setOtherStore('')} data-pos-store-stay>Stay at {session.location_name}</button>
           </p>
         )}
+        <div className="pos-find">
         <label className="pos-search-label" htmlFor="pos-search">Scan barcode or search name / SKU <kbd>F2</kbd></label>
         <input id="pos-search" ref={searchRef} className="pos-search" value={q} autoFocus autoComplete="off" placeholder="Scan or type…"
           onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void runSearch(q, true); } if (e.key === 'Escape') { setQ(''); setResults([]); } }} data-pos-search />
+        </div>
+       </div>
         {searchMsg && <p className="note" data-pos-search-msg>{searchMsg}</p>}
+        {!searching && stock.length > 0 && cats.length > 1 && (
+          <div className="pos-cats" role="group" aria-label="Filter by category" data-pos-cats>
+            <button type="button" className={`pos-cat${cat === '' ? ' active' : ''}`} aria-pressed={cat === ''} onClick={() => setCat('')} data-pos-cat="all"><span>All</span><b>{stock.length}</b></button>
+            {cats.map(([name, n]) => <button key={name} type="button" className={`pos-cat${cat === name ? ' active' : ''}`} aria-pressed={cat === name} onClick={() => setCat(name)} data-pos-cat={name}><span>{name}</span><b>{n}</b></button>)}
+          </div>
+        )}
         {!q.trim() && (
           <p className="pos-stock-head" data-pos-stock-head>
             {stockState === 'loading' ? `Loading the stock at ${session.location_name}…`
@@ -191,35 +247,36 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
               : `In stock at ${session.location_name}${stockMore ? ' (first ' + stock.length + ' products; search for the rest)' : ''}`}
           </p>
         )}
-        <ul className="pos-results" data-pos-results data-pos-listing={q.trim() ? 'search' : 'stock'}>
-          {(q.trim() ? results : stock).map(p => (
-            <li key={p.productId} className="pos-product">
-              <div className="pos-product-head">
-                {p.image ? <img src={p.image} alt="" width={44} height={56} loading="lazy" /> : <span className="pos-noimg" aria-hidden="true" />}
+        <ul className="pos-results pos-grid" data-pos-results data-pos-listing={searching ? 'search' : 'stock'}>
+          {shown.map(p => { const left = p.variants.reduce((n, v) => n + Math.max(0, v.stock), 0), low = Math.min(...p.variants.map(v => v.unitPaise)), high = Math.max(...p.variants.map(v => v.unitPaise)); return (
+            <li key={p.productId} className="pos-product pos-tile" data-pos-product={p.productId}>
+              <div className="pos-tile-img">{p.image ? <img src={p.image} alt="" loading="lazy" /> : <span className="pos-noimg" aria-hidden="true" />}</div>
+              <div className="pos-tile-body">
                 <b>{p.name}</b>
+                <div className="pos-tile-meta"><span className="pos-tile-price">{low === high ? inr(low) : `${inr(low)} – ${inr(high)}`}</span><span>Available: {left}</span></div>
               </div>
               <div className="pos-variants">
                 {p.variants.map(v => (
-                  <button key={v.variantId} type="button" className="pos-variant" disabled={v.stock <= 0} onClick={() => add(v, p.name)}
-                    data-pos-variant={v.sku} title={`${v.sku}${v.barcode ? ' · ' + v.barcode : ''}`}>
+                  <button key={v.variantId} type="button" className="pos-variant" disabled={v.stock <= 0} onClick={() => add(v, p.name, p.image)}
+                    data-pos-variant={v.sku} title={`${v.stock > 0 ? v.stock + ' in stock' : 'Out of stock'} · ${inr(v.unitPaise)} · ${v.sku}${v.barcode ? ' · ' + v.barcode : ''}`}>
                     <span>{v.colourLabel ? `${v.colourLabel} · ` : ''}{v.size}</span>
-                    <small>{inr(v.unitPaise)} · {v.stock > 0 ? `${v.stock} in stock` : 'out of stock'}</small>
+                    <small className="pos-variant-more">{low === high ? '' : `${inr(v.unitPaise)} · `}{v.stock > 0 ? `${v.stock} in stock` : 'out of stock'}</small>
                   </button>
                 ))}
               </div>
             </li>
-          ))}
+          ); })}
         </ul>
       </section>
 
       <section className="pos-right card" aria-label="Bill">
         <div className="pos-bill-head"><h2>Bill</h2>{lines.length > 0 && <button type="button" className="btn ghost" onClick={newSale} data-pos-clear>Clear</button>}</div>
-        {lines.length === 0 ? <p className="note">Scan or search a product to start the bill.</p> : (
+        {lines.length === 0 ? <p className="pos-empty" data-pos-empty>No items yet. Tap a size on the left, or scan a barcode.</p> : (
           <table className="pos-lines" data-pos-lines>
             <thead><tr><th>Item</th><th className="num">Price</th><th className="num">Qty</th><th className="num">Amount</th><th><span className="sr-only">Remove</span></th></tr></thead>
             <tbody>{lines.map(l => (
-              <tr key={l.variantId} data-pos-line={l.sku}>
-                <td>{l.name}<div className="note">{l.colourLabel ? `${l.colourLabel} · ` : ''}Size {l.size} · <span className="mono">{l.sku}</span> · {l.stock} in stock</div></td>
+              <tr key={l.variantId} data-pos-line={l.sku} className={selected?.variantId === l.variantId ? 'sel' : undefined} onClick={() => setSel(l.variantId)} aria-selected={selected?.variantId === l.variantId}>
+                <td><div className="pos-line-item">{l.image ? <img src={l.image} alt="" loading="lazy" /> : <span className="pos-noimg" aria-hidden="true" />}<div>{l.name}<div className="note">{l.colourLabel ? `${l.colourLabel} · ` : ''}Size {l.size} · <span className="mono">{l.sku}</span> · {l.stock} in stock</div></div></div></td>
                 <td className="num">{inr(l.unitPaise)}</td>
                 <td className="num"><div className="pos-qty">
                   <button type="button" className="btn ghost" aria-label={`One less ${l.sku}`} onClick={() => setQty(l.variantId, l.qty - 1)} data-pos-minus>−</button>
@@ -238,15 +295,17 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
             <p>Customer: <b>{customer.full_name ?? customer.email}</b> · {customer.phone ?? customer.email} <button type="button" className="btn ghost" onClick={() => setCustomer(null)} data-pos-customer-clear>Change</button></p>
           ) : (
             <>
-              <label htmlFor="pos-cust">Customer (optional): phone, email or name — leave empty for a walk-in customer</label>
-              <input id="pos-cust" value={custQ} onChange={e => setCustQ(e.target.value)} autoComplete="off" placeholder="Walk-in customer" data-pos-customer-search />
+              <label htmlFor="pos-cust">Customer (optional)</label>
+              <input id="pos-cust" value={custQ} onChange={e => setCustQ(e.target.value)} autoComplete="off" placeholder="Walk-in customer · or search phone, email, name" data-pos-customer-search />
               {custResults.length > 0 && <ul className="pos-cust-results">{custResults.map(c => (
                 <li key={c.id}><button type="button" className="btn ghost" onClick={() => { setCustomer(c); setCustQ(''); setCustResults([]); }} data-pos-customer-pick={c.email}>
                   {c.full_name ?? '—'} · {c.phone ?? ''} · {c.email}</button></li>))}</ul>}
+              <details className="pos-walkin" data-pos-walkin><summary>Add a name or phone for this walk-in customer</summary>
               <div className="pos-row">
                 <input aria-label="Walk-in name (optional)" placeholder="Name (optional)" value={contactName} onChange={e => setContactName(e.target.value)} data-pos-contact-name />
                 <input aria-label="Walk-in phone (optional)" placeholder="Phone (optional)" value={contactPhone} onChange={e => setContactPhone(e.target.value)} inputMode="tel" data-pos-contact-phone />
               </div>
+              </details>
             </>
           )}
         </div>
@@ -308,9 +367,28 @@ export default function PosCounter({ session, locations, maxDiscountBp, canDisco
               <input value={reference} onChange={e => setReference(e.target.value)} autoComplete="off" data-pos-reference /></label>
           )}
           {error && <p className="msg error" role="alert" data-pos-error>{error}</p>}
+          {lines.length > 0 && <details className="pos-pad" data-pos-pad open>
+            <summary>Keypad</summary>
+            <div className="pos-pad-tabs" role="tablist" aria-label="Keypad enters">
+              {(['qty', 'cash', 'discount'] as Pad[]).filter(padOn).map(p => (
+                <button key={p} type="button" role="tab" aria-selected={pad === p} className={`pos-pad-tab${pad === p ? ' active' : ''}`} onClick={() => setPad(p)} data-pos-pad-tab={p}>{p === 'qty' ? 'Quantity' : p === 'cash' ? 'Cash received' : 'Discount %'}</button>
+              ))}
+            </div>
+            <p className="pos-pad-target" data-pos-pad-target>
+              {pad === 'qty' ? (selected ? <>{selected.name} · size {selected.size}: <b>{selected.qty}</b></> : 'No line selected') : pad === 'cash' ? <>Cash received: <b>{tendered ? `₹${tendered}` : '—'}</b></> : <>Discount: <b>{discount ? `${discount}%` : '—'}</b></>}
+            </p>
+            <div className="pos-pad-keys">
+              {PAD_KEYS.map(k => <button key={k} type="button" className={`pos-key${k === 'C' || k === '⌫' || k === '+' || k === '−' ? ' fn' : ''}`} onClick={() => press(k)}
+                disabled={pad === 'qty' ? k === '.' || k === '00' || k === '0' : k === '+' || k === '−'} aria-label={k === 'C' ? 'Clear' : k === '⌫' ? 'Delete' : k === '+' ? 'One more' : k === '−' ? 'One less' : k} data-pos-key={k}>{k}</button>)}
+            </div>
+          </details>}
           <button type="button" className="btn primary pos-charge" disabled={!ready} onClick={pay} data-pos-charge>
             {paying ? 'Recording payment…' : quote ? `Charge ${inr(total)} (F9)` : 'Charge'}
           </button>
+          <div className="pos-foot">
+            <Link className="btn ghost" href="/pos/sessions" data-pos-sales-link>Sessions &amp; sales</Link>
+            <Link className="btn ghost" href="/pos/sessions#close" data-pos-end-link>End session</Link>
+          </div>
         </div>
       </section>
     </div>

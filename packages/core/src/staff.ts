@@ -108,6 +108,13 @@ export async function updateStaff(db: Db, actor: StaffPrincipal, input: UpdateSt
       if (taken) throw new ConflictError('A staff account with this email already exists.');
     }
     await tx.updateTable('staff_users').set({ email: input.email, full_name: input.fullName }).where('id', '=', input.staffId).execute();
+    // 2026-10-13: a new sign-in address ends that person's sessions (not the one making the change to their own account) and
+    // the password-reset links already sent to the OLD mailbox. A pending invitation is left alone (resend it if needed).
+    if (before.email !== input.email) {
+      await revokeAllStaffSessions(tx, input.staffId, input.staffId === actor.staffId ? actor.sessionId : undefined);
+      await tx.updateTable('auth_tokens').set({ used_at: sql<Date>`now()`, metadata: JSON.stringify({ superseded: true, reason: 'email_changed' }) })
+        .where('staff_user_id', '=', input.staffId).where('used_at', 'is', null).where('purpose', '!=', 'staff_invitation').execute();
+    }
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'staff.update', entityType: 'staff_users', entityId: input.staffId,
       before: { email: before.email, full_name: before.full_name }, after: { email: input.email, full_name: input.fullName }, ...auditCtx(ctx) });
   });

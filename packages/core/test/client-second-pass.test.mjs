@@ -11,7 +11,7 @@ import {acceptStaffInvite, issueStaffInvite, validateStaffSession} from '@kitsyu
 import {ForbiddenError, codCancelInput, codCollectInput, loyaltyAdjustInput, orderEditInput, placeOrderInput, settingUpdateInput, shippingRateInput, shippingZoneInput} from '@kitsyuu/contracts';
 import {
   addCartLine, adjustLoyaltyPoints, cancelCodOrder, cancelOrderByCustomer, createInvoiceForOrder, databaseDiscounts, defaultCommerceConfig, editOrder, expireLoyaltyPoints,
-  getCustomerCart, getCustomerOrder, getMyLoyalty, importLoyaltyPoints, listLoyaltyAccounts, listOrderEdits, orderConfirmationEmail, orderEditBlocker, parseLoyaltyImport,
+  getCustomerCart, getCustomerLoyalty, getCustomerOrder, getMyLoyalty, loyaltyBalance, loyaltyTier, loyaltyNextTier, importLoyaltyPoints, listLoyaltyAccounts, listOrderEdits, orderConfirmationEmail, orderEditBlocker, parseLoyaltyImport,
   placeOrder, preparePayment, recordCodCollected, refundOrderEdit, removeCartLine, saveCustomerAddress, saveShippingRate, saveShippingZone, settingsShipping,
   submitPaymentResult, testPaymentProvider, updateOrderStatus, updateSetting, voidInvoice,
 } from '@kitsyuu/core';
@@ -243,6 +243,41 @@ test('loyalty: nothing without the settings; earned when paid; staff adjust with
   await emptyCart(ravi); await emptyCart(asha);
   assert.ok((await listLoyaltyAccounts(admin, root, {page: 1})).rows.some(r => r.id === asha.customerId));
   await assert.rejects(listLoyaltyAccounts(admin, manager, {page: 1}), ForbiddenError);
+});
+
+test('loyalty tiers (2026-10-13): a label by current points balance; shown only when Silver < Gold < Diamond are all set', async () => {
+  const none = await listLoyaltyAccounts(admin, root, {page: 1});
+  assert.equal(none.settings.tiers, null); assert.equal(none.counts, null);
+  assert.ok(none.rows.every(r => r.tier === null && r.next === null), 'no tier until the business sets them');
+  // an incomplete or disordered set is not used
+  await set(root, 'loyalty.tier_silver_points', '100'); await set(root, 'loyalty.tier_gold_points', '50');
+  assert.equal((await listLoyaltyAccounts(admin, root, {page: 1})).settings.tiers, null);
+  await set(root, 'loyalty.tier_diamond_points', '500');
+  assert.equal((await listLoyaltyAccounts(admin, root, {page: 1})).settings.tiers, null, 'Gold below Silver: no tiers');
+  const bal = await loyaltyBalance(admin, asha.customerId);
+  assert.ok(bal >= 3, 'the customer of the tests above holds points');
+  // thresholds placed around that balance: Silver at 1, Gold exactly at the balance, Diamond one point above
+  await set(root, 'loyalty.tier_silver_points', '1'); await set(root, 'loyalty.tier_gold_points', String(bal)); await set(root, 'loyalty.tier_diamond_points', String(bal + 1));
+  const all = await listLoyaltyAccounts(admin, root, {page: 1});
+  assert.deepEqual(all.settings.tiers, {silver: 1, gold: bal, diamond: bal + 1});
+  const row = all.rows.find(r => r.id === asha.customerId);
+  assert.deepEqual([row.tier, row.next], ['gold', {tier: 'diamond', points: 1}], 'the threshold itself is inside the tier');
+  const [{n}] = await q(`select count(*)::int n from loyalty_accounts where balance > 0`);
+  assert.equal(all.counts.diamond + all.counts.gold + all.counts.silver + all.counts.none, n, 'every customer with points is in exactly one group');
+  assert.ok((await listLoyaltyAccounts(admin, root, {page: 1, tier: 'gold'})).rows.some(r => r.id === asha.customerId));
+  for (const k of ['diamond', 'silver', 'none']) assert.ok(!(await listLoyaltyAccounts(admin, root, {page: 1, tier: k})).rows.some(r => r.id === asha.customerId), k);
+  assert.equal((await listLoyaltyAccounts(admin, root, {page: 1, tier: 'gold'})).rows.length, all.counts.gold);
+  // pure rules
+  const T = {silver: 100, gold: 500, diamond: 2000};
+  assert.deepEqual([0, 99, 100, 499, 500, 1999, 2000, 99999].map(b => loyaltyTier(T, b)), [null, null, 'silver', 'silver', 'gold', 'gold', 'diamond', 'diamond']);
+  assert.deepEqual([loyaltyNextTier(T, 40), loyaltyNextTier(T, 100), loyaltyNextTier(T, 1500), loyaltyNextTier(T, 2000)], [{tier: 'silver', points: 60}, {tier: 'gold', points: 400}, {tier: 'diamond', points: 500}, null]);
+  assert.equal(loyaltyTier(null, 5000), null);
+  // the customer page carries the same tier; the permission is unchanged
+  const one = await getCustomerLoyalty(admin, root, asha.customerId);
+  assert.deepEqual([one.tier, one.next], ['gold', {tier: 'diamond', points: 1}]);
+  await assert.rejects(listLoyaltyAccounts(admin, manager, {page: 1, tier: 'gold'}), ForbiddenError);
+  for (const k of ['silver', 'gold', 'diamond']) await set(root, `loyalty.tier_${k}_points`, '');
+  assert.equal((await listLoyaltyAccounts(admin, root, {page: 1})).settings.tiers, null, 'cleared again: later tests see no tiers');
 });
 
 test('loyalty: import opening balances (all or nothing); unused points expire', async () => {

@@ -39,12 +39,13 @@ export default function FirstOfferPopup() {
   const box = useRef<HTMLDivElement>(null);
   const back = useRef<HTMLElement | null>(null);
 
-  // Scroll trigger: once the visitor has scrolled into the store (past the landing film on the home page), ask the server once.
+  // Scroll trigger: once the visitor has scrolled into the store, ask the server once. On the home page that moment is the
+  // New arrivals section coming into view (2026-10-13, the owner's choice), not the hero above it.
   useEffect(() => {
     if (quiet || asked.current || seen()) return;
     const far = () => {
-      const store = path === '/' ? document.getElementById('store') : null;
-      return store ? store.getBoundingClientRect().top <= innerHeight * 0.5 : scrollY > Math.max(320, innerHeight * 0.4);
+      const store = path === '/' ? document.querySelector('[data-offer-trigger]') ?? document.getElementById('store') : null;
+      return store ? store.getBoundingClientRect().top <= innerHeight * 0.6 : scrollY > Math.max(320, innerHeight * 0.4);
     };
     const check = () => {
       if (asked.current || !far()) return;

@@ -225,6 +225,10 @@ export async function getBulkEditDraft(db: Db, actor: StaffPrincipal, id: string
 
 /** Applies a draft: each change, in order, through bulkEditProducts (same checks and audit as one-by-one edits). */
 export async function applyBulkEditDraft(db: Db, actor: StaffPrincipal, input: { draftId: string }, ctx: MutationContext) {
+  // 2026-10-13: permissions are checked BEFORE the draft is claimed, so someone without them never writes to it.
+  const pending = await db.selectFrom('bulk_edit_drafts').select('changes').where('id', '=', input.draftId).where('status', '=', 'draft').executeTakeFirst();
+  if (!pending) throw new ConflictError('This bulk edit was already applied or cancelled.');
+  checkChanges(actor, pending.changes as BulkAction[]);
   const claim = await db.updateTable('bulk_edit_drafts').set({ status: 'applied', applied_by: actor.staffId, applied_at: sql`now()` })
     .where('id', '=', input.draftId).where('status', '=', 'draft').returning(['id', 'number', 'product_ids', 'changes', 'preview']).executeTakeFirst();
   if (!claim) throw new ConflictError('This bulk edit was already applied or cancelled.');

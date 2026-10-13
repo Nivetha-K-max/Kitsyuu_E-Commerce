@@ -4,8 +4,10 @@
    grid, radius 6px (controls) / 12px (cards). Both themes use the same semantic names; <html data-theme="light|dark">
    is set before first paint by the script in app/layout.tsx. Rules below use only these tokens. */
 :root{
-  --font:'DM Sans',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-  --display:'Barlow Condensed','DM Sans',ui-sans-serif,system-ui,sans-serif;
+  --font:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  --display:var(--font);
+  /* type scale (2026-10-13): page title · section heading · body · table · label · helper · button · headline figure */
+  --fs-title:26px;--fs-section:15px;--fs-body:14px;--fs-table:13.5px;--fs-label:12px;--fs-help:12.5px;--fs-btn:13px;--fs-figure:28px;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --fs-12:12px;--fs-13:13px;--fs-14:14px;--fs-16:16px;--fs-20:20px;--fs-24:24px;--fs-32:32px;
   --radius-sm:6px;--radius:8px;--radius-lg:10px;
@@ -354,7 +356,7 @@ main>.msg{margin-bottom:20px}
 .gate{border:1px solid var(--border);border-left:4px solid var(--warning);border-radius:var(--radius);padding:20px 22px;max-width:620px;background:var(--surface)}
 .gate[data-gate=error]{border-left-color:var(--danger)}
 .gate h2{font-size:18px}
-.gate .eyebrow{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.gate .eyebrow{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .gate .actions{margin-top:14px}
 .danger-card{max-width:620px;border-color:color-mix(in srgb,var(--danger) 35%,var(--border))}
 .danger-zone{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
@@ -590,7 +592,7 @@ ul.plain li:last-child{border-bottom:0}
 .notes-list li{padding:10px 0;border-bottom:1px solid var(--border)}
 .notes-list li:last-child{border-bottom:0}
 .note-body{margin:0 0 4px;white-space:pre-line}
-.sub-h{margin:12px 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.sub-h{margin:12px 0 6px;font-size:13px;color:var(--muted);letter-spacing:.01em}
 .announce-preview{padding:10px 14px;border-radius:var(--radius-sm);background:#101011;color:#eae7e0;font-size:13px;letter-spacing:.04em}
 
 /* M18: search, two-factor, alerts */
@@ -827,7 +829,7 @@ ul.plain li:last-child{border-bottom:0}
 .nav a[aria-current=page] .nav-keys{display:none}
 :root[data-sidebar=collapsed] .nav a[aria-current=page]:after{display:none}
 :root[data-theme=dark] .nav a[aria-current=page]{box-shadow:none}
-.nav-group{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:0 12px 6px}
+.nav-group{font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--faint);padding:0 12px 6px}
 .side-foot{padding:10px 12px 14px}
 .user-trigger{padding:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
 .topbar{background:color-mix(in srgb,var(--bg) 80%,transparent);border-bottom-color:transparent}
@@ -962,7 +964,7 @@ textarea.input{padding:10px 12px}
 .check input{accent-color:var(--accent)}
 .record-form .block legend{font-size:15px}
 .record-form>.actions{border-radius:0 0 var(--radius-lg) var(--radius-lg);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(6px)}
-h3.sub{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+h3.sub{font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--muted)}
 
 /* tables everywhere: light header row, clickable rows, quiet row buttons */
 th{background:var(--surface-2);color:var(--muted)}
@@ -1196,12 +1198,12 @@ td .btn.danger:hover{background:var(--danger-soft);color:var(--danger);border-co
 .ord-dates{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px}
 .ord-dates label{font-weight:500}
 .ord-chipset{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ord-chip-label{margin-right:2px;color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
+.ord-chip-label{margin-right:2px;color:var(--faint);font-size:12px;font-weight:600;letter-spacing:.01em}
 .ord-chip{display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-2);font-size:12.5px;font-weight:500;white-space:nowrap;text-decoration:none;transition:background-color var(--dur) var(--ease),border-color var(--dur) var(--ease),color var(--dur) var(--ease)}
 .ord-chip:hover{border-color:var(--border-strong);color:var(--text);text-decoration:none}
 .ord-chip[aria-current]{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
 .ord-view-note{margin:-4px 0 14px}
-.ord-table th{color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.ord-table th{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.01em;white-space:nowrap}
 .ord-table td{padding-top:12px;padding-bottom:12px;vertical-align:middle}
 .ord-who{min-width:160px}
 .ord-who .row-link{font-size:13.5px;font-weight:600}
@@ -1240,7 +1242,7 @@ td .btn.danger:hover{background:var(--danger-soft);color:var(--danger);border-co
 @media(min-width:1241px){.ord-table .ord-placed{min-width:104px;white-space:normal}}
 
 /* ---------- Order page (2026-10-05): flow stepper, next step, two columns. Same scoped indigo as the Orders list. ---------- */
-.ord-detail .head-status-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase}
+.ord-detail .head-status-label{font-size:12px;font-weight:600;letter-spacing:.01em}
 .ord-flow{padding:18px 22px 16px}
 .ord-steps{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;margin:0;padding:0;list-style:none}
 .ord-steps li{position:relative;min-width:0;padding-top:12px;border-top:3px solid var(--border);color:var(--muted);font-size:13px}
@@ -1322,7 +1324,7 @@ td .btn.danger:hover{background:var(--danger-soft);color:var(--danger);border-co
 .ord-detail h2[id],.ord-detail h3[id],.ord-detail section[id]{scroll-margin-top:96px}
 /* payment summary: the same block on the order page and on the payment page */
 .ord-pay-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px 20px;margin-bottom:14px}
-.ord-pay-method{display:block;margin-bottom:2px;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.ord-pay-method{display:block;margin-bottom:2px;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.01em}
 .ord-pay-amount{display:block;font-size:22px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
 .ord-pay-state{text-align:right}
 .ord-pay-state .badge{margin:0}
@@ -1488,7 +1490,7 @@ body:has(.ord) .topbar{will-change:transform;transform:translateZ(0)}
 .ent-dl dd{margin:0;overflow-wrap:anywhere}
 .ent-figures{display:flex;flex-wrap:wrap;gap:18px 44px;margin:0}
 .ent-figures>div{min-width:0}
-.ent-figures dt{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.ent-figures dt{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.01em}
 .ent-figures dd{margin:4px 0 0;font-size:22px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
 .ent-figures small{display:block;margin-top:2px;color:var(--muted);font-size:12.5px}
 .ent-was{margin-left:10px;color:var(--muted);font-size:14px;font-weight:500;text-decoration:line-through}
@@ -1717,31 +1719,32 @@ body:has(.ord) .topbar{will-change:transform;transform:translateZ(0)}
 /* ================= KITSYUU visual system (2026-10-08) =================
    The ERP wears the store's own identity: ink (#101011) on paper (#e9e5df), with warm neutrals between them and NO colour
    accent. Green, red and a restrained amber appear only as states (succeeded / failed or destructive / needs attention).
-   Titles are Barlow Condensed (the store's heading face), everything else DM Sans, in four weights: 400 text, 500 labels
-   and navigation, 600 headings and actions, 700 rare emphasis. Hierarchy comes from type, spacing and hairlines, not from
+   2026-10-13: ONE typeface, Inter (variable weight, served by this app), for titles, text and figures: 400 text, 500 labels
+   and navigation, 600 headings and actions, 650 page titles and headline figures. Codes (order numbers, SKUs) keep the
+   system monospace; money and quantities are Inter with tabular figures. No uppercase headings or tracked-out labels. Hierarchy comes from type, spacing and hairlines, not from
    boxes, shadows or colour. This layer only restyles: no selector here changes what a page contains or does. */
-@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:600;font-display:swap;src:url(/assets/fonts/barlow-condensed-600.woff2) format('woff2')}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;font-display:swap;src:url(/assets/fonts/dm-sans-400.woff2) format('woff2')}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:500;font-display:swap;src:url(/assets/fonts/dm-sans-500.woff2) format('woff2')}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:600 700;font-display:swap;src:url(/assets/fonts/dm-sans-600.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(/assets/fonts/inter-latin.woff2) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+/* the rupee sign and other extended Latin, so ₹ is drawn in the same face as the figures next to it */
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:swap;src:url(/assets/fonts/inter-latin-ext.woff2) format('woff2-variations');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 
 /* ---- type ---- */
 html,body{font-feature-settings:normal;letter-spacing:0}
 b,strong{font-weight:600}
-h1,.page-head h1{font-family:var(--display);font-weight:600;font-size:34px;line-height:1.05;letter-spacing:.015em;text-transform:uppercase}
+h1,.page-head h1{font-family:var(--font);font-weight:650;font-size:var(--fs-title);line-height:1.2;letter-spacing:-.02em;text-transform:none}
 .page-head h1 .badge,.ent-status .badge{font-family:var(--font);letter-spacing:0}
-.card>h2,.section-title,.gate h2,.dialog h2,.drawer-head h2{font-size:15px;font-weight:600;letter-spacing:0}
+.card>h2,.section-title,.gate h2,.dialog h2,.drawer-head h2{font-size:var(--fs-section);font-weight:600;letter-spacing:-.005em}
 .ent-section-head h2{font-size:14.5px;font-weight:600;letter-spacing:0}
 .eyebrow{font-size:13.5px;line-height:1.45;margin-top:8px;max-width:80ch}
 .crumbs{font-size:12px;letter-spacing:.02em;margin-bottom:8px}
 .note{line-height:1.5}
 .mono,.mono-strong,.ord-no{font-variant-numeric:tabular-nums}
 .num,.money,.qty,td.num,th.num,.ent-figures dd,.kpi dd,.pager-page{font-variant-numeric:tabular-nums lining-nums}
-/* headline figures: the display face, so numbers read as the page's content */
-.kpi dd,.kpis.hero dd,.ent-figures dd{font-family:var(--display);font-weight:600;font-size:34px;line-height:1;letter-spacing:.01em}
-.kpis.minor dd{font-size:24px}
+/* headline figures: the same face, heavier and tighter, with tabular figures */
+.kpi dd,.kpis.hero dd,.ent-figures dd{font-family:var(--font);font-weight:650;font-size:var(--fs-figure);line-height:1.1;letter-spacing:-.02em}
+.kpis.minor dd{font-size:22px}
 .kpi dd small,.kpis.hero dd small,.ent-figures small{font-family:var(--font);font-size:12.5px;font-weight:400;letter-spacing:0;line-height:1.4}
-.kpi dt,.kpis.hero dt,.ent-figures dt,.nav-group,th,.ord-table th,.ord-chip-label{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+/* small labels (column headings, figure captions, sidebar captions): sentence case, one size, one weight */
+.kpi dt,.kpis.hero dt,.ent-figures dt,.ent-facts dt,.pipe dt,.nav-group,th,.ord-table th,.ord-chip-label{font-size:var(--fs-label);font-weight:500;letter-spacing:.01em;text-transform:none;color:var(--muted)}
 /* links that sit in running text or cells are underlined (never told apart by colour alone) */
 .note a,p a:not(.btn),dd a:not(.btn),td a:not(.row-link):not(.btn),.state a:not(.btn),li a:not(.btn):not(.menu-item){text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:3px;text-decoration-thickness:1px}
 .note a:hover,p a:not(.btn):hover,dd a:not(.btn):hover,td a:not(.row-link):not(.btn):hover,li a:not(.btn):not(.menu-item):hover{text-decoration-color:currentColor}
@@ -1754,17 +1757,17 @@ h1,.page-head h1{font-family:var(--display);font-weight:600;font-size:34px;line-
 .brand{height:44px;border:0;background:none;box-shadow:none;border-radius:var(--radius-sm)}
 .brand:hover{background:var(--surface-3)}
 .brand-mark{border-radius:6px}
-.brand b{font-family:var(--display);font-size:19px;font-weight:600;letter-spacing:.14em;line-height:1}
+.brand b{font-family:var(--font);font-size:15px;font-weight:700;letter-spacing:.16em;line-height:1}
 .brand small{font-size:11px;letter-spacing:.04em}
-.nav-group{padding:0 12px 8px;color:var(--faint)}
-.nav a,.side-link{height:36px;border-radius:var(--radius-sm);font-size:13.5px;font-weight:500;color:var(--text-2)}
+.nav-section+.nav-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline,var(--border))}
+.nav-group{padding:0 12px 6px;color:var(--muted)}
+.nav a,.side-link{height:36px;border-radius:8px;font-size:13.5px;font-weight:500;color:var(--text-2)}
 .nav a .icon,.side-link .icon{color:var(--muted)}
 .nav a:hover,.side-link:hover{background:var(--surface-3);color:var(--text)}
-.nav a[aria-current=page]{background:var(--accent-soft);color:var(--text);font-weight:600;box-shadow:none}
-.nav a[aria-current=page] .icon{color:var(--text)}
-.nav a[aria-current=page]:before{display:block;content:'';position:absolute;left:-12px;top:7px;bottom:7px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
-.nav a[aria-current=page]:after{display:none}
-:root[data-sidebar=collapsed] .nav a[aria-current=page]:before{left:-8px}
+.nav a:hover .icon{color:var(--text)}
+.nav a[aria-current=page],.nav a[aria-current=page]:hover{background:var(--text);color:var(--bg);font-weight:600;box-shadow:none}
+.nav a[aria-current=page] .icon,.nav a[aria-current=page]:hover .icon{color:var(--bg)}
+.nav a[aria-current=page]:before,.nav a[aria-current=page]:after{display:none}
 .user-trigger{border:0;background:none;border-radius:var(--radius-sm)}
 .user-trigger:hover{background:var(--surface-3)}
 .topbar{background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--hairline)}
@@ -1781,7 +1784,7 @@ h1,.page-head h1{font-family:var(--display);font-weight:600;font-size:34px;line-
 .ent-head{align-items:flex-start}
 .ent-name h1{gap:8px 14px}
 .ent-facts{margin-top:10px;gap:6px 26px}
-.ent-facts dt{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase}
+.ent-facts dt{font-size:12px;font-weight:600;letter-spacing:.01em}
 .ent-facts>div{align-items:baseline;gap:8px}
 
 /* ---- surfaces: a hairline, not a shadow ---- */
@@ -1838,7 +1841,7 @@ td.num,td.qty,td.money,.ord-amount{font-weight:500;color:var(--text)}
 /* ---- overlays ---- */
 .drawer{animation-duration:.16s;border-left:1px solid var(--border)}
 .drawer-head{padding:20px 22px 16px}
-.drawer-head h2{font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;line-height:1.1}
+.drawer-head h2{font-family:var(--font);font-size:18px;font-weight:650;letter-spacing:-.01em;text-transform:none;line-height:1.25}
 .drawer-body{padding:20px 22px}
 .dialog{border-radius:var(--radius-lg)}
 .menu,.chart-tip{border-radius:var(--radius)}
@@ -1851,8 +1854,8 @@ td.num,td.qty,td.money,.ord-amount{font-weight:500;color:var(--text)}
 .sk,.sk-cell,.sk-panel{animation-duration:1.2s}
 
 @media(max-width:760px){
-  h1,.page-head h1{font-size:28px}
-  .kpi dd,.kpis.hero dd,.ent-figures dd{font-size:28px}
+  h1,.page-head h1{font-size:22px}
+  .kpi dd,.kpis.hero dd,.ent-figures dd{font-size:24px}
   .page-head{padding-top:18px;padding-bottom:14px}
   .ent-figures{gap:16px 28px}
 }
@@ -1870,9 +1873,7 @@ p.crumbs a,.crumbs a{text-decoration:none}
 /* Titles and labels keep the case they are written in (the page says "Purchase orders", not "PURCHASE ORDERS"): the condensed
    face carries the identity, and nothing that reads the page (people, screen readers, the browser tests) sees changed text.
    Only what was already set in capitals stays so: queue-table headings, figure labels and the sidebar captions. */
-h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
-.kpi dt,.kpis.hero dt,.ent-facts dt,th,.pipe dt{text-transform:none;letter-spacing:.02em;font-size:12px;font-weight:500}
-.ord-table th,.ent-figures dt,.nav-group,.ord-chip-label{font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase}
+/* (2026-10-13: the three overrides that stood here set title and label styles a second and third time; they now live once, in the type block above) */
 .auth-panel{border-radius:var(--radius-lg);box-shadow:none;border:1px solid var(--border)}
 .auth{background:var(--bg)}
 /* quantities read in the text face like every other figure; the older empty box matches the newer state block */
@@ -1892,7 +1893,7 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .cal-nav .btn{height:32px;min-height:32px}
 .cal-title{margin:0 0 0 8px;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--border);gap:1px}
-.cal-head{padding:6px 8px;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:var(--surface)}
+.cal-head{padding:6px 8px;font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--muted);background:var(--surface)}
 .cal-day{display:flex;flex-direction:column;gap:4px;min-width:0;min-height:104px;padding:6px;background:var(--bg,var(--paper))}
 .cal-week .cal-day{min-height:220px}
 .cal-day.is-outside{opacity:.55}
@@ -1910,7 +1911,7 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .cal-ev.is-done{color:var(--muted);border-left-color:var(--faint)}
 .cal-ev.is-done b{text-decoration:line-through;font-weight:500}
 .cal-ev.is-overdue{border-color:var(--text);font-weight:600}
-.cal-flag{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.cal-flag{font-size:12px;font-weight:600;letter-spacing:.01em}
 .cal-more{font-size:12px;color:var(--muted)}
 @media (max-width:760px){
   .cal{display:block;background:transparent;border:0}
@@ -1939,7 +1940,7 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .kb-col[data-drop-over]{outline:2px solid var(--text);outline-offset:-2px}
 .kb-col[data-drop-busy],.cc-day[data-drop-busy],.cc-side[data-drop-busy]{opacity:.6}
 .kb-head{display:flex;align-items:baseline;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--border)}
-.kb-head h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.kb-head h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.01em}
 .kb-count{font-size:12px;font-weight:600;color:var(--muted);padding:1px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface)}
 .kb-hint{margin-left:auto;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kb-cards{display:flex;flex-direction:column;gap:8px;padding:10px;max-height:min(68vh,760px);overflow-y:auto}
@@ -1959,7 +1960,7 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .kb-desc{color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .kb-link{font-size:12.5px;font-weight:500}
 .kb-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.kb-flag{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.kb-flag{font-size:12px;font-weight:600;letter-spacing:.01em}
 .kb-foot{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:6px;padding-top:6px;border-top:1px solid var(--border)}
 .kb-move{flex:1 1 100%}
 .kb-move>summary{float:right}
@@ -1988,7 +1989,7 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
 .cc-day[data-drop-over],.cc-side[data-drop-over]{outline:2px solid var(--text);outline-offset:-2px}
 .cc-day-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:8px 10px;border-bottom:1px solid var(--border)}
 .cc-day-head b{font-size:15px}
-.cc-dow{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cc-dow{font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--muted)}
 .cc-day .kb-cards,.cc-side .kb-cards{padding:8px;max-height:none}
 .cc-month .kb-cards{gap:4px;padding:6px}
 .kb-card.is-compact{padding:6px 8px;gap:4px;font-size:12px}
@@ -2004,3 +2005,152 @@ h1,.page-head h1,.drawer-head h2{text-transform:none;letter-spacing:.005em}
   .cc-day,.cc-week .cc-day{min-height:0}
   .cc-month .cc-day.is-empty,.cc-month .cc-day.is-outside{display:none}
 }
+
+/* Stabilisation pass (2026-10-13): fixes found by looking at every module at 1440, 820 and 390px.
+   · Dashboard cards: the "vs prior 30d" caption was cut to "vs pri…"; it now wraps under its figure instead.
+   · POS: the bill's table scrolls inside itself on a narrow screen instead of pushing the page sideways, and the quantity,
+     remove and customer buttons are finger-sized on touch screens.
+   · The order-type tag follows the same sentence-case label style as every other label. */
+.delta{flex-wrap:wrap;row-gap:2px}
+.delta small{overflow:visible;text-overflow:clip;white-space:nowrap}
+.kpi-foot{flex-wrap:wrap}
+.ord-type{text-transform:none;letter-spacing:.01em;font-size:11.5px}
+@media (max-width:900px){.pos-lines{display:block;overflow-x:auto}}
+@media (max-width:900px),(pointer:coarse){
+  .pos-qty .btn{min-width:44px;min-height:44px}
+  .pos-lines .btn,.pos-customer .btn,[data-pos-customer-result]{min-height:44px}
+}
+
+/* Loyalty tiers (2026-10-13): no colour accent; Diamond solid ink, Gold outlined, Silver quiet */
+.badge.tier-diamond{background:var(--text);color:var(--bg)}
+.badge.tier-gold{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1.5px var(--text);font-weight:600}
+.badge.tier-silver{background:var(--surface-3);color:var(--text-2)}
+.badge[class*=tier-]:before{display:none}
+
+/* POS counter layout (2026-10-13): product grid with pictures and category chips on the left, the bill and keypad on the right */
+.pos{grid-template-columns:minmax(0,1.55fr) minmax(360px,1fr);gap:18px}
+.pos-left{display:grid;gap:14px;min-width:0;align-content:start}
+.pos-bar{display:grid;grid-template-columns:minmax(180px,260px) minmax(0,1fr);gap:14px;align-items:end;padding:14px 16px}
+.pos-bar .pos-store{margin:0}.pos-find{min-width:0}
+.pos-search{font-size:16px;padding:11px 14px;border-radius:10px}
+.pos-cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.pos-cat{flex:0 0 auto;display:grid;gap:2px;min-width:104px;padding:10px 14px;text-align:left;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text-2);font:inherit;cursor:pointer}
+.pos-cat span{font-size:12px;color:var(--muted);white-space:nowrap}.pos-cat b{font-size:18px;font-weight:650;color:var(--text);font-variant-numeric:tabular-nums}
+.pos-cat:hover{border-color:var(--text)}
+.pos-cat.active{background:var(--text);border-color:var(--text)}.pos-cat.active span,.pos-cat.active b{color:var(--bg)}
+.pos-stock-head{margin:0}
+.pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:12px;margin:0}
+.pos-tile{display:flex;flex-direction:column;padding:0;margin:0;border:1px solid var(--border);border-radius:14px;background:var(--surface);overflow:hidden}
+.pos-tile-img{aspect-ratio:1/1;background:var(--surface-3);display:grid;place-items:center;overflow:hidden}
+.pos-tile-img img{width:100%;height:100%;object-fit:cover;display:block}.pos-tile-img .pos-noimg{width:100%;height:100%;border-radius:0}
+.pos-tile-body{padding:10px 12px 0;display:grid;gap:4px}
+.pos-tile-body b{font-size:13.5px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em}
+.pos-tile-meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pos-tile-price{color:var(--text);font-weight:600;font-size:13px}
+.pos-tile .pos-variants{padding:10px 12px 12px;gap:6px;margin-top:auto}
+.pos-tile .pos-variant{flex:1 1 calc(50% - 6px);min-width:0;padding:7px 8px;border-radius:9px;align-items:flex-start;text-align:left}
+.pos-tile .pos-variant span{font-size:12.5px}.pos-tile .pos-variant small{font-size:11px;white-space:normal;line-height:1.3}
+.pos-right{position:sticky;top:12px;border-radius:16px}
+.pos-line-item{display:flex;gap:10px;align-items:flex-start}
+.pos-line-item img,.pos-line-item .pos-noimg{width:36px;height:44px;flex:0 0 36px;border-radius:6px;object-fit:cover;background:var(--surface-3)}
+.pos-lines tbody tr{cursor:pointer}.pos-lines tbody tr.sel td{background:var(--surface-3)}
+.pos-totals{background:var(--surface-3);border-radius:12px;padding:12px 14px;margin-top:14px}
+.pos-pad{margin-top:12px;border:1px solid var(--border);border-radius:14px;padding:10px;background:var(--surface)}
+.pos-pad-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.pos-pad-tab{flex:1 1 0;min-height:36px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:transparent;color:var(--text-2);font:500 12.5px/1 var(--font);cursor:pointer;white-space:nowrap}
+.pos-pad-tab.active{background:var(--text);border-color:var(--text);color:var(--bg)}
+.pos-pad-target{margin:8px 2px;font-size:12.5px;color:var(--muted);min-height:18px}.pos-pad-target b{color:var(--text);font-variant-numeric:tabular-nums}
+.pos-pad-keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pos-key{min-height:46px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:600 16px/1 var(--font);font-variant-numeric:tabular-nums;cursor:pointer}
+.pos-key:hover:not(:disabled){border-color:var(--text)}.pos-key:active:not(:disabled){background:var(--surface-3)}
+.pos-key.fn{background:var(--surface-3);color:var(--text-2)}.pos-key:disabled{opacity:.35;cursor:default}
+.pos-charge{margin-top:12px;border-radius:12px;min-height:58px;font-size:18px}
+.pos-foot{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.pos-foot .btn{justify-content:center;min-height:42px;border-radius:10px}
+@media (max-width:1100px){.pos{grid-template-columns:minmax(0,1fr)}.pos-right{position:static}}
+@media (max-width:640px){.pos-bar{grid-template-columns:1fr}.pos-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pos-key{min-height:52px}}
+
+/* Sidebar as pills (2026-10-13, from the owner's reference): every module is its own rounded pill on a quiet fill; the
+   current one is solid ink. Same flat list, order and icons. */
+.nav{padding:8px 12px 14px}
+.nav-section+.nav-section{margin-top:12px;padding-top:0;border-top:0}
+.nav-group{padding:0 14px 6px}
+.nav a{height:40px;padding:0 16px;gap:12px;margin-bottom:6px;border-radius:999px;background:var(--surface-3);color:var(--text-2);font-weight:500}
+.nav a:last-child{margin-bottom:0}
+.nav a:hover{background:var(--surface);box-shadow:inset 0 0 0 1px var(--text);color:var(--text)}
+.nav a[aria-current=page],.nav a[aria-current=page]:hover{background:var(--text);color:var(--bg);font-weight:600;box-shadow:none}
+:root[data-sidebar=collapsed] .nav a{padding:0;width:40px;margin-left:auto;margin-right:auto}
+/* POS counter (2026-10-13), second part: the grid scrolls with the page (the bill stays in view); bill lines are rows, not a wide table */
+.pos-grid{max-height:none;overflow:visible}
+.pos-tile-img{aspect-ratio:4/3}
+.pos-lines,.pos-lines tbody{display:block;width:100%}
+.pos-lines thead{display:none}
+.pos-lines tr{display:grid;grid-template-columns:minmax(0,1fr) auto auto 34px;grid-template-areas:"item qty amount remove" "price qty amount remove";column-gap:10px;align-items:center;padding:10px 8px;border-bottom:1px solid var(--border);border-radius:10px}
+.pos-lines td{padding:0;border:0;min-width:0}
+.pos-lines td:nth-child(1){grid-area:item}
+.pos-lines td:nth-child(2){grid-area:price;text-align:left;font-size:12px;color:var(--muted);padding-left:46px}
+.pos-lines td:nth-child(2):before{content:'each '}
+.pos-lines td:nth-child(3){grid-area:qty}
+.pos-lines td:nth-child(4){grid-area:amount;font-weight:600;min-width:86px}
+.pos-lines td:nth-child(5){grid-area:remove}
+.pos-lines td:nth-child(5) .btn{width:34px;min-width:0;height:34px;padding:0;justify-content:center}
+.pos-lines tbody tr.sel{background:var(--surface-3)}.pos-lines tbody tr.sel td{background:transparent}
+.pos-line-item .note{font-size:11.5px;line-height:1.35}
+.pos-right{max-height:calc(100vh - 24px);overflow-y:auto;scrollbar-width:thin}
+@media (max-width:1100px){.pos-right{max-height:none;overflow:visible}}
+@media (max-width:900px){.pos-lines{overflow-x:visible}}
+.pos-tile .pos-variant{flex:1 1 calc(33.33% - 6px);min-height:44px;min-width:64px}
+.pos-lines tr{grid-template-columns:minmax(0,1fr) auto auto 30px;column-gap:8px}
+.pos-lines .pos-qty{gap:4px}.pos-lines .pos-qty .btn{min-width:30px;min-height:30px;width:30px;height:30px}
+.pos-lines td:nth-child(4){min-width:78px}
+.pos-lines td:nth-child(5) .btn{width:30px;height:30px}
+/* payment method: the chosen one is solid ink, the others are outlined (they used to look the same) */
+.pos-method{background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none}
+.pos-method:hover{border-color:var(--text);background:var(--surface)}
+.pos-method.active,.pos-method.active:hover{background:var(--text);border-color:var(--text);color:var(--bg)}
+.nav a{padding:0 12px;gap:10px;font-size:13px}
+.pos-pay .pos-quick{flex:1 1 100%;order:3}
+.pos-pay .pos-change{flex:1 1 100%;order:4;margin:0}
+
+/* POS counter, lighter (2026-10-13, the owner found it congested and too big): smaller controls, more air, less text on screen */
+.pos{gap:24px;grid-template-columns:minmax(0,1.7fr) minmax(330px,400px)}
+.pos-left{gap:16px}
+.pos-bar{padding:12px 14px;gap:12px;grid-template-columns:minmax(160px,220px) minmax(0,1fr);border-radius:14px}
+.pos-bar label,.pos-search-label{font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.pos-bar .input,.pos-search{height:40px;font-size:14px;padding:0 12px;border-radius:9px;border-width:1px}
+.pos-cats{gap:8px}
+.pos-cat{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 12px;border-radius:999px}
+.pos-cat span{font-size:13px;color:var(--text-2)}.pos-cat b{font-size:12px;font-weight:600;color:var(--muted);background:var(--surface-3);border-radius:999px;padding:2px 7px}
+.pos-cat.active b{background:rgba(255,255,255,.18);color:var(--bg)}
+.pos-stock-head{font-size:12.5px;font-weight:500;color:var(--muted)}
+.pos-grid{grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px}
+.pos-tile{border-radius:12px}
+.pos-tile-img{aspect-ratio:1/1}
+.pos-tile-body{padding:10px 10px 0;gap:3px}
+.pos-tile-body b{font-size:13px;font-weight:600;min-height:0;-webkit-line-clamp:1}
+.pos-tile-meta{font-size:11.5px}.pos-tile-price{font-size:13px}
+.pos-tile .pos-variants{padding:8px 10px 10px;gap:5px;flex-wrap:wrap}
+.pos-tile .pos-variant{position:relative;flex:0 0 auto;min-width:38px;min-height:32px;height:32px;padding:0 9px;border-radius:8px;align-items:center;justify-content:center;background:var(--surface)}
+.pos-tile .pos-variant span{font-size:12.5px;font-weight:600}
+.pos-tile .pos-variant:hover:not(:disabled){background:var(--text);border-color:var(--text);color:var(--bg)}
+.pos-variant-more{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pos-right{padding:18px;border-radius:14px}
+.pos-bill-head h2{font-size:16px}
+.pos-empty{margin:10px 0 4px;padding:22px 14px;text-align:center;font-size:13px;color:var(--muted);border:1px dashed var(--border);border-radius:12px}
+.pos-customer{margin-top:14px}.pos-customer label,.pos-row label,.pos-pay label{font-size:12px;color:var(--muted);font-weight:500}
+.pos-customer input,.pos-row input,.pos-pay input{height:38px;font-size:14px;padding:0 11px;border-radius:9px}
+.pos-walkin{margin-top:6px}.pos-walkin summary{font-size:12.5px;color:var(--text-2);cursor:pointer;padding:4px 0;list-style:none}
+.pos-walkin summary::-webkit-details-marker{display:none}.pos-walkin summary:before{content:"+ ";font-weight:600}.pos-walkin[open] summary:before{content:"− "}
+.pos-walkin .pos-row{margin-top:6px}
+.pos-totals{padding:12px;font-size:13.5px;row-gap:5px}.pos-total{font-size:19px}
+.pos-pay{margin-top:14px}
+.pos-method{min-height:40px;font-size:13.5px;border-radius:9px}
+details.pos-pad{padding:8px 10px;border-radius:12px}
+.pos-pad>summary{font-size:12.5px;font-weight:500;color:var(--text-2);cursor:pointer;padding:2px 2px 0;list-style:none}
+.pos-pad>summary::-webkit-details-marker{display:none}.pos-pad>summary:after{content:"Show";float:right;color:var(--muted)}.pos-pad[open]>summary:after{content:"Hide"}
+.pos-pad[open]>summary{margin-bottom:8px}
+.pos-pad-tab{min-height:32px;font-size:12px}
+.pos-pad-target{margin:6px 2px}
+.pos-key{min-height:38px;font-size:15px;border-radius:9px}
+.pos-charge{min-height:50px;font-size:16px;margin-top:14px}
+.pos-foot .btn{min-height:36px;font-size:13px}
+@media (max-width:640px){.pos-key{min-height:48px}}

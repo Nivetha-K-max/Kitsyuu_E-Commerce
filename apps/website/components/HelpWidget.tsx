@@ -95,10 +95,21 @@ export default function HelpWidget() {
   const close = useCallback(() => { setOpen(false); setTimeout(() => launcher.current?.focus(), 0); }, []);
   // The bubble is offered once per visit: it goes when the window is first opened and does not come back.
   useEffect(() => { setBubble(!bubbleSeen()); }, []);
+  /* What the window shows comes from one request. If it fails (the connection dropped, the server was restarting) the
+     window says so and offers to try again; it also tries again by itself each time it is opened. Until it has loaded,
+     no form is offered, because a form without its topics could not be sent. */
+  const loading = useRef(false);
+  const load = () => {
+    if (loading.current) return;
+    loading.current = true; setFailed(false);
+    fetch('/api/help', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null))
+      .then((d: Data | null) => { if (d && d.topics.length) setData(d); else setFailed(true); })
+      .catch(() => setFailed(true)).finally(() => { loading.current = false; });
+  };
   const show = () => {
     setOpen(true);
     setBubble(false); try { sessionStorage.setItem(BUBBLE_SEEN, '1'); } catch { /* storage unavailable: the bubble may show again, nothing else depends on it */ }
-    if (!data) fetch('/api/help', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then((d: Data | null) => { if (d && d.topics.length) setData(d); else setFailed(true); }).catch(() => setFailed(true));
+    if (!data) load();
   };
   useEffect(() => {
     if (!open) return;
@@ -153,7 +164,14 @@ export default function HelpWidget() {
           </div>
 
           <div className="st-help-body" role="tabpanel" id={`${uid}-p-${tab}`} aria-labelledby={`${uid}-tab-${tab}`} data-help-view={tab}>
-            {tab === 'topics' && (failed ? <p className="st-form-alert" role="status" data-help-unavailable>Help topics are not available right now. You can still send us a message.</p> : !data ? <p className="st-help-note" aria-live="polite">Loading…</p> : <>
+            {!data && failed && (
+              <div className="st-form-alert" role="status" data-help-unavailable>
+                <p>Help could not be loaded just now. Check your connection and try again.</p>
+                <button type="button" className="button" onClick={load} data-help-retry>Try again</button>
+              </div>
+            )}
+            {!data && !failed && tab !== 'topics' && <p className="st-help-note" aria-live="polite">Loading…</p>}
+            {tab === 'topics' && (failed && !data ? null : !data ? <p className="st-help-note" aria-live="polite">Loading…</p> : <>
               <form className="st-help-ask" onSubmit={ask} data-help-ask>
                 <label htmlFor={`${uid}-q`}>What do you need help with?</label>
                 <div className="st-help-row"><input id={`${uid}-q`} name="q" type="search" maxLength={300} placeholder="e.g. where is my order" autoComplete="off" /><button type="submit" className="button" disabled={pending}>Search</button></div>
@@ -181,7 +199,7 @@ export default function HelpWidget() {
                 ? <>Your orders and their tracking are under <Link href="/account/orders" onClick={close}>My account → Orders</Link>.</>
                 : <><Link href="/login" onClick={close}>Sign in</Link> to see your orders and their tracking under My account.</>}</p>
             )}
-            {tab === 'order' && !(data && !data.guest) && <>
+            {tab === 'order' && data && data.guest && <>
               <form className="st-help-form" onSubmit={lookup} data-help-order-form>
                 <label htmlFor={`${uid}-on`}>Order number</label>
                 <input id={`${uid}-on`} name="orderNumber" required maxLength={40} autoComplete="off" autoCapitalize="characters" />
@@ -212,7 +230,7 @@ export default function HelpWidget() {
             {tab === 'message' && data && !data.guest && !data.signedIn && !sent?.ok && (
               <p className="st-help-note" data-help-message-closed><Link href="/login" onClick={close}>Sign in</Link> or <Link href="/signup" onClick={close}>create an account</Link> to send us a message. We reply by email.</p>
             )}
-            {tab === 'message' && !(data && !data.guest && !data.signedIn && !sent?.ok) && (sent?.ok ? (
+            {tab === 'message' && data && !(!data.guest && !data.signedIn && !sent?.ok) && (sent?.ok ? (
               <div aria-live="polite"><p className="st-form-ok" role="status" data-help-sent>{sent.message}</p>
                 <button type="button" className="text-link" onClick={() => setSent(null)}>Send another message</button></div>
             ) : (

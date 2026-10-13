@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import pg from 'pg';
 import {launch} from './cdp.mjs';
 
-const {BASE, LIMIT_BASE, HELP_STRICT_BASE, SERVER_LOG, KITSYUU_DB_URL} = process.env;
+const {BASE, LIMIT_BASE, LIMIT_DOWN_BASE, HELP_STRICT_BASE, SERVER_LOG, KITSYUU_DB_URL} = process.env;
 if (!/@localhost[:/]/.test(KITSYUU_DB_URL || '')) throw new Error('help tests only run against a local database');
 const out = []; const ok = (n, p, x = '') => { const l = `${p ? 'PASS' : 'FAIL'}  ${n}${x ? '  — ' + x : ''}`; out.push(l); console.log(l); };
 const w = ms => new Promise(r => setTimeout(r, ms));
@@ -153,6 +153,33 @@ try {
   await b.viewport(1440, 900);
   await go('/shop'); await openHelp(); await b.shot('help.png');
 
+  // ---------- the window could not load its content: it says so, offers no unusable form, and can try again (2026-10-12) ----------
+  await b.viewport(1440, 900);
+  await b.send('Network.clearBrowserCookies');
+  await go('/shop');
+  // The first request for the window's content fails (as when the connection drops); later ones go through.
+  await ev(`(()=>{const real=window.fetch;let failedOnce=false;window.fetch=(...a)=>{if(String(a[0]).includes('/api/help')&&!failedOnce){failedOnce=true;return Promise.reject(new TypeError('Failed to fetch'));}return real(...a);};return true})()`);
+  await click('[data-help-open]');
+  ok('could not load: the window says so and offers "Try again"', (await until(`!!document.querySelector('[data-help-unavailable] [data-help-retry]')`, 10000)) && /could not be loaded/.test(await text('[data-help-unavailable]')) && !(await exists('[data-help-topic]')));
+  await tab('message');
+  ok('could not load: no message form is offered while its topics are missing (nothing that cannot be sent)', !(await exists('[data-help-message-form]')) && (await exists('[data-help-retry]')));
+  await tab('order');
+  ok('could not load: no order form is offered either', !(await exists('[data-help-order-form]')));
+  await click('[data-help-retry]');
+  await tab('message');
+  ok('could not load: "Try again" loads it; the message form then has its topics and can be sent', (await until(`document.querySelectorAll('[data-help-message-form] select[name=categoryCode] option').length > 1 && !document.querySelector('[data-help-unavailable]')`, 12000))
+    && (await ev(`!document.querySelector('[data-help-message-form] button[type=submit]').disabled`)));
+  await tab('topics');
+  ok('could not load: after trying again the six help topics are there', (await ev(`document.querySelectorAll('[data-help-topic]').length`)) === 6);
+  // Closing and opening again also tries again by itself.
+  await go('/shop');
+  await ev(`(()=>{const real=window.fetch;let failedOnce=false;window.fetch=(...a)=>{if(String(a[0]).includes('/api/help')&&!failedOnce){failedOnce=true;return Promise.reject(new TypeError('Failed to fetch'));}return real(...a);};return true})()`);
+  await click('[data-help-open]');
+  await until(`!!document.querySelector('[data-help-unavailable]')`, 10000);
+  await key('Escape', 'Escape', 27); await until(`!document.querySelector('[data-help-panel]')`, 5000);
+  await click('[data-help-open]');
+  ok('could not load: opening the window again tries again without being asked', await until(`document.querySelectorAll('[data-help-topic]').length === 6 && !document.querySelector('[data-help-unavailable]')`, 12000));
+
   // ---------- the robot mascot: a second way to the same window (2026-10-12) ----------
   await b.viewport(1440, 900);
   await b.send('Network.clearBrowserCookies');
@@ -283,6 +310,20 @@ try {
     if (r.sent) { await click('[data-help-sent] ~ button'); await until(`!!document.querySelector('[data-help-message-form]')`); }
   }
   ok('limits: three messages an hour from one address; the fourth is refused and stores nothing', sends.slice(0, 3).every(r => /TCK-/.test(r.sent)) && /Too many attempts/.test(sends[3].error) && (await tickets()) === t2 + 3, JSON.stringify(sends[3]));
+
+  // ---------- the limiter is configured but cannot be reached (LIMIT_DOWN_BASE): guest features are refused, not let through uncounted ----------
+  if (LIMIT_DOWN_BASE) {
+    await b.send('Network.clearBrowserCookies');
+    await go('/shop', LIMIT_DOWN_BASE);
+    ok('limiter down: the help topics still open (reading them does not depend on the limiter)', await openHelp());
+    await tab('order');
+    const down = await lookup('KTS-HELP-0002', 'someone.else@example.com');
+    ok('limiter down: a guest order lookup with the RIGHT contact is refused, nothing about the order is shown', down.state === 'refused' && /not available right now/.test(down.text) && !/KTS-HELP-0002.*(Placed|Delivered|Shipped)/.test(down.text), JSON.stringify(down));
+    await tab('message');
+    const t3 = await tickets();
+    const dm = await message({name: 'Guest', email: 'down.guest@example.com', categoryCode: cat.code, subject: 'Question', body: 'Hello.'});
+    ok('limiter down: a guest message is refused and nothing is stored', /not available right now/.test(dm.error ?? '') && (await tickets()) === t3, JSON.stringify(dm));
+  }
 
   ok('no page errors during the run', b.errors.filter(e => !/http 40[345]|favicon/.test(e)).length === 0, b.errors.filter(e => !/http 40[345]|favicon/.test(e)).slice(0, 3).join(' | '));
 } catch (e) {

@@ -25,9 +25,28 @@ import type { MutationContext } from './staff.ts';
 export interface LoyaltySettings {
   enabled: boolean; earnPer100: number | null; earnWhen: 'paid' | 'delivered' | null;
   pointValuePaise: number | null; minRedeem: number | null; maxRedeem: number | null; expiryMonths: number | null;
+  /** Points from which a customer is Silver / Gold / Diamond; null until all three are set in rising order. */
+  tiers: LoyaltyTiers | null;
+}
+/* Tiers (2026-10-13): a staff-side label that follows the CURRENT points balance (it falls when points are used or
+   expire). No benefit is attached to a tier. */
+export const LOYALTY_TIERS = ['diamond', 'gold', 'silver'] as const;
+export type LoyaltyTier = typeof LOYALTY_TIERS[number];
+export type LoyaltyTiers = Record<LoyaltyTier, number>;
+export const LOYALTY_TIER_LABELS: Record<LoyaltyTier, string> = { diamond: 'Diamond', gold: 'Gold', silver: 'Silver' };
+/** The tier of a balance (pure); null below Silver or when tiers are not set. */
+export function loyaltyTier(t: LoyaltyTiers | null, balance: number): LoyaltyTier | null {
+  return !t ? null : LOYALTY_TIERS.find(k => balance >= t[k]) ?? null;
+}
+/** The next tier up and the points still missing for it (pure); null at the top or when tiers are not set. */
+export function loyaltyNextTier(t: LoyaltyTiers | null, balance: number): { tier: LoyaltyTier; points: number } | null {
+  if (!t) return null;
+  const next = [...LOYALTY_TIERS].reverse().find(k => balance < t[k]);
+  return next ? { tier: next, points: t[next] - balance } : null;
 }
 export const LOYALTY_KEYS = ['loyalty.enabled', 'loyalty.earn_points_per_100', 'loyalty.earn_when', 'loyalty.point_value_paise',
-  'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months'] as const;
+  'loyalty.min_redeem_points', 'loyalty.max_redeem_points', 'loyalty.expiry_months',
+  'loyalty.tier_silver_points', 'loyalty.tier_gold_points', 'loyalty.tier_diamond_points'] as const;
 
 const posInt = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : null);
 
@@ -35,7 +54,9 @@ export async function readLoyaltySettings(q: Queryable): Promise<LoyaltySettings
   const rows = await q.selectFrom('settings').select(['key', 'value']).where('key', 'in', [...LOYALTY_KEYS]).execute();
   const v = new Map(rows.map(r => [r.key, r.value]));
   const when = v.get('loyalty.earn_when');
+  const [silver, gold, diamond] = ['silver', 'gold', 'diamond'].map(k => posInt(v.get(`loyalty.tier_${k}_points` as typeof LOYALTY_KEYS[number])));
   return {
+    tiers: silver && gold && diamond && silver < gold && gold < diamond ? { silver, gold, diamond } : null,
     enabled: v.get('loyalty.enabled') === 'on', earnPer100: posInt(v.get('loyalty.earn_points_per_100')),
     earnWhen: when === 'paid' || when === 'delivered' ? when : null, pointValuePaise: posInt(v.get('loyalty.point_value_paise')),
     minRedeem: posInt(v.get('loyalty.min_redeem_points')), maxRedeem: posInt(v.get('loyalty.max_redeem_points')), expiryMonths: posInt(v.get('loyalty.expiry_months')),
@@ -293,21 +314,32 @@ export async function getCustomerLoyalty(db: Db, actor: StaffPrincipal, customer
   const [balance, rows, totals] = await Promise.all([loyaltyBalance(db, customerId), history(db, customerId, 100), loyaltyTotals(db, customerId)]);
   const ids = [...new Set(rows.map(r => r.staff_id).filter((x): x is string => !!x))];
   const staff = new Map(ids.length ? (await db.selectFrom('staff_users').select(['id', 'email']).where('id', 'in', ids).execute()).map(s => [s.id, s.email]) : []);
-  return { balance, totals, rows: rows.map(r => ({ ...r, staff_email: r.staff_id ? staff.get(r.staff_id) ?? null : null })) };
+  const { tiers } = await readLoyaltySettings(db);
+  return { balance, totals, tiers, tier: loyaltyTier(tiers, balance), next: loyaltyNextTier(tiers, balance), rows: rows.map(r => ({ ...r, staff_email: r.staff_id ? staff.get(r.staff_id) ?? null : null })) };
 }
 
 /** Staff: customers with points (Loyalty page), biggest balances first, and the latest point changes. */
-export async function listLoyaltyAccounts(db: Db, actor: StaffPrincipal, query: { q?: string; page: number }) {
+export async function listLoyaltyAccounts(db: Db, actor: StaffPrincipal, query: { q?: string; page: number; tier?: LoyaltyTier | 'none' }) {
   requirePermission(actor, 'loyalty.read');
+  const settings = await readLoyaltySettings(db), t = settings.tiers;
+  // [from, below) in points for each tier; 'none' = has points, not yet Silver.
+  const band = (k: LoyaltyTier | 'none'): [number, number | null] | null => !t ? null
+    : k === 'diamond' ? [t.diamond, null] : k === 'gold' ? [t.gold, t.diamond] : k === 'silver' ? [t.silver, t.gold] : [1, t.silver];
   let q = db.selectFrom('loyalty_accounts as a').innerJoin('customers as c', 'c.id', 'a.customer_id')
     .select(['c.id', 'c.email', 'c.full_name', 'a.balance', 'a.updated_at']).where('a.balance', '>', 0);
   if (query.q) q = q.where(eb => eb.or([eb('c.email', 'ilike', `%${query.q}%`), eb('c.full_name', 'ilike', `%${query.q}%`)]));
+  const want = query.tier ? band(query.tier) : null;
+  if (want) { q = q.where('a.balance', '>=', want[0]); if (want[1] != null) q = q.where('a.balance', '<', want[1]); }
+  const counts = t ? await db.selectFrom('loyalty_accounts').select([
+    sql<number>`count(*) filter (where balance >= ${t.diamond})::int`.as('diamond'), sql<number>`count(*) filter (where balance >= ${t.gold} and balance < ${t.diamond})::int`.as('gold'),
+    sql<number>`count(*) filter (where balance >= ${t.silver} and balance < ${t.gold})::int`.as('silver'), sql<number>`count(*) filter (where balance > 0 and balance < ${t.silver})::int`.as('none'),
+  ]).executeTakeFirstOrThrow() : null;
   const rows = await q.orderBy('a.balance', 'desc').orderBy('c.email').limit(51).offset((query.page - 1) * 50).execute();
   const totals = await db.selectFrom('loyalty_accounts').select([sql<number>`coalesce(sum(balance), 0)::int`.as('points'), sql<number>`count(*) filter (where balance > 0)::int`.as('customers')]).executeTakeFirstOrThrow();
   const recent = await db.selectFrom('loyalty_transactions as t').innerJoin('customers as c', 'c.id', 't.customer_id').leftJoin('orders as o', 'o.id', 't.order_id')
     .select(['t.id', 't.points', 't.kind', 't.reason', 't.created_at', 'c.id as customer_id', 'c.email', 'o.id as order_id', 'o.order_number'])
     .orderBy('t.created_at', 'desc').orderBy('t.id').limit(30).execute();
-  return { rows: rows.slice(0, 50), hasNext: rows.length > 50, totals, recent, settings: await readLoyaltySettings(db) };
+  return { rows: rows.slice(0, 50).map(r => ({ ...r, tier: loyaltyTier(t, r.balance), next: loyaltyNextTier(t, r.balance) })), hasNext: rows.length > 50, totals, recent, settings, counts };
 }
 
 const REFUND_REASON = 'Refund adjustment';

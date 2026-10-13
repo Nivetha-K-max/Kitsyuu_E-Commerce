@@ -119,6 +119,11 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def('loyalty.min_redeem_points', 'Fewest points per order', 'Loyalty', 'The fewest points a customer can use on one order. Leave empty for no minimum.', { kind: 'integer', min: 1, max: 1_000_000, unit: 'points', optional: true }),
   def('loyalty.max_redeem_points', 'Most points per order', 'Loyalty', 'The most points a customer can use on one order. Leave empty for no maximum (points can never take off more than the items cost).', { kind: 'integer', min: 1, max: 1_000_000, unit: 'points', optional: true }),
   def('loyalty.expiry_months', 'Points expire after', 'Loyalty', 'Unused points expire this many months after they were added. Leave empty: points never expire.', { kind: 'integer', min: 1, max: 120, unit: 'months', optional: true }),
+  // Loyalty tiers (2026-10-13, the owner's decision): a label that follows the customer's CURRENT points balance. Staff screens only;
+  // a tier gives no benefit. Tiers are shown only when all three are entered, each higher than the one before.
+  def('loyalty.tier_silver_points', 'Silver from', 'Loyalty', 'A customer holding at least this many points is Silver. Tiers are a label for staff (Customers → Loyalty); they give no discount or extra points. Leave the three tier values empty for no tiers.', { kind: 'integer', min: 1, max: 100_000_000, unit: 'points', optional: true }),
+  def('loyalty.tier_gold_points', 'Gold from', 'Loyalty', 'A customer holding at least this many points is Gold. Must be more than Silver.', { kind: 'integer', min: 1, max: 100_000_000, unit: 'points', optional: true }),
+  def('loyalty.tier_diamond_points', 'Diamond from', 'Loyalty', 'A customer holding at least this many points is Diamond. Must be more than Gold.', { kind: 'integer', min: 1, max: 100_000_000, unit: 'points', optional: true }),
   // Commerce workflows (2026-10-01): staff discounts, order emails, automatic cart reminders. Everything starts off / empty.
   def('discounts.staff_max_percent', 'Maximum staff discount', 'Discounts', 'The largest % staff with the order-discount permission can give on a draft order (for example 10). A product’s minimum price (Products) is never undercut. With no value, staff cannot give discounts.',
     { kind: 'integer', min: 1, max: 90, unit: '%' }),

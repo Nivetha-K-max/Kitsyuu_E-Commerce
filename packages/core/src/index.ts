@@ -182,7 +182,7 @@ export { cartRefreshMinutes, CART_REFRESH_DEFAULT_MINUTES } from './cart.ts';
 export { readCodSettings, codQuote, codDiscount, codQuoteFrom, recordCodCollected, cancelCodOrder, orderCodState, COD_KEYS, type CodQuote, type CodSettings } from './cod.ts';
 export {
   readLoyaltySettings, quoteLoyalty, pointsForAmount, loyaltyBalance, adjustLoyaltyPoints, parseLoyaltyImport, importLoyaltyPoints, expireLoyaltyPoints,
-  getMyLoyalty, getCustomerLoyalty, listLoyaltyAccounts, LOYALTY_KEYS, LOYALTY_KIND_LABELS, LOYALTY_IMPORT_MAX_LINES, type LoyaltyQuote, type LoyaltySettings,
+  getMyLoyalty, getCustomerLoyalty, listLoyaltyAccounts, LOYALTY_KEYS, LOYALTY_KIND_LABELS, LOYALTY_IMPORT_MAX_LINES, LOYALTY_TIERS, LOYALTY_TIER_LABELS, loyaltyTier, loyaltyNextTier, type LoyaltyQuote, type LoyaltySettings, type LoyaltyTier, type LoyaltyTiers,
 } from './loyalty.ts';
 export { editOrder, orderEditBlocker, orderEditOptions, listOrderEdits, refundOrderEdit } from './order-edit.ts';
 export type { PaymentChoice } from './pricing.ts';

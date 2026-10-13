@@ -23,7 +23,7 @@ const exists = sel => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
 const text = sel => ev(`document.querySelector(${JSON.stringify(sel)})?.innerText ?? ''`);
 const key = async (k, code, vk, shift = false) => { for (const type of ['keyDown', 'keyUp']) await b.send('Input.dispatchKeyEvent', {type, key: k, code, windowsVirtualKeyCode: vk, modifiers: shift ? 8 : 0}); await w(60); };
 /** Scrolls into the store the way a visitor would (a real scroll event); on the home page, to the store section. */
-const scrollIn = () => ev(`(()=>{const s=location.pathname==='/'?document.getElementById('store'):null;if(s)s.scrollIntoView();else scrollTo(0,Math.max(900,innerHeight));dispatchEvent(new Event('scroll'));return true})()`);
+const scrollIn = () => ev(`(()=>{const s=location.pathname==='/'?(document.querySelector('[data-offer-trigger]')||document.getElementById('store')):null;if(s)s.scrollIntoView();else scrollTo(0,Math.max(900,innerHeight));dispatchEvent(new Event('scroll'));return true})()`);
 const shown = (ms = 8000) => until(`!!document.querySelector('[data-first-offer] [data-offer-dialog]')`, ms);
 /** A fresh browser session for the popup. The popup reads its "closed" note when a page loads, so this is called BEFORE going to the page. */
 const newSession = () => ev(`(()=>{try{sessionStorage.clear()}catch{}return true})()`);
@@ -155,8 +155,15 @@ try {
   // ---------- home page: only once the visitor reaches the store ----------
   await newSession(); await go('/', 'document.readyState === "complete"');
   ok('home page: nothing over the landing film', !(await shown(1500)));
-  await scrollIn();
-  ok('home page: the offer opens once the store section is reached', await shown());
+  // 2026-10-13: the moment is the New arrivals section, not the hero above it.
+  await ev(`(()=>{const t=document.querySelector('[data-offer-trigger]');scrollTo(0,scrollY+t.getBoundingClientRect().top-innerHeight*0.95);dispatchEvent(new Event('scroll'));return true})()`);
+  ok('home page: still nothing while New arrivals is only just below the screen edge (the hero is in view)', !(await shown(1500)));
+  // The home page holds the scroll for a moment where the film ends, so the section is scrolled to until it is really in view.
+  for (let i = 0; i < 8 && !(await ev(`document.querySelector('[data-offer-trigger]').getBoundingClientRect().top <= innerHeight * 0.5`)); i++) {
+    await ev(`(()=>{const t=document.querySelector('[data-offer-trigger]');scrollTo(0,scrollY+t.getBoundingClientRect().top+40);dispatchEvent(new Event('scroll'));return true})()`); await w(500);
+  }
+  await ev(`dispatchEvent(new Event('scroll')),true`);
+  ok('home page: the offer opens once the New arrivals section is reached', await shown());
   await key('Escape', 'Escape', 27);
 
   // ---------- phone width, reduced motion ----------

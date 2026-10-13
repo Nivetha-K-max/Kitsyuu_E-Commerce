@@ -45,7 +45,7 @@ export default async function StoreHome() {
       <Choreo />
 
       {/* 01 — New arrivals: one large frame; scrolling moves through the pieces (a swipe strip on phones). */}
-      <section className="st-section ch-na" aria-labelledby="st-na-title">
+      <section className="st-section ch-na" aria-labelledby="st-na-title" data-offer-trigger>
         <div className="st-wrap">
           <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(naList.length, 'piece') : ''}</span></div>
           <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.collection('new-arrivals')}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>

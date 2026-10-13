@@ -870,3 +870,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
   .st-help-bubble{font-size:12px;padding:6px 10px}
 }
 @media (prefers-reduced-motion:reduce){.st-help-mascot-body,.st-help-mascot-arm,.st-help-mascot-eyes{animation:none}}
+
+/* The help window could not load: the message and its "Try again" button (2026-10-12). */
+.st-help [data-help-unavailable] p{margin:0 0 12px}
+.st-help [data-help-unavailable] .button{width:100%}

@@ -129,6 +129,25 @@ test('change password requires the current one', async () => {
   assert.deepEqual(await changeStaffPassword(db, p, {current: 'wrong wrong wrong', password: 'x'.repeat(14)}, ctx), {ok: false, error: 'wrong_current'});
 });
 
+test('regression 2026-10-13: a changed sign-in email ends that person\'s sessions and the reset links sent to the old mailbox', async () => {
+  const login = await loginStaff(db, {email: 'admin@test.local', password: 'a brand new long password'}, ctx);
+  assert.ok(login.ok && await validateStaffSession(db, login.token));
+  outbox.length = 0;
+  await requestStaffPasswordReset(db, mailer, {email: 'admin@test.local'}, {...ctx, resetUrl: t => `http://test/reset-password?token=${t}`});
+  const oldLink = lastLink();
+  const root = await principal(superSession);
+  await updateStaff(db, root, {staffId: admin.staffId, email: 'admin.moved@test.local', fullName: 'Admin'}, mctx);
+  assert.equal(await validateStaffSession(db, login.token), null, 'signed out everywhere');
+  assert.deepEqual(await resetStaffPassword(db, {token: oldLink, password: 'taken over with the old link'}, ctx), {ok: false, error: 'invalid_link'});
+  assert.ok((await loginStaff(db, {email: 'admin.moved@test.local', password: 'a brand new long password'}, ctx)).ok, 'the password itself is unchanged');
+  // A change of name only signs nobody out; the person changing their own email keeps the session they are using.
+  const again = await loginStaff(db, {email: 'admin.moved@test.local', password: 'a brand new long password'}, ctx);
+  await updateStaff(db, root, {staffId: admin.staffId, email: 'admin.moved@test.local', fullName: 'Admin Renamed'}, mctx);
+  assert.ok(await validateStaffSession(db, again.token));
+  await updateStaff(db, root, {staffId: admin.staffId, email: 'admin@test.local', fullName: 'Admin'}, mctx);
+  assert.ok(await validateStaffSession(db, superSession), 'the super admin who made the changes is still signed in');
+});
+
 test('throttling after repeated failures (per email), even for the right password', async () => {
   for (let i = 0; i < 5; i++) await loginStaff(db, {email: 'root@test.local', password: 'bad password ' + i}, {...ctx, ip: '10.9.9.' + i});
   const r = await loginStaff(db, {email: 'root@test.local', password: PW}, {...ctx, ip: '10.9.9.99'});

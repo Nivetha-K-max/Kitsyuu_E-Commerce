@@ -270,6 +270,40 @@ test('returns: a POS sale follows the normal return rules; restock and exchange 
   assert.equal(bill.returns.length, 2); assert.equal(bill.canVoid, false);
 });
 
+test('regression 2026-10-13: a repeated bill key is a replay only of the SAME bill; a voided bill is never replayed', async () => {
+  const have = await locQty(store2, V3.id);
+  await adjustLocationStock(admin, manager, {locationId: store2, variantId: V3.id, delta: 8, reason: 'restock', note: 'Regression stock', expectedQty: have}, ctx);
+  const lines = [{variantId: V3.id, qty: 1}], cash = {method: 'cash', tenderedPaise: 10_000_000}, k = key();
+  const sold = async () => (await q(`select count(*)::int n from orders where pos_session_id = $1`, [s2m.id]))[0].n;
+  const first = await sell(manager, s2m, lines, cash, {key: k});
+  const [stock, orders] = [await locQty(store2, V3.id), await sold()];
+  // The answer was lost and the cashier presses Charge again: the same bill comes back, nothing is sold twice.
+  const again = await sell(manager, s2m, lines, cash, {key: k});
+  assert.deepEqual([again.replay, again.orderId, again.posNumber], [true, first.orderId, first.posNumber]);
+  // The same key with something else on the screen (an item added, another way to pay) is NOT reported as paid.
+  await assert.rejects(sell(manager, s2m, [{variantId: V3.id, qty: 2}], cash, {key: k}), e => e instanceof ConflictError && /already paid as/.test(e.message) && e.message.includes(first.posNumber));
+  await assert.rejects(sell(manager, s2m, lines, {method: 'upi', reference: 'UPI-REG-0001'}, {key: k}), /already paid as/);
+  assert.deepEqual([await locQty(store2, V3.id), await sold()], [stock, orders], 'no stock taken and no order written by the refused attempts');
+  // Once voided, the key no longer answers "paid".
+  await voidPosSale(admin, manager, {orderId: first.orderId, reason: 'Regression: voided before a late retry'}, ctx);
+  await assert.rejects(sell(manager, s2m, lines, cash, {key: k}), e => e instanceof ConflictError && /has since been voided/.test(e.message));
+  assert.deepEqual([await locQty(store2, V3.id), await sold()], [stock + 1, orders]);
+});
+
+test('regression 2026-10-13: void — refused once a tax invoice is issued; the report leaves voids out of the payment methods', async () => {
+  // The first Store 1 sale has a tax invoice (the test above): it is corrected through Returns & refunds, not voided.
+  const [inv] = await q(`select o.id, o.status from orders o join invoices i on i.order_id = o.id where o.pos_session_id = $1 limit 1`, [s1.id]);
+  await assert.rejects(voidPosSale(admin, manager, {orderId: inv.id, reason: 'Regression: has an invoice'}, ctx), e => e instanceof ConflictError && /cannot be voided/.test(e.message));
+  assert.equal((await q(`select status from orders where id = $1`, [inv.id]))[0].status, inv.status, 'the invoiced sale is untouched');
+  assert.equal((await q(`select count(*)::int n from refunds where order_id = $1 and reference like 'VOID %'`, [inv.id]))[0].n, 0);
+  // Report: a voided sale is counted under "voided", not under a payment method.
+  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const rep = await posReport(admin, accountant, {from: today, to: today});
+  const [{live, dead}] = await q(`select count(*) filter (where status <> 'cancelled')::int live, count(*) filter (where status = 'cancelled')::int dead from orders where pos_number is not null`);
+  assert.equal(rep.methods.reduce((x, m) => x + m.count, 0), live);
+  assert.equal(rep.voided, dead);
+});
+
 test('close session: expected cash = opening + cash sales − cash voids; a variance needs a note; report by method, cashier and branch', async () => {
   const sum = await posSessionSummary(admin, s1.id);
   const cash = (await q(`select coalesce(sum(p.amount_paise), 0)::int n from payments p join orders o on o.id = p.order_id where o.pos_session_id = $1 and p.method = 'cash'`, [s1.id]))[0].n;
@@ -290,10 +324,10 @@ test('close session: expected cash = opening + cash sales − cash voids; a vari
   const rep = await posReport(admin, accountant, {from: today, to: today});
   const [{n}] = await q(`select count(*)::int n from orders where pos_number is not null`);
   assert.equal(rep.transactions, n);
-  assert.equal(rep.methods.reduce((x, m) => x + m.count, 0), n);
+  assert.equal(rep.methods.reduce((x, m) => x + m.count, 0), n - rep.voided, 'voided sales are not counted under a payment method');
   assert.deepEqual(rep.byLocation.map(l => l.name).sort(), ['Chennai Store 1', 'Chennai Store 2']);
   assert.ok(rep.byCashier.some(c => c.name === 'pos.sales@test.local'));
-  assert.equal(rep.voided, 1); assert.ok(rep.returnRefundsPaise > 0); assert.equal(rep.netPaise, rep.grossPaise - rep.voidRefundsPaise - rep.returnRefundsPaise);
+  assert.equal(rep.voided, 2); assert.ok(rep.returnRefundsPaise > 0); assert.equal(rep.netPaise, rep.grossPaise - rep.voidRefundsPaise - rep.returnRefundsPaise);
   const stores2 = await posReport(admin, root, {from: today, to: today, locationId: store2});
   assert.deepEqual(stores2.byLocation.map(l => l.name), ['Chennai Store 2']);
   assert.equal((await listPosSessions(admin, sales)).length, 1, 'a cashier sees their own sessions');

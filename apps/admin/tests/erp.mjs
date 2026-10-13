@@ -159,6 +159,22 @@ try {
     && (await q(`select count(*)::int n from loyalty_transactions where customer_id = $1 and reason = 'E2E gift'`, [cust.id]))[0].n === 1);
   await visit('/loyalty');
   ok('loyalty: the customer is listed with their points', await exists('[data-loyalty-customer="loyal.e2e@test.local"]'));
+  // loyalty tiers (2026-10-13): a label by current balance, shown once Silver < Gold < Diamond are set in Configuration → Loyalty
+  ok('loyalty tiers: nothing about tiers in the list until they are set', !(await exists('[data-loyalty-tiers]')) && !(await exists('[data-loyalty-tier]')) && /Not set/.test(await text('[data-loyalty-tier-rule]')));
+  await q(`insert into settings (key, value) values ('loyalty.tier_silver_points', '10'), ('loyalty.tier_gold_points', '50'), ('loyalty.tier_diamond_points', '1000') on conflict (key) do update set value = excluded.value`);
+  await visit('/loyalty');
+  ok('loyalty tiers: the rule is shown, and the customer holding 50 points is Gold with 950 to Diamond', /Silver from 10 points, Gold from 50, Diamond from 1,000/.test(await text('[data-loyalty-tier-rule]'))
+    && (await ev(`document.querySelector('[data-loyalty-customer="loyal.e2e@test.local"] [data-loyalty-tier]')?.dataset.loyaltyTier`)) === 'gold'
+    && /950 points to Diamond/.test(await text('[data-loyalty-customer="loyal.e2e@test.local"]')), await text('[data-loyalty-customer="loyal.e2e@test.local"]'));
+  ok('loyalty tiers: filter chips with counts (All, Diamond, Gold, Silver, No tier)', (await ev(`[...document.querySelectorAll('[data-loyalty-tier-chip]')].map(a => a.dataset.loyaltyTierChip).join()`)) === 'all,diamond,gold,silver,none'
+    && /Gold\s*1/.test(await text('[data-loyalty-tier-chip=gold]')), await text('[data-loyalty-tiers]'));
+  await visit('/loyalty?tier=gold');
+  const goldHas = await exists('[data-loyalty-customer="loyal.e2e@test.local"]');
+  await visit('/loyalty?tier=diamond');
+  ok('loyalty tiers: the Gold filter lists the customer, the Diamond filter does not', goldHas && !(await exists('[data-loyalty-customer="loyal.e2e@test.local"]')));
+  await visit(`/customers/${cust.id}?tab=loyalty`, '!!document.querySelector("#loyalty-adjust-form")');
+  ok('loyalty tiers: the customer record shows the same tier', /Gold/.test(await text('[data-loyalty-tier]')), await text('[data-loyalty-tier]'));
+  await q(`delete from settings where key like 'loyalty.tier_%'`);
   await visit('/settings?group=all');
   ok('settings: cash on delivery and loyalty settings are listed, with no value', await exists('[data-setting="payments.cod_enabled"]') && await exists('[data-setting="loyalty.point_value_paise"]'));
 

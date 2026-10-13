@@ -13,6 +13,7 @@
    Payment state: there is no card terminal or UPI integration. A sale is completed only when the cashier confirms the
    payment: cash needs the amount received (≥ the total; the change is worked out), card / UPI need the transaction
    reference shown by the terminal / UPI app. Nothing is recorded as paid without that confirmation. */
+import { createHash } from 'node:crypto';
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError, MAX_QTY_PER_LINE } from '@kitsyuu/contracts';
 import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
@@ -138,7 +139,7 @@ export async function listPosSessions(db: Db, actor: StaffPrincipal, opts: { all
 
 // ---------------------------------------------------------------- product search
 export type PosVariant = { variantId: string; sku: string; barcode: string | null; size: string; colour: string | null; colourLabel: string | null; unitPaise: number; stock: number };
-export type PosProduct = { productId: string; name: string; imagePath: string | null; variants: PosVariant[] };
+export type PosProduct = { productId: string; name: string; imagePath: string | null; /** the product's category (counter filter chips) */ category: string | null; variants: PosVariant[] };
 
 /** Products by name, SKU (or SKU prefix) or barcode, with each size's price and the stock AT THIS BRANCH. An exact barcode
     or SKU match returns just that size (a scan adds it straight to the bill). */
@@ -149,7 +150,7 @@ export async function searchPosProducts(db: Db, actor: StaffPrincipal, input: { 
   const like = `${term.toLowerCase().replace(/[%_\\]/g, m => '\\' + m)}%`;
   const word = `%${term.toLowerCase().replace(/[%_\\]/g, m => '\\' + m)}%`;
   const rows = await variantQuery(db).leftJoin('location_stock as ls', join => join.onRef('ls.variant_id', '=', 'v.id').on('ls.location_id', '=', input.locationId))
-    .select(['v.barcode', sql<number>`coalesce(ls.qty, 0)::int`.as('branch_qty'), 'v.sort_order'])
+    .select(['v.barcode', sql<string | null>`(select c.label from public.categories c where c.id = p.category_id)`.as('category_label'), sql<number>`coalesce(ls.qty, 0)::int`.as('branch_qty'), 'v.sort_order'])
     .where('v.is_active', '=', true)
     .where(eb => eb.or([eb('v.barcode', '=', term), sql<boolean>`lower(v.sku) like ${like}`, sql<boolean>`lower(p.sku) like ${like}`, sql<boolean>`lower(p.name) like ${word}`]))
     .orderBy('p.name').orderBy('v.colour_slug').orderBy('v.sort_order').limit(200).execute();
@@ -158,7 +159,7 @@ export async function searchPosProducts(db: Db, actor: StaffPrincipal, input: { 
   const hit = rows.find(r => r.barcode === term) ?? rows.find(r => r.sku.toLowerCase() === term.toLowerCase());
   const products = new Map<string, PosProduct>();
   for (const r of rows) {
-    const p = products.get(r.product_id) ?? { productId: r.product_id, name: r.name, imagePath: r.image_path, variants: [] };
+    const p = products.get(r.product_id) ?? { productId: r.product_id, name: r.name, imagePath: r.image_path, category: r.category_label, variants: [] };
     p.variants.push(toVariant(r));
     products.set(r.product_id, p);
   }
@@ -171,12 +172,12 @@ export async function listPosBranchStock(db: Db, actor: StaffPrincipal, input: {
   requirePermission(actor, 'pos.access');
   const limit = Math.min(Math.max(input.limit ?? 40, 1), 100);
   const rows = await variantQuery(db).innerJoin('location_stock as ls', join => join.onRef('ls.variant_id', '=', 'v.id').on('ls.location_id', '=', input.locationId))
-    .select(['v.barcode', sql<number>`ls.qty::int`.as('branch_qty'), 'v.sort_order'])
+    .select(['v.barcode', sql<string | null>`(select c.label from public.categories c where c.id = p.category_id)`.as('category_label'), sql<number>`ls.qty::int`.as('branch_qty'), 'v.sort_order'])
     .where('v.is_active', '=', true).where('ls.qty', '>', 0)
     .orderBy('p.name').orderBy('v.colour_slug').orderBy('v.sort_order').limit(1500).execute();
   const products = new Map<string, PosProduct>();
   for (const r of rows) {
-    const p = products.get(r.product_id) ?? { productId: r.product_id, name: r.name, imagePath: r.image_path, variants: [] };
+    const p = products.get(r.product_id) ?? { productId: r.product_id, name: r.name, imagePath: r.image_path, category: r.category_label, variants: [] };
     p.variants.push({ variantId: r.variant_id, sku: r.sku, barcode: r.barcode, size: r.size, colour: r.colour_slug,
       colourLabel: r.colour_slug ? (r.colour_label ?? r.colour_slug) : null, unitPaise: r.unit_paise, stock: r.branch_qty });
     products.set(r.product_id, p);
@@ -261,6 +262,15 @@ export interface PosSaleInput {
   expectedTotalPaise: number;
 }
 
+/** What a bill consists of, as one short value kept with the sale (2026-10-13). A bill sent again with the same key
+    (double click, retry after a lost answer) is the same sale only if this matches: the same sizes and quantities, customer,
+    discount, coupon, points, method and total. */
+function billFingerprint(input: PosSaleInput): string {
+  const lines = [...input.lines].map(l => `${l.variantId}:${l.qty}`).sort().join(',');
+  return createHash('sha256').update(JSON.stringify([lines, input.customerId ?? null, input.discount && input.discount.percent > 0 ? input.discount.percent : 0,
+    (input.couponCode ?? '').trim().toUpperCase(), !!input.usePoints, input.payment.method, input.expectedTotalPaise])).digest('hex').slice(0, 32);
+}
+
 export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosSaleInput, ctx: MutationContext)
   : Promise<{ orderId: string; orderNumber: string; posNumber: string; totalPaise: number; changePaise: number; replay: boolean }> {
   requirePermission(actor, 'pos.sell');
@@ -286,9 +296,16 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
       if (s.staff_id !== actor.staffId) throw new ForbiddenError('This is another cashier’s session: open your own session.');
       if (s.status !== 'open') throw new ConflictError(`Session ${s.number} is closed: open a new session to keep billing.`);
       if (!s.is_active) throw new ConflictError(`${s.location_name} is inactive.`);
-      const prior = await tx.selectFrom('orders').select(['id', 'order_number', 'pos_number', 'total_paise', 'pricing']).where('idempotency_key', '=', key).where('channel', '=', 'retail').executeTakeFirst();
-      if (prior) return { orderId: prior.id, orderNumber: prior.order_number, posNumber: prior.pos_number!, totalPaise: prior.total_paise,
-        changePaise: Number(((prior.pricing ?? {}) as { pos?: { changePaise?: number } }).pos?.changePaise ?? 0), replay: true };
+      const prior = await tx.selectFrom('orders').select(['id', 'order_number', 'pos_number', 'total_paise', 'pricing', 'status']).where('idempotency_key', '=', key).where('channel', '=', 'retail').executeTakeFirst();
+      if (prior) {
+        // 2026-10-13: the earlier sale is returned only when this IS that bill. Before, a bill changed after a lost answer
+        // (an item added, then Charge again) was answered "paid" with the old total, and a voided one likewise.
+        const was = ((prior.pricing ?? {}) as { pos?: { changePaise?: number; fingerprint?: string } }).pos ?? {};
+        if (prior.status === 'cancelled') throw new ConflictError(`This bill was already saved as ${prior.pos_number} and has since been voided. Start a new sale.`);
+        if (was.fingerprint && was.fingerprint !== billFingerprint(input))
+          throw new ConflictError(`This bill was already paid as ${prior.pos_number} (₹${(prior.total_paise / 100).toFixed(2)}). What is on the screen now is different: start a new sale for anything added since.`);
+        return { orderId: prior.id, orderNumber: prior.order_number, posNumber: prior.pos_number!, totalPaise: prior.total_paise, changePaise: Number(was.changePaise ?? 0), replay: true };
+      }
 
       let contact = { name: input.contact?.name?.trim().slice(0, 120) || null, email: null as string | null, phone: input.contact?.phone?.replace(/[^0-9+]/g, '').slice(0, 15) || null };
       if (input.customerId) {
@@ -318,7 +335,7 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
       }
       const staffDiscount = t.discounts.find(x => x.code === 'STAFF')?.amountPaise ?? 0;
       const posNumber = (await sql<{ n: string }>`select public.next_document_number('pos_sale', 'POS') as n`.execute(tx)).rows[0].n;
-      const pos = { number: posNumber, session: s.number, cashier: actor.email, method: input.payment.method, reference, tenderedPaise, changePaise };
+      const pos = { number: posNumber, session: s.number, cashier: actor.email, method: input.payment.method, reference, tenderedPaise, changePaise, fingerprint: billFingerprint(input) };
 
       const order = await tx.insertInto('orders').values({
         customer_id: input.customerId ?? null, cart_id: null, idempotency_key: key,
@@ -411,6 +428,10 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
   const reason = input.reason?.trim();
   if (!reason || reason.length < 3) throw new DomainError('invalid', 'Enter the reason for voiding this sale.');
   return db.transaction().execute(async tx => {
+    // 2026-10-13: the till's session is locked first, as a sale and a close do, so a void cannot slip in while the session is
+    // being closed (its expected cash would then still count the voided sale).
+    const seen = await tx.selectFrom('orders').select('pos_session_id').where('id', '=', input.orderId).executeTakeFirst();
+    if (seen?.pos_session_id) await tx.selectFrom('pos_sessions').select('id').where('id', '=', seen.pos_session_id).forUpdate().executeTakeFirst();
     const o = await tx.selectFrom('orders as o').innerJoin('pos_sessions as s', 's.id', 'o.pos_session_id')
       .select(['o.id', 'o.order_number', 'o.pos_number', 'o.status', 'o.location_id', 'o.total_paise', 's.status as session_status', 's.number as session_number'])
       .where('o.id', '=', input.orderId).forUpdate('o').executeTakeFirst();
@@ -419,6 +440,10 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
     if (o.session_status !== 'open') throw new ConflictError(`Session ${o.session_number} is closed: a sale from a closed session is returned through Returns & refunds.`);
     const openReturn = await tx.selectFrom('return_requests').select('number').where('order_id', '=', o.id).where('status', 'not in', ['rejected', 'cancelled']).executeTakeFirst();
     if (openReturn) throw new ConflictError(`${o.pos_number} has return ${openReturn.number}: continue it in Returns & refunds.`);
+    // 2026-10-13: a tax invoice that has been issued is a numbered legal document; voiding the sale under it would leave an
+    // issued invoice for a cancelled sale. The sale is then corrected through a return (which keeps the invoice trail).
+    const invoice = await tx.selectFrom('invoices').select('invoice_number').where('order_id', '=', o.id).where('status', '=', 'issued').executeTakeFirst();
+    if (invoice) throw new ConflictError(`${o.pos_number} has tax invoice ${invoice.invoice_number} issued: it cannot be voided. Use Returns & refunds for this sale.`);
     const items = await tx.selectFrom('order_items').select(['variant_id', sql<number>`sum(qty)::int`.as('qty')]).where('order_id', '=', o.id).where('variant_id', 'is not', null)
       .groupBy('variant_id').orderBy('variant_id').execute();
     for (const it of items) {
@@ -427,10 +452,15 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
     // 2026-10-12: points used on the voided bill go back to the customer, and points it earned are taken back (once each).
     await reverseOrderPoints(tx, o.id, `POS sale ${o.pos_number} voided`);
     const pay = await tx.selectFrom('payments').select(['id', 'amount_paise']).where('order_id', '=', o.id).where('provider', '=', 'pos').where('status', '=', 'captured').executeTakeFirst();
-    if (pay) {
+    if (pay && pay.amount_paise > 0) {
       await tx.insertInto('refunds').values({ payment_id: pay.id, order_id: o.id, amount_paise: pay.amount_paise, reason: `POS void: ${reason}`.slice(0, 500), status: 'processed',
         method: 'manual', reference: `VOID ${o.pos_number}`, requested_by: actor.staffId, processed_at: sql<Date>`now()`, processed_by: actor.staffId } as never).execute();
       await markPaymentRefunded(tx, o.id, pay.id);
+    } else if (pay) {
+      // 2026-10-13: a bill fully covered by a coupon or points took no money, so there is nothing to refund (a refund of ₹0
+      // is not a valid row and used to make the whole void fail). The payment and the order are still marked as returned.
+      await tx.updateTable('payments').set({ status: 'refunded' }).where('id', '=', pay.id).execute();
+      await tx.updateTable('orders').set({ payment_status: 'refunded' }).where('id', '=', o.id).execute();
     }
     await tx.updateTable('orders').set({ status: 'cancelled' }).where('id', '=', o.id).execute();
     await tx.insertInto('order_status_history').values({ order_id: o.id, from_status: o.status, to_status: 'cancelled', note: `POS sale voided by ${actor.email}: ${reason}`.slice(0, 1000) }).execute();
@@ -456,7 +486,8 @@ export async function posReport(db: Db, actor: StaffPrincipal, range: { from: st
   if (range.locationId) refundQ = refundQ.where('o.location_id', '=', range.locationId);
   const refunds = await refundQ.execute();
   const sum = (xs: { total_paise: number }[]) => xs.reduce((n, x) => n + x.total_paise, 0);
-  const methods = POS_PAYMENT_METHODS.map(m => { const xs = sales.filter(s => s.payment_method === m); return { method: m, label: METHOD_LABEL[m], count: xs.length, amountPaise: sum(xs) }; });
+  // 2026-10-13: voided sales are left out here, as they are in the by-cashier and by-branch tables (they were counted here only).
+  const methods = POS_PAYMENT_METHODS.map(m => { const xs = sales.filter(s => s.payment_method === m && s.status !== 'cancelled'); return { method: m, label: METHOD_LABEL[m], count: xs.length, amountPaise: sum(xs) }; });
   const group = (key: 'cashier' | 'location') => Object.values(sales.reduce<Record<string, { name: string; count: number; amountPaise: number; voided: number }>>((acc, s) => {
     const k = s[key] ?? '—'; const g = acc[k] ??= { name: k, count: 0, amountPaise: 0, voided: 0 };
     if (s.status === 'cancelled') g.voided++; else { g.count++; g.amountPaise += s.total_paise; }

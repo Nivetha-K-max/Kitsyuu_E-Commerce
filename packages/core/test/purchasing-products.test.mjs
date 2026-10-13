@@ -177,6 +177,9 @@ test('bulk edit: saved as a draft change set (old → new), nothing changes unti
   assert.deepEqual((await q(`select price_paise from products where id = any($1) order by sku`, [ps.slice(0, 2).map(p => p.id)])).map(x => x.price_paise), ps.slice(0, 2).map(p => p.price_paise), 'unchanged while a draft');
   const view = await getBulkEditDraft(admin, manager, d.id);
   assert.equal(view.preview.length, 2); assert.equal(view.preview[0].changes[0].field, 'Price');
+  // 2026-10-13: someone without the permission is refused BEFORE the draft is touched (it used to be marked applied, then put back).
+  await assert.rejects(applyBulkEditDraft(admin, support, {draftId: d.id}, ctx), ForbiddenError);
+  assert.deepEqual((await q(`select status, applied_by, applied_at from bulk_edit_drafts where id = $1`, [d.id]))[0], {status: 'draft', applied_by: null, applied_at: null});
   const res = await applyBulkEditDraft(admin, root, {draftId: d.id}, ctx);
   assert.deepEqual([res.applied.length, res.failed.length], [2, 0]);
   const now = await q(`select price_paise from products where id = any($1) order by sku`, [ps.slice(0, 2).map(p => p.id)]);

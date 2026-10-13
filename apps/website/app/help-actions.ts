@@ -9,7 +9,7 @@
 import { DomainError } from '@kitsyuu/contracts';
 import { guestOrderStatus, helpTopics, lookupContact, matchHelpTopics, openCustomerTicket, openGuestTicket, type GuestOrderStatus } from '@kitsyuu/core';
 import { GUEST_LOOKUP_CLOSED, GUEST_MESSAGE_CLOSED } from '@/lib/guest-help';
-import { guestHelpAllowed, limited, limitedByAddress } from '@/lib/rate-limit';
+import { guestHelpAllowed, limited, limitedByAddress, limitedStrict } from '@/lib/rate-limit';
 import { currentCustomer, db, requestContext } from '@/lib/server';
 
 const text = (v: FormDataEntryValue | null, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -33,7 +33,8 @@ export async function orderStatusAction(form: FormData): Promise<{ ok: boolean; 
   if (!orderNumber) return { ok: false, message: 'Enter your order number.' };
   if (!lookupContact(contact)) return { ok: false, message: 'Enter the email address or the 10-digit phone number you ordered with.' };
   // Per address (someone trying many orders) and per order number (many addresses trying one order's contact).
-  const wait = (await limitedByAddress('order-lookup')) ?? (await limited('order-lookup-order', orderNumber));
+  // Strict: while a configured limiter cannot count the request, the lookup is refused instead of let through uncounted.
+  const wait = (await limitedStrict('order-lookup', (await requestContext()).ip)) ?? (await limitedStrict('order-lookup-order', orderNumber));
   if (wait) return { ok: false, message: wait };
   try {
     const r = await guestOrderStatus(db(), { orderNumber, contact });
@@ -63,7 +64,7 @@ export async function sendHelpMessageAction(form: FormData): Promise<{ ok: boole
     const name = text(form.get('name'), 120), email = text(form.get('email'), 254).toLowerCase();
     if (!name) return { ok: false, message: 'Enter your name.' };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: 'Enter a valid email address.' };
-    const wait = (await limitedByAddress('guest-ticket')) ?? (await limited('guest-ticket-email', email));
+    const wait = (await limitedStrict('guest-ticket', (await requestContext()).ip)) ?? (await limitedStrict('guest-ticket-email', email));
     if (wait) return { ok: false, message: wait };
     const t = await openGuestTicket(db(), { ...input, name, email }, await requestContext());
     return { ok: true, ticket: t.number, message: `Your message has been sent (ticket ${t.number}). We reply by email to ${email}.` };
