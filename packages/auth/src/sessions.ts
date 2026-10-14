@@ -3,7 +3,7 @@
    idle timeout, absolute timeout, or the staff account no longer being active. Times are the database's clock. */
 import { sql, type Queryable } from '@kitsyuu/db';
 import { hashToken, newToken } from './crypto.ts';
-import { loadPermissions, type StaffPrincipal } from './rbac.ts';
+import { loadLocationScope, loadPermissions, type StaffPrincipal } from './rbac.ts';
 import { authSettings, type AuthSettings } from './settings.ts';
 
 export interface RequestContext { ip?: string | null; userAgent?: string | null; requestId?: string | null }
@@ -41,9 +41,10 @@ export async function validateStaffSession(q: Queryable, token: string | undefin
       .set({ last_seen_at: sql<Date>`now()`, idle_expires_at: sql<Date>`least(now() + make_interval(mins => ${s.staffIdleMinutes}), expires_at)` })
       .where('id', '=', row.session_id).execute();
   }
+  const permissions = await loadPermissions(q, row.staff_id);
   return {
-    staffId: row.staff_id, email: row.email, fullName: row.full_name, sessionId: row.session_id,
-    permissions: await loadPermissions(q, row.staff_id),
+    staffId: row.staff_id, email: row.email, fullName: row.full_name, sessionId: row.session_id, permissions,
+    locationIds: await loadLocationScope(q, row.staff_id, permissions),   // 2026-10-14: branch scope
   };
 }
 

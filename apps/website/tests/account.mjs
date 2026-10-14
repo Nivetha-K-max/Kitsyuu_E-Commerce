@@ -60,7 +60,10 @@ async function signupAndConfirm(email, name, password = PW) {
   await fill('main [name=fullName]', name); await fill('main [name=email]', email); await fill('main [name=password]', password); await fill('main [name=confirm]', password);
   await submit();
   const link = lastLink(email);
-  await b.goto(link, '!!document.querySelector("main h1")');
+  // 2026-10-14: the link opens the confirmation page; confirming sets the password (sign-up takeover fix).
+  await b.goto(link, '!!document.querySelector("main [name=confirm]")');
+  await fill('main [name=password]', password); await fill('main [name=confirm]', password);
+  await submit();
   return until(`location.pathname === '/account'`);
 }
 
@@ -93,12 +96,19 @@ try {
     // ---------- login before confirming ----------
     await go('/login');
     await fill('main [name=email]', email); await fill('main [name=password]', PW); await submit();
-    ok(`[${tag}] login before confirming explains it and sends a new link`, /confirm your email/i.test(await message()) && mailCount(email) === 2, await message());
+    // 2026-10-14 (sign-up takeover fix): a login never emails a link (whoever registered the address could trigger it).
+    ok(`[${tag}] login before confirming explains it and sends nothing`, /confirm your email/i.test(await message()) && mailCount(email) === 1, await message());
 
     // ---------- confirmation link ----------
     const link = lastLink(email);
-    await b.goto(link, '!!document.querySelector("main h1")');
-    ok(`[${tag}] confirmation link signs in and opens the account`, await until(`location.pathname === '/account' && !!document.querySelector('[data-notice=welcome]')`));
+    await b.goto(link, '!!document.querySelector("main [name=confirm]")');
+    const [still] = await q(`select email_verified_at from customers where email = $1`, [email]);
+    ok(`[${tag}] opening the link only shows the confirmation form: nothing confirmed, no session (mail scanners)`,
+      still.email_verified_at === null && !(await cookieOf()) && (await ev('location.pathname')) === '/verify-email');
+    await b.goto(link, '!!document.querySelector("main [name=confirm]")');
+    ok(`[${tag}] the link can be opened again (it is not used up by opening it)`, await ev(`!!document.querySelector('main [name=confirm]')`));
+    await fill('main [name=password]', PW); await fill('main [name=confirm]', PW); await submit();
+    ok(`[${tag}] confirming (setting the password) signs in and opens the account`, await until(`location.pathname === '/account' && !!document.querySelector('[data-notice=welcome]')`));
     const c = await cookieOf();
     ok(`[${tag}] session cookie: __Host-, HttpOnly, Secure, SameSite=Lax, host-only, path /`, !!c && c.httpOnly && c.secure && c.sameSite === 'Lax' && c.path === '/' && !c.domain.startsWith('.'), JSON.stringify(c && {httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite, domain: c.domain}));
     ok(`[${tag}] session token is not readable by page scripts`, !(await ev('document.cookie')).includes('kitsyuu_customer'));
@@ -107,7 +117,7 @@ try {
     // Signed out, as a stranger holding the old link would be (a signed-in visitor is sent on from /login to the account).
     await b.send('Network.clearBrowserCookies');
     await b.goto(link, 'document.readyState==="complete"');
-    ok(`[${tag}] a used confirmation link is refused`, await until(`location.search === '?reason=link'`) && !(await cookieOf()));
+    ok(`[${tag}] a used confirmation link is refused`, await until(`!!document.querySelector('[data-verify-invalid]') && !document.querySelector('main [name=confirm]')`) && !(await cookieOf()));
     await b.send('Network.setCookie', {name: c.name, value: c.value, url: BASE, path: '/', secure: true, httpOnly: true, sameSite: 'Lax'});
     await go('/account');
     await until(`document.querySelector('.st-tool-account')?.dataset.auth === 'customer'`);

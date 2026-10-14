@@ -2,8 +2,8 @@
 /* Signed-out customer flows (M6). Messages never reveal whether an email address has an account: signup, password reset
    and "resend confirmation" answer the same way for every address, and a failed login always reads the same. */
 import { redirect } from 'next/navigation';
-import { loginInput, resetPasswordInput, resetRequestInput, signupInput, type ActionState } from '@kitsyuu/contracts';
-import { loginCustomer, logoutCustomer, requestCustomerPasswordReset, resendCustomerVerification, resetCustomerPassword, signupCustomer } from '@kitsyuu/auth';
+import { loginInput, resetPasswordInput, resetRequestInput, signupInput, verifyEmailInput, type ActionState } from '@kitsyuu/contracts';
+import { loginCustomer, logoutCustomer, requestCustomerPasswordReset, resendCustomerVerification, resetCustomerPassword, signupCustomer, verifyCustomerEmail } from '@kitsyuu/auth';
 import { attributeReferral } from '@kitsyuu/core';
 import { handle } from '@/lib/actions';
 import { safeNext } from '@/lib/auth/next';
@@ -19,7 +19,7 @@ export async function loginAction(_: ActionState, form: FormData): Promise<Actio
     const r = await loginCustomer(db(), mailer(), input, { ...(await requestContext()), verifyUrl }, supabasePasswordCheck);
     if (!r.ok) return { ok: false, message:
       r.error === 'throttled' ? `Too many attempts. For your security, try again in ${r.retryAfterMinutes} minutes, or reset your password.`
-      : r.error === 'unverified' ? 'Please confirm your email address first. We have sent a new confirmation link to your inbox.'
+      : r.error === 'unverified' ? 'Please confirm your email address first: open the confirmation link we emailed you, or send yourself a new one from “Forgot your password?”.'
       : 'The email or password is incorrect.' };
     await setSessionCookie(r.token, r.expiresAt);
     next = safeNext(String(form.get('next') ?? ''));
@@ -78,6 +78,22 @@ export async function resetPasswordAction(_: ActionState, form: FormData): Promi
     return { ok: true };
   });
   if (done) { await clearSessionCookie(); redirect('/login?reason=reset'); }
+  return result;
+}
+
+/** 2026-10-14 (sign-up takeover fix): the confirmation page's form. Confirming sets the account's password, ends every other
+    session and signs this browser in. Opening the link alone (a GET, also made by mail scanners) changes nothing. */
+export async function verifyEmailAction(_: ActionState, form: FormData): Promise<ActionState> {
+  let session: { token: string; expiresAt: Date } | null = null;
+  const result = await handle(verifyEmailInput, form, async input => {
+    const wait = await limitedByAddress('verify-email-confirm');
+    if (wait) return { ok: false, message: wait };
+    const r = await verifyCustomerEmail(db(), input, await requestContext());
+    if (!r.ok) return { ok: false, message: 'This confirmation link is invalid, already used, or expired. Send yourself a new one from the “Forgot your password?” page.' };
+    session = r;
+    return { ok: true };
+  });
+  if (session) { const s: { token: string; expiresAt: Date } = session; await setSessionCookie(s.token, s.expiresAt); redirect('/account?welcome=1'); }
   return result;
 }
 

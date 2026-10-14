@@ -55,7 +55,7 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
 - **Performance** (2026-10-01, measured locally on Slow 4G with a 4× slower CPU): homepage LCP 8.6 s → 1.5 s, interaction delay ~1.5 s → ~24 ms, 10 MB → 1.2 MB in the first seconds. Below-the-fold pictures are lazy, menu photos load when the menu is used, the browser copy of the catalogue leaves out server-only text, the catalogue is cached for 30 s across requests, stylesheets are versioned and cached for a year. `apps/website/tests/run-perf.mjs` repeats the measurement.
 - **Catalogue**: 22 products in three categories and seven subcategories, New Arrivals, Featured, sorting, search, and a product page with sizes, quantity and wishlist. Catalogue pages are statically generated.
 - **Customer accounts** (M6):
-  - Signup with email verification, login, logout and "sign out everywhere".
+  - Signup with email verification (confirming sets the password on the page the email link opens, so a registration made with someone else's address can never be activated with the registrant's password), login, logout and "sign out everywhere".
   - Password change and reset, personal information, delivery addresses, order history, and a security page listing active sessions.
 - **Cart and wishlist** (M7):
   - Guests keep them in the browser.
@@ -88,6 +88,12 @@ The platform is built in milestones. Each is reviewed before it moves on. **Prod
   - **Fulfilment** inside the order page: packing progress while processing, the courier (manual for now) and an optional tracking number when shipping, shipped and delivered times. The order status stays the one status.
   - **Configuration** (the settings page; called Settings before 2026-10-03): an index of areas (Company, Locations, Billing, Tax, POS, Orders) over a typed registry. Business rules (10-day hold, pricing, tax, account security) are shown locked with the reason; only the low-stock level can be changed, and every change is audited.
   - **Order export** (CSV of the filtered list, capped, audited) and **dashboard** figures for awaiting fulfilment, shipped, delivered, pending payments, payment exceptions and disabled customers.
+
+- **Access hardening** (2026-10-14, local, not deployed):
+  - Price changes need `pricing.manage`; unit costs need `costs.read`.
+  - Branch scope: staff can be limited to their branches for POS, branch stock, transfers, stock counts and branch drafts (migration 20261014005000).
+  - Customer delivery addresses on shipments need `shipping.addresses` (migration 20261014005100).
+  - Pending Razorpay refunds are settled from Razorpay's own status, read only (`/api/jobs/reconcile-refunds`).
 
 ### Platform
 - **Business logic in `packages/core`**, used by both apps. Validation and the order workflow live in `packages/contracts`.
@@ -238,6 +244,7 @@ KITSYUU-Website2/
 - **Business decisions to plug in later**: shipping method and charges, real GST rates per product, discount rules (none at launch), and the payment provider going live (Razorpay, tested last).
 - **Email going live**: create the Resend account, verify the sending domain, set `MAILER=resend`, `RESEND_API_KEY` and `MAIL_FROM`.
 - **After M9**: structured logging with request correlation, external uptime monitoring against `/api/health`, performance budgets. (Checkout rate limiting and the daily unpaid-order expiry job already exist.)
+- **Production rollout of the 2026-10-14 hardening**: migrations 20261014005000 and 005100 after review; the role-matrix decision on inventory-manager address access; retiring the legacy Supabase Auth policies (draft and checks in `docs/reviews/2026-10-14/`).
 - **Official photography and confirmed product data** (see `PRODUCT-DATA.md`).
 - **Continuous integration** running the test suites on every branch.
 - **Retail till (POS)**: retail sales are recorded as stock movements at their branch; a till that creates retail orders waits for the client's choice.
@@ -252,6 +259,9 @@ KITSYUU-Website2/
 - **Flaky tests are real bugs.** Several "random" failures were test helpers reading a page too early; fixing the helpers, not rerunning, made the suites trustworthy.
 - **Measure before optimising.** The storefront felt slow "because of the animations", but the measurements showed the cost was the hero film's 100 MB of full-size frames, menu photos downloading on every page and a lazy-loaded first row of products; the animations themselves were cheap once their layers were scoped.
 - **Wait for a condition, never for a time.** Replacing fixed sleeps with waits on what the next check reads (a badge count, the URL, a rendered result) made the store suite five times faster and stopped its flakes. Images in a hidden menu are never downloaded, so tests only check the images a visitor can see.
+
+- **Keep test databases apart from the demo.** `KITSYUU_TEST_DB=kitsyuu_e2e_<name>` runs every suite in its own throwaway database (and keeps the shared app roles' passwords), so a full run never resets the local demo copy.
+- **A confirmation link must not do anything on its own.** Mail scanners open links; confirming an account now needs the owner to set the password on the page the link opens.
 
 ## Credits
 Brand, catalogue and imagery © KITSYUU. Landing-page concept imagery and film are documented in [`PRODUCTION-NOTES.md`](PRODUCTION-NOTES.md). Fonts: Barlow Condensed and DM Sans (Google Fonts, served locally).

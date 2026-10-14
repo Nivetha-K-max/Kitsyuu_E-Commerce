@@ -36,7 +36,7 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
   const actions = [
     { value: '', label: 'Choose a change…' },
     ...(can(actor, 'products.publish') ? [{ value: 'publish', label: 'Publish (show in the store)' }] : []), { value: 'draft', label: 'Move to draft (hide)' }, { value: 'archive', label: 'Archive' },
-    { value: 'price_set', label: 'Set the price…' }, { value: 'price_percent', label: 'Change the price by %…' },
+    ...(can(actor, 'pricing.manage') ? [{ value: 'price_set', label: 'Set the price…' }, { value: 'price_percent', label: 'Change the price by %…' }] : []),
     { value: 'category', label: 'Move to category…' },
     ...(can(actor, 'categories.write') ? [{ value: 'collection_add', label: 'Add to collections…' }, { value: 'collection_remove', label: 'Remove from collections…' }] : []),
     { value: 'attribute_add', label: 'Add attribute values…' }, { value: 'attribute_remove', label: 'Remove attribute values…' },
@@ -102,8 +102,7 @@ export default async function BulkEditPage({ searchParams }: { searchParams: SP 
                 <Field name="startsAt" label="Sale starts (optional)" type="datetime-local" />
                 <Field name="endsAt" label="Sale ends (optional)" type="datetime-local" />
               </>}
-              <Field name="price" label="New price, ₹ (for “Set the price”)" />
-              {!can(actor, 'pricing.manage') && <Field name="percent" label="% change (for “Change the price by %”, e.g. 10 or -5)" />}
+              {can(actor, 'pricing.manage') && <Field name="price" label="New price, ₹ (for “Set the price”)" />}
               {vendors.length > 0 && <Select name="vendorId" label="Vendor (for “Add / Remove a vendor”)" options={[{ value: '', label: '—' }, ...vendors.filter(v => v.is_active).map(v => ({ value: v.id, label: v.name }))]} />}
             </div>
             {can(actor, 'pricing.manage') && <p className="note">The % field is used both for “Put on sale” (% off) and “Change the price by %” (e.g. 10 or -5).</p>}

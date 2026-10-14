@@ -6,7 +6,7 @@
    entered (costs.manage); value = stock × that cost where set. Materials are valued at their last purchase price. */
 import { recordAudit, sql, type Db } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { locationScope, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -14,10 +14,12 @@ const staffAudit = (actor: StaffPrincipal, ctx: MutationContext) => ({ actorType
 
 export async function listStockCounts(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'inventory.read');
+  const scope = locationScope(actor);   // 2026-10-14: staff assigned to branches see those branches' counts only
   return db.selectFrom('stock_counts as c').leftJoin('staff_users as s', 's.id', 'c.created_by').innerJoin('locations as loc', 'loc.id', 'c.location_id')
     .select(['c.id', 'c.number', 'c.status', 'c.note', 'c.created_at', 'c.posted_at', 's.email as created_by', 'loc.name as location', 'c.location_id',
       sql<number>`(select count(*)::int from public.stock_count_lines l where l.stock_count_id = c.id)`.as('lines'),
       sql<number>`(select count(*)::int from public.stock_count_lines l where l.stock_count_id = c.id and l.counted_qty is not null)`.as('counted')])
+    .$if(!!scope, qb => qb.where('c.location_id', 'in', scope!))
     .orderBy('c.created_at', 'desc').limit(100).execute();
 }
 
@@ -30,6 +32,7 @@ export async function openStockCount(db: Db, actor: StaffPrincipal, input: { not
       ? await tx.selectFrom('locations').select(['id', 'name', 'is_active']).where('id', '=', input.locationId).executeTakeFirst()
       : await tx.selectFrom('locations').select(['id', 'name', 'is_active']).where('is_online', '=', true).executeTakeFirst();
     if (!loc) throw new NotFoundError('Location not found.');
+    requireLocation(actor, loc.id);   // 2026-10-14
     if (!loc.is_active) throw new ConflictError('This location is inactive.');
     if (await tx.selectFrom('stock_counts').select('id').where('status', '=', 'open').where('location_id', '=', loc.id).executeTakeFirst())
       throw new ConflictError(`A stock count is already open for ${loc.name}. Post or cancel it first.`);
@@ -51,6 +54,7 @@ export async function getStockCount(db: Db, actor: StaffPrincipal, id: string) {
   const c = await db.selectFrom('stock_counts as c').innerJoin('locations as loc', 'loc.id', 'c.location_id')
     .select(['c.id', 'c.number', 'c.status', 'c.note', 'c.created_at', 'c.posted_at', 'c.location_id', 'loc.name as location']).where('c.id', '=', id).executeTakeFirst();
   if (!c) throw new NotFoundError('Stock count not found.');
+  requireLocation(actor, c.location_id);   // 2026-10-14
   const lines = await db.selectFrom('stock_count_lines as l').innerJoin('product_variants as v', 'v.id', 'l.variant_id').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('location_stock as s', join => join.onRef('s.variant_id', '=', 'l.variant_id').on('s.location_id', '=', c.location_id))
     .select(['l.id', 'l.expected_qty', 'l.counted_qty', sql<number>`coalesce(s.qty, 0)::int`.as('current_qty'), 'v.size', 'v.sku as variant_sku', 'p.name'])
@@ -62,8 +66,9 @@ export async function getStockCount(db: Db, actor: StaffPrincipal, id: string) {
 export async function recordCounts(db: Db, actor: StaffPrincipal, input: { stockCountId: string; lines: { lineId: string; counted: number }[] }, ctx: MutationContext) {
   requirePermission(actor, 'inventory.count');
   return db.transaction().execute(async tx => {
-    const c = await tx.selectFrom('stock_counts').select(['id', 'status']).where('id', '=', input.stockCountId).forUpdate().executeTakeFirst();
+    const c = await tx.selectFrom('stock_counts').select(['id', 'status', 'location_id']).where('id', '=', input.stockCountId).forUpdate().executeTakeFirst();
     if (!c) throw new NotFoundError('Stock count not found.');
+    requireLocation(actor, c.location_id);   // 2026-10-14
     if (c.status !== 'open') throw new ConflictError('This stock count is closed.');
     let saved = 0;
     for (const l of input.lines) {
@@ -82,6 +87,7 @@ export async function postStockCount(db: Db, actor: StaffPrincipal, input: { sto
   return db.transaction().execute(async tx => {
     const c = await tx.selectFrom('stock_counts').select(['id', 'status', 'number', 'location_id']).where('id', '=', input.stockCountId).forUpdate().executeTakeFirst();
     if (!c) throw new NotFoundError('Stock count not found.');
+    requireLocation(actor, c.location_id);   // 2026-10-14
     if (c.status !== 'open') throw new ConflictError('This stock count is already closed.');
     const lines = await tx.selectFrom('stock_count_lines').select(['variant_id', 'expected_qty', 'counted_qty']).where('stock_count_id', '=', c.id).where('counted_qty', 'is not', null).execute();
     if (!lines.length) throw new ConflictError('Enter at least one counted quantity before posting.');
@@ -107,8 +113,9 @@ export async function postStockCount(db: Db, actor: StaffPrincipal, input: { sto
 export async function cancelStockCount(db: Db, actor: StaffPrincipal, input: { stockCountId: string }, ctx: MutationContext) {
   requirePermission(actor, 'inventory.count');
   await db.transaction().execute(async tx => {
-    const c = await tx.selectFrom('stock_counts').select(['id', 'status']).where('id', '=', input.stockCountId).forUpdate().executeTakeFirst();
+    const c = await tx.selectFrom('stock_counts').select(['id', 'status', 'location_id']).where('id', '=', input.stockCountId).forUpdate().executeTakeFirst();
     if (!c) throw new NotFoundError('Stock count not found.');
+    requireLocation(actor, c.location_id);   // 2026-10-14
     if (c.status !== 'open') throw new ConflictError('This stock count is already closed.');
     await tx.updateTable('stock_counts').set({ status: 'cancelled' }).where('id', '=', c.id).execute();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'stock_count.cancel', entityType: 'stock_counts', entityId: c.id, before: { status: 'open' }, after: { status: 'cancelled' } });

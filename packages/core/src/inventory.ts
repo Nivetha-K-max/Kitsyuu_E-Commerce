@@ -3,7 +3,7 @@
    The audit record is written in the same transaction, so ledger, stock and audit always agree. */
 import { recordAudit, sql, type Db } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError, type AdjustStockInput, type StockListQuery } from '@kitsyuu/contracts';
-import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -51,6 +51,8 @@ export async function adjustStock(db: Db, actor: StaffPrincipal, input: AdjustSt
   requirePermission(actor, 'inventory.adjust');
   const delta = input.direction === 'increase' ? input.quantity : -input.quantity;
   return db.transaction().execute(async tx => {
+    // 2026-10-14: this is the online location's stock: staff assigned to branches change it only if assigned to it too.
+    if (actor.locationIds) requireLocation(actor, (await tx.selectFrom('locations').select('id').where('is_online', '=', true).executeTakeFirst())?.id);
     const reason = await tx.selectFrom('inventory_reasons').select(['code', 'direction', 'is_system', 'is_active']).where('code', '=', input.reason).executeTakeFirst();
     if (!reason || reason.is_system || !reason.is_active || RETAIL_ONLY_REASONS.includes(reason.code)) throw new DomainError('invalid', 'Choose one of the listed reasons.');
     if ((reason.direction === 'in' && delta < 0) || (reason.direction === 'out' && delta > 0))

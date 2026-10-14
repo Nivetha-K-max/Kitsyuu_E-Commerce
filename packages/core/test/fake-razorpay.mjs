@@ -1,5 +1,6 @@
 /* A local stand-in for Razorpay's API and Checkout, for tests only (no real payments, no network).
-   - REST: POST /v1/orders, GET /v1/payments/:id, POST /v1/payments/:id/capture, GET /v1/orders/:id/payments
+   - REST: POST /v1/orders, GET /v1/payments/:id, POST /v1/payments/:id/capture, POST /v1/payments/:id/refund,
+     GET /v1/payments/:id/refunds, GET /v1/orders/:id/payments
      (Basic auth with the test key id/secret, amounts in paise, same field names as Razorpay).
    - Signatures are made exactly like Razorpay's: HMAC-SHA256(order_id|payment_id, key secret) for the checkout handler,
      HMAC-SHA256(raw body, webhook secret) for webhooks.
@@ -14,7 +15,7 @@ export const TEST_KEY_ID = 'rzp_test_FakeKey000001';
 
 export async function startFakeRazorpay({keyId = TEST_KEY_ID, keySecret, webhookSecret = '', port = 0} = {}) {
   if (!keySecret) throw new Error('keySecret required');
-  const orders = new Map(), payments = new Map();
+  const orders = new Map(), payments = new Map(), refunds = new Map();
   const state = {down: false, requests: 0};
   const id = prefix => `${prefix}_${randomBytes(7).toString('hex')}`;
   const sign = (orderId, paymentId) => createHmac('sha256', keySecret).update(`${orderId}|${paymentId}`).digest('hex');
@@ -88,7 +89,13 @@ export async function startFakeRazorpay({keyId = TEST_KEY_ID, keySecret, webhook
         if (!p || p.status !== 'captured' && p.status !== 'refunded' || state.refundFails || !(body.amount > 0) || body.amount > p.amount - done)
           return send(400, {error: {code: 'BAD_REQUEST_ERROR', description: state.refundFails ? 'Refund declined (test)' : 'The refund amount is invalid'}});
         p.amount_refunded = done + body.amount; if (p.amount_refunded === p.amount) p.status = 'refunded';
-        return send(200, {id: `rfnd_${Math.random().toString(36).slice(2, 16)}`, entity: 'refund', amount: body.amount, currency: p.currency, payment_id: p.id, notes: body.notes ?? {}, status: 'processed'});
+        // 2026-10-14: state.refundStatus ('pending') answers like a refund Razorpay has not finished; refunds are kept for listing.
+        const f = {id: `rfnd_${Math.random().toString(36).slice(2, 16)}`, entity: 'refund', amount: body.amount, currency: p.currency, payment_id: p.id,
+          notes: body.notes && Object.keys(body.notes).length ? body.notes : [], status: state.refundStatus ?? 'processed'};
+        refunds.set(f.id, f); return send(200, f);
+      }
+      if (req.method === 'GET' && (m = url.pathname.match(/^\/v1\/payments\/([\w]+)\/refunds$/))) {
+        const items = [...refunds.values()].filter(f => f.payment_id === m[1]); return send(200, {entity: 'collection', count: items.length, items});
       }
       if (req.method === 'GET' && (m = url.pathname.match(/^\/v1\/orders\/([\w]+)\/payments$/))) {
         const items = [...payments.values()].filter(p => p.order_id === m[1]); return send(200, {entity: 'collection', count: items.length, items});
@@ -104,7 +111,7 @@ export async function startFakeRazorpay({keyId = TEST_KEY_ID, keySecret, webhook
     const rawBody = JSON.stringify({entity: 'event', account_id: 'acc_test', event, contains: ['payment'], payload: {payment: {entity: payment}}, created_at: Math.floor(Date.now() / 1000)});
     return {rawBody, eventId, signature: createHmac('sha256', webhookSecret).update(rawBody).digest('hex')};
   }
-  return {url, keyId, orders, payments, state, pay, sign, webhook, close: () => new Promise(r => server.close(r))};
+  return {url, keyId, orders, payments, refunds, state, pay, sign, webhook, close: () => new Promise(r => server.close(r))};
 }
 
 // CLI (browser tests): node fake-razorpay.mjs <port>  — reads RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET from the environment.

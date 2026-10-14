@@ -5,10 +5,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {testDbName, testEnvFile} from '../../../database/scripts/lib/test-db-name.mjs';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const REPO = path.join(WEB, '../..');
-export const TEST_ENV_FILE = path.join(REPO, 'apps/admin/tests/.output/test.env');
+// 2026-10-14: test.env for kitsyuu_test, or the isolated database's own file when KITSYUU_TEST_DB is set.
+export const TEST_ENV_FILE = testEnvFile();
 const readEnv = f => Object.fromEntries(fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^([A-Z0-9_]+)=(.*)$/)).filter(Boolean).map(m => [m[1], m[2]]));
 
 /** Hosted-project variables, all blank. */
@@ -20,7 +22,7 @@ export function localTestDatabase() {
   const env = readEnv(TEST_ENV_FILE);
   for (const [name, role] of [['WEBSITE_DATABASE_URL', 'kitsyuu_website'], ['ADMIN_DATABASE_URL', 'kitsyuu_admin'], ['KITSYUU_DB_URL', null]]) {
     let u; try { u = new URL(env[name] ?? ''); } catch { throw new Error(`refusing: ${name} is missing or not a database URL`); }
-    if (!['localhost', '127.0.0.1'].includes(u.hostname) || u.pathname !== '/kitsyuu_test') throw new Error(`refusing: ${name} is not the local test database`);
+    if (!['localhost', '127.0.0.1'].includes(u.hostname) || u.pathname !== `/${testDbName()}`) throw new Error(`refusing: ${name} is not the local test database`);
     if (role && decodeURIComponent(u.username) !== role) throw new Error(`refusing: ${name} does not use the ${role} role`);
   }
   return env;

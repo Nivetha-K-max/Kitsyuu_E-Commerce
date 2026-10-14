@@ -42,14 +42,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: SP
   const parsed = shipmentListQuery.safeParse({ q: one(sp.q), status: one(sp.status) || undefined, courier: one(sp.courier), page: one(sp.page) || undefined });
   const query = parsed.success ? parsed.data : shipmentListQuery.parse({});
   const [list, couriers] = await Promise.all([listShipments(db(), actor, query), listCouriers(db(), actor)]);
-  // The packing state and the customer of the listed shipments (the shipment's own row and its order's contact).
-  const ids = list.rows.map(r => r.id), orderIds = [...new Set(list.rows.map(r => r.order_id))];
-  const [packs, contacts] = ids.length ? await Promise.all([
-    db().selectFrom('shipments').select(['id', 'packing_state']).where('id', 'in', ids).execute(),
-    db().selectFrom('orders').select(['id', 'contact']).where('id', 'in', orderIds).execute(),
-  ]) : [[], []];
-  const packingOf = (id: string) => packs.find(p => p.id === id)?.packing_state ?? null;
-  const nameOf = (orderId: string) => { const c = (contacts.find(x => x.id === orderId)?.contact ?? {}) as { name?: string | null; email?: string | null }; return c.name || c.email || null; };
+  // 2026-10-14: the packing state and the customer come with the list from core (the customer and the city only with
+  // shipping.addresses); this page no longer reads orders itself.
+  const address = can(actor, 'shipping.addresses');
   const canOrders = can(actor, 'orders.read'), canStatus = can(actor, 'orders.update_status'), manage = can(actor, 'shipping.manage');
   const href = (change: Partial<Record<'q' | 'status' | 'courier' | 'page', string | undefined>>) => {
     const next = { q: query.q, status: query.status as string, courier: query.courier, page: undefined as string | undefined, ...change };
@@ -95,18 +90,18 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: SP
         <div className="table-wrap ord-table" data-fresh key={href({ page: String(query.page) })}><table data-shipments-table>
           <thead><tr><th>Shipment for</th><th>Courier &amp; tracking</th><th>Status</th><th>Deliver to</th><th>Updated (IST)</th><th>Next step</th></tr></thead>
           <tbody>{list.rows.map(s => {
-            const packing = packingOf(s.id), n = nextStep(s, packing);
+            const packing = s.packing_state ?? null, n = nextStep(s, packing);
             const actionable = !!n && (n.by === 'order' ? canStatus : manage);
             const dispatched = !!s.shipped_at;
             return (
               <tr key={s.id} data-shipment={s.order_number} data-shipment-state={s.status}>
-                <td className="ord-who"><NavLink prefetch className="row-link" href={open(s)} aria-label={`Shipment of order ${s.order_number}`}>{nameOf(s.order_id) ?? 'No customer details'}</NavLink>
+                <td className="ord-who"><NavLink prefetch className="row-link" href={open(s)} aria-label={`Shipment of order ${s.order_number}`}>{address ? s.customer ?? 'No customer details' : `Order ${s.order_number}`}</NavLink>
                   <div className="ord-no"><span className="mono">{s.order_number}</span></div></td>
                 <td className="ord-items">{dispatched ? s.courier_name ?? s.carrier_code : <span className="note">not shipped yet</span>}
                   {dispatched && <div className="note">{s.tracking_number ? (s.tracking_url ? <a className="mono" href={s.tracking_url} target="_blank" rel="noopener noreferrer">{s.tracking_number}</a> : <span className="mono">{s.tracking_number}</span>) : 'no tracking number'}</div>}</td>
                 <td className="ord-stage">{['in_transit', 'failed_delivery', 'cancelled'].includes(s.status) ? <StatusBadge status={s.status} /> : <StagePill status={s.order_status} packingState={packing} />}
                   {n?.why && <div className="note" data-shipment-why>{n.why}</div>}</td>
-                <td className="ord-extra" data-label="Deliver to">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
+                <td className="ord-extra" data-label="Deliver to">{address ? [s.city, s.state].filter(Boolean).join(', ') || '—' : <span className="note">hidden</span>}</td>
                 <td className="nowrap ord-placed">{formatDateTime(s.updated_at as Date)}{s.shipped_at && <div className="note">shipped {formatDateTime(s.shipped_at as Date)}</div>}</td>
                 <td className="ord-next" data-next-step>{actionable && canOrders
                   ? <NavLink className="btn sm" href={open(s)} aria-label={`${n!.label}: order ${s.order_number}`}>{n!.label}<span aria-hidden="true"> →</span></NavLink>

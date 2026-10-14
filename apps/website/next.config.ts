@@ -46,7 +46,9 @@ const nextConfig: NextConfig = {
       // Performance (2026-10-01): the homepage film's resized frames and posters (a new set gets a new folder name).
       { source: '/assets/film-v1/:file*', headers: [{ key: 'Cache-Control', value: YEAR }] },
       // Stylesheets: always requested with ?v=<build> (app/layout.tsx).
-      { source: '/:css(fonts|styles|store|account).css', headers: [{ key: 'Cache-Control', value: YEAR }] },
+      { source: '/:css(fonts|store-fonts|styles|store|account).css', headers: [{ key: 'Cache-Control', value: YEAR }] },
+      // 2026-10-14: the typefaces' Latin subsets (a changed subset gets a new folder name).
+      { source: '/assets/fonts-latin-v1/:file*', headers: [{ key: 'Cache-Control', value: YEAR }] },
       // Typefaces never change in place; a month, then revalidated in the background.
       { source: '/assets/fonts/:file*', headers: [{ key: 'Cache-Control', value: 'public, max-age=2592000, stale-while-revalidate=31536000' }] },
     ];

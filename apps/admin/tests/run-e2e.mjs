@@ -12,6 +12,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 import {assertLocalTestEnv} from './local-only.mjs';
+import {testEnvFile} from '../../../database/scripts/lib/test-db-name.mjs';   // 2026-10-14: KITSYUU_TEST_DB → an isolated database
 
 const ADMIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.join(ADMIN, '../..');
@@ -62,7 +63,7 @@ try {
   // SKIP_CORE=1: browser tests only (e.g. rerunning them after the core tests already passed).
   for (const f of process.env.SKIP_CORE ? [] : coreFiles) {
     if (!createDb()) throw new Error('could not create the test database');
-    const env = assertLocalTestEnv(readEnv(path.join(OUT, 'test.env')));
+    const env = assertLocalTestEnv(readEnv(testEnvFile()));
     if (!(await dbCheck(`before ${f}`, env, {staff: 0}))) failed = true;
     // Explicit file path: `node --test <directory>` is not supported by this Node version.
     const r = node(['--test', '--test-concurrency=1', '--test-reporter=spec', path.join('packages/core/test', f)], env);
@@ -89,6 +90,10 @@ try {
       : f === 'production-calendar.test.mjs' ? {customers: 1, orders: 2}
       // returns-gaps.test.mjs (2026-10-12): one customer; 11 delivered orders written as fixtures (no stock moves; manual refunds and staff settlements only, no provider).
       : f === 'returns-gaps.test.mjs' ? {customers: 1, orders: 11}
+      // refund-reconcile.test.mjs (2026-10-14): one customer; 12 delivered orders written as fixtures (no stock moves; a fake provider that only lists refunds, and the local fake Razorpay).
+      : f === 'refund-reconcile.test.mjs' ? {customers: 1, orders: 12}
+      // signup-takeover.test.mjs (2026-10-14): 4 customer accounts (sign-up and confirmation only; no orders, no stock).
+      : f === 'signup-takeover.test.mjs' ? {customers: 4}
       // support-widget.test.mjs (2026-10-12): two customers and three order rows written as fixtures (no stock moves).
       : f === 'support-widget.test.mjs' ? {customers: 2, orders: 3}
       // referrals.test.mjs (2026-10-12): 22 customers; 15 orders (history rows written without stock, and one paid checkout holding 1 unit through the ledger).
@@ -117,9 +122,12 @@ try {
       // locations and back through the ledger (online stock and every location's stock must equal their ledger rows).
       : f === 'third-pass.test.mjs' ? {customers: 1, orders: 1, variants: 111, units: 1100, everySizeTen: false}
       // pos.test.mjs (2026-10-02): 11 POS sales at two branches (one voided), 1 customer; the online stock is never touched.
-      : f === 'pos.test.mjs' ? {customers: 1, orders: 11, units: 1100}
+      // 2026-10-14: 12, not 11: the 2026-10-13 regression test (a replayed bill key) makes one more sale (the count was not updated then).
+      : f === 'pos.test.mjs' ? {customers: 1, orders: 12, units: 1100}
       // pos-phase2.test.mjs (2026-10-13): 2 customers; 22 orders (split, store-credit and credit sales, replacement bills of exchanges, 2 website-order fixtures); the online stock is never touched.
       : f === 'pos-phase2.test.mjs' ? {customers: 2, orders: 22, units: 1100}
+      // branch-scope.test.mjs (2026-10-14): two counter sales (one per branch), branch stock and transfers between branches only; the online stock is never touched.
+      : f === 'branch-scope.test.mjs' ? {orders: 2, units: 1100}
       // Commerce workflows: 4 customers; 3 orders (the one that won the last unit, a staff-created online order, an offline
       // branch order); online stock moved by sales, corrections and restocks, all through the ledger (branch stock too).
       : f === 'commerce-workflows.test.mjs' ? {customers: 4, orders: 3, units: 1087, everySizeTen: false}
@@ -132,7 +140,7 @@ try {
 
   // ---------- browser tests against one server ----------
   if (!createDb()) throw new Error('could not recreate the test database');
-  const env = assertLocalTestEnv(readEnv(path.join(OUT, 'test.env')));
+  const env = assertLocalTestEnv(readEnv(testEnvFile()));
   if (!(await dbCheck('before browser tests', env, {staff: 0}))) failed = true;
   // Product images: the repository's own files (dist/store/images/products), copied into this run's local storage folder below
   // and served by the admin's /media route. Nothing is read from the hosted bucket (2026-10-08).

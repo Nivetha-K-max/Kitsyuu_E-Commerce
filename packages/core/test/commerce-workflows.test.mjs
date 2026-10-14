@@ -113,15 +113,19 @@ test('locations: two Chennai branches; restock with cost and history (before / c
   store1 = (await saveLocation(admin, root, {code: 'CHN-S1', name: 'Chennai Store 1', kind: 'retail', address: 'T. Nagar, Chennai', active: true}, ctx)).id;
   store2 = (await saveLocation(admin, root, {code: 'CHN-S2', name: 'Chennai Store 2', kind: 'retail', address: 'Anna Nagar, Chennai', active: true}, ctx)).id;
   const v = await variant('KTS-TOP-002-M');
-  await adjustLocationStock(admin, manager, {locationId: store1, variantId: v.id, delta: 5, reason: 'restock', note: 'Received 5 units from supplier.', expectedQty: 0, unitCostPaise: 85000}, ctx);
+  // 2026-10-14: a unit cost is entered (and seen) only with costs.read; the manager role does not hold it.
+  await assert.rejects(adjustLocationStock(admin, manager, {locationId: store1, variantId: v.id, delta: 5, reason: 'restock', note: null, expectedQty: 0, unitCostPaise: 85000}, ctx), ForbiddenError);
+  await adjustLocationStock(admin, root, {locationId: store1, variantId: v.id, delta: 5, reason: 'restock', note: 'Received 5 units from supplier.', expectedQty: 0, unitCostPaise: 85000}, ctx);
   await adjustLocationStock(admin, manager, {locationId: store2, variantId: v.id, delta: 3, reason: 'restock', note: null, expectedQty: 0}, ctx);
   await adjustLocationStock(admin, manager, {locationId: store1, variantId: v.id, delta: 20, reason: 'restock', note: 'Received 20 units from supplier.', expectedQty: 5}, ctx);
   assert.deepEqual([await locQty(store1, v.id), await locQty(store2, v.id), await stock(v.id)], [25, 3, 10], 'per location; the online stock is unchanged');
   const s1 = await getLocationStock(admin, manager, {locationId: store1});
   const [last, first] = s1.movements;
   assert.deepEqual([last.balance_before, last.delta, last.balance_after, last.reason, last.note, last.staff_email], [5, 20, 25, 'restock', 'Received 20 units from supplier.', 'wf.manager@test.local']);
-  assert.equal(first.unit_cost_paise, 85000, 'the unit cost is kept on the restock row');
-  await assert.rejects(adjustLocationStock(admin, manager, {locationId: store1, variantId: v.id, delta: -1, reason: 'damage', note: null, expectedQty: 25, unitCostPaise: 100}, ctx), /stock coming in/);
+  assert.deepEqual([first.unit_cost_paise, s1.canSeeCosts], [null, false], 'the manager does not see unit costs');
+  const r1 = await getLocationStock(admin, root, {locationId: store1});
+  assert.deepEqual([r1.movements[1].unit_cost_paise, r1.canSeeCosts], [85000, true], 'the unit cost is kept on the restock row (seen with costs.read)');
+  await assert.rejects(adjustLocationStock(admin, root, {locationId: store1, variantId: v.id, delta: -1, reason: 'damage', note: null, expectedQty: 25, unitCostPaise: 100}, ctx), /stock coming in/);
   await assert.rejects(adjustLocationStock(admin, support, {locationId: store1, variantId: v.id, delta: 1, reason: 'restock', note: null, expectedQty: 25}, ctx), ForbiddenError);
 });
 

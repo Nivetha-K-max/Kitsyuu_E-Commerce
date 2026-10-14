@@ -83,7 +83,10 @@ async function signupAndConfirm(email, name) {
   await go('/signup', '!!document.querySelector("main [name=email]")');
   await fill('main [name=fullName]', name); await fill('main [name=email]', email); await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
   await submit();
-  await go(lastLink(email), '!!document.querySelector("main h1")');
+  // 2026-10-14: the link opens the confirmation page; confirming sets the password (sign-up takeover fix).
+  await go(lastLink(email), '!!document.querySelector("main [name=confirm]")');
+  await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
+  await submit();
   return until(`location.pathname === '/account'`);
 }
 async function placeOrder(base = BASE) {
@@ -489,9 +492,14 @@ try {
     ok('[cod] staff cancel: stored as cancelled; a second cancel (by staff or by the customer) is refused', cc.status === 'cancelled' && /not been dispatched|already/i.test(again) && /already cancelled/i.test(byCustomer), JSON.stringify({cc, again, byCustomer}));
     await ev('location.reload()'); await w(300);
     await until(`document.querySelector('[data-order-status]')?.dataset.orderStatus === 'cancelled'`);
+    // 2026-10-14: each condition is reported on failure (the page text alone did not say which one failed). The status line
+    // is waited for: twice it was read before it had rendered (a timing flake, not a page fault).
+    await until(`/This order was cancelled/.test(document.querySelector('main')?.innerText ?? '')`, 8000);
+    const cod = {status: await text('[data-order-status]'), cancelButton: await exists('#st-cancel-order'), payButton: await exists('[data-pay-order]'), tracking: await exists('[data-order-tracking]'),
+      saysCancelled: /This order was cancelled/.test(await text('main')), paymentText: await text('[data-payment-method=cod]'),
+      next: await text('.st-order-next'), mains: await ev(`document.querySelectorAll('main').length`), path: await ev('location.pathname')};
     ok('[cod] cancelled: the open order page, refreshed, says Cancelled, with no Cancel button, no tracking and nothing to pay',
-      /^cancelled$/i.test(await text('[data-order-status]')) && !(await exists('#st-cancel-order')) && !(await exists('[data-pay-order]')) && !(await exists('[data-order-tracking]'))
-      && /This order was cancelled/.test(await text('main')) && !/pay ₹/.test(await text('[data-payment-method=cod]')), (await text('main')).slice(0, 200));
+      /^cancelled$/i.test(cod.status) && !cod.cancelButton && !cod.payButton && !cod.tracking && cod.saysCancelled && !/pay ₹/.test(cod.paymentText), JSON.stringify(cod));
     await go('/account/orders', '!!document.querySelector("[data-orders-table]")');
     ok('[cod] cancelled: the order list says Cancelled for it', /Cancelled/.test(await text(`[data-order="${codNumber}"]`)) && !/Being packed|Confirmed/.test(await text(`[data-order="${codNumber}"]`)), await text(`[data-order="${codNumber}"]`));
     // Reached by links inside the store (the client-side router), not only by a full page load.

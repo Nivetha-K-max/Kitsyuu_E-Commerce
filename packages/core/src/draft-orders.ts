@@ -14,7 +14,7 @@
    when it is entered and again when the draft is confirmed, and kept on the order (amount, %, reason, who gave it). */
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError, MAX_QTY_PER_LINE } from '@kitsyuu/contracts';
-import { requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { locationScope, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { priceOrder, defaultCommerceConfig, type CartTotals, type CommerceConfig, type DiscountRule, type ShippingProvider } from './pricing.ts';
 import { lineLabel, lineProblemText, pricedLine, variantQuery, type PricedLine } from './cart.ts';
 import { checkoutSettings } from './checkout.ts';
@@ -84,6 +84,11 @@ async function loadDraft(q: Queryable, id: string, lock = false) {
   if (!d) throw new NotFoundError('Draft order not found.');
   return d;
 }
+/** 2026-10-14: a branch (retail) draft is seen and changed only by staff who may work at its branch. Online drafts are not
+    tied to a branch. */
+function branchOf(actor: StaffPrincipal, d: { channel: string; location_id: string | null }) {
+  if (d.channel === 'retail') requireLocation(actor, d.location_id);
+}
 
 function pricingConfig(d: { channel: string; discount_bp: number | null; discount_reason: string | null }, config?: CommerceConfig): CommerceConfig {
   const base = config ?? defaultCommerceConfig;
@@ -111,6 +116,8 @@ export async function listDraftOrders(db: Db, actor: StaffPrincipal, opts: { sta
   if (opts.status && opts.status !== 'all') q = q.where('d.status', '=', opts.status);
   else if (!opts.status) q = q.where('d.status', '=', 'open');
   if (opts.customerId) q = q.where('d.customer_id', '=', opts.customerId);
+  const scope = locationScope(actor);   // 2026-10-14: branch drafts of the staff member's branches only (online drafts stay listed)
+  if (scope) q = q.where(eb => eb.or([eb('d.channel', '=', 'online'), eb('d.location_id', 'in', scope)]));
   return q.execute();
 }
 
@@ -118,6 +125,7 @@ export async function listDraftOrders(db: Db, actor: StaffPrincipal, opts: { sta
 export async function getDraftOrder(db: Db, actor: StaffPrincipal, id: string, opts: { payment?: DraftPayment; config?: CommerceConfig } = {}) {
   requirePermission(actor, 'orders.read');
   const d = await loadDraft(db, id);
+  branchOf(actor, d);
   const lines = await draftLines(db, id);
   const payment = opts.payment ?? (d.channel === 'retail' ? 'cash' : 'online');
   const totals = await priceDraft(db, d, lines, payment, opts.config);
@@ -137,6 +145,7 @@ export async function getDraftOrder(db: Db, actor: StaffPrincipal, id: string, o
 export async function draftSizeOptions(db: Db, actor: StaffPrincipal, draftId: string) {
   requirePermission(actor, 'orders.read');
   const d = await loadDraft(db, draftId);
+  branchOf(actor, d);
   const rows = await variantQuery(db).where('v.is_active', '=', true).orderBy('p.name').orderBy('v.colour_slug').orderBy('v.sort_order').execute();
   const branch = d.channel === 'retail' && d.location_id
     ? new Map((await db.selectFrom('location_stock').select(['variant_id', 'qty']).where('location_id', '=', d.location_id).execute()).map(r => [r.variant_id, r.qty]))
@@ -145,8 +154,9 @@ export async function draftSizeOptions(db: Db, actor: StaffPrincipal, draftId: s
 }
 
 // ---------------------------------------------------------------- changing a draft
-async function openDraft(tx: Tx, id: string) {
+async function openDraft(tx: Tx, id: string, actor: StaffPrincipal) {
   const d = await loadDraft(tx, id, true);
+  branchOf(actor, d);
   if (d.status !== 'open') throw new ConflictError(`Draft ${d.number} is ${d.status}; it can no longer be changed.`);
   return d;
 }
@@ -166,6 +176,7 @@ export async function createDraftOrder(db: Db, actor: StaffPrincipal, input: { c
     if (input.channel === 'retail') {
       const l = input.locationId ? await tx.selectFrom('locations').select(['is_online', 'is_active', 'name']).where('id', '=', input.locationId).executeTakeFirst() : null;
       if (!l) throw new DomainError('invalid', 'Choose the branch where the customer is buying.');
+      requireLocation(actor, input.locationId);   // 2026-10-14
       if (l.is_online) throw new DomainError('invalid', `${l.name} is the online stock, not a branch: choose a retail location.`);
       if (!l.is_active) throw new ConflictError(`${l.name} is inactive.`);
     }
@@ -189,7 +200,7 @@ export async function setDraftItem(db: Db, actor: StaffPrincipal, input: { draft
   requirePermission(actor, 'orders.create');
   if (!Number.isInteger(input.qty) || input.qty < 0 || input.qty > MAX_QTY_PER_LINE) throw new DomainError('invalid', `Enter a quantity from 0 to ${MAX_QTY_PER_LINE}.`);
   return db.transaction().execute(async tx => {
-    const d = await openDraft(tx, input.draftId);
+    const d = await openDraft(tx, input.draftId, actor);
     if (input.qty === 0) {
       await tx.deleteFrom('draft_order_items').where('draft_id', '=', d.id).where('variant_id', '=', input.variantId).execute();
     } else {
@@ -222,7 +233,7 @@ export async function setDraftAddresses(db: Db, actor: StaffPrincipal, input: { 
   if (!addressOk(input.shipping)) throw new DomainError('invalid', 'Enter the full delivery address: name, a 10-digit mobile number, address line, city, state and a 6-digit PIN.');
   if (!input.billingSame && !addressOk(input.billing)) throw new DomainError('invalid', 'Enter the full billing address, or tick "Billing address is the same as the delivery address".');
   return db.transaction().execute(async tx => {
-    const d = await openDraft(tx, input.draftId);
+    const d = await openDraft(tx, input.draftId, actor);
     if (d.channel !== 'online') throw new ConflictError('An order at a branch is handed over in the store: it has no delivery address.');
     await tx.updateTable('draft_orders').set({ shipping_address: JSON.stringify(cleanAddress(input.shipping as Address)),
       billing_address: input.billingSame ? null : JSON.stringify(cleanAddress(input.billing as Address)) }).where('id', '=', d.id).execute();
@@ -235,7 +246,7 @@ export async function setDraftDiscount(db: Db, actor: StaffPrincipal, input: { d
   requirePermission(actor, 'orders.discount');
   const bp = Math.round(input.percent * 100), reason = input.reason?.trim() || null;
   return db.transaction().execute(async tx => {
-    const d = await openDraft(tx, input.draftId);
+    const d = await openDraft(tx, input.draftId, actor);
     if (bp > 0) {
       if (!reason || reason.length < 3) throw new DomainError('invalid', 'Enter the reason for the discount (e.g. "Customer loyalty discount").');
       await checkStaffDiscount(tx, await draftLines(tx, d.id), bp);
@@ -249,7 +260,7 @@ export async function setDraftDiscount(db: Db, actor: StaffPrincipal, input: { d
 export async function setDraftNote(db: Db, actor: StaffPrincipal, input: { draftId: string; note: string | null }, ctx: MutationContext) {
   requirePermission(actor, 'orders.create');
   return db.transaction().execute(async tx => {
-    const d = await openDraft(tx, input.draftId);
+    const d = await openDraft(tx, input.draftId, actor);
     const note = input.note?.trim().slice(0, 1000) || null;
     await tx.updateTable('draft_orders').set({ note }).where('id', '=', d.id).execute();
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'draft_order.note', entityType: 'draft_orders', entityId: d.id, after: { note }, ...auditCtx(ctx) });
@@ -259,7 +270,7 @@ export async function setDraftNote(db: Db, actor: StaffPrincipal, input: { draft
 export async function cancelDraftOrder(db: Db, actor: StaffPrincipal, input: { draftId: string }, ctx: MutationContext) {
   requirePermission(actor, 'orders.create');
   return db.transaction().execute(async tx => {
-    const d = await openDraft(tx, input.draftId);
+    const d = await openDraft(tx, input.draftId, actor);
     await tx.updateTable('draft_orders').set({ status: 'cancelled', cancelled_at: sql`now()` }).where('id', '=', d.id).execute();
     await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'draft_order.cancel', entityType: 'draft_orders', entityId: d.id, before: { status: 'open' }, after: { status: 'cancelled' }, ...auditCtx(ctx) });
   });
@@ -275,7 +286,7 @@ export async function confirmDraftOrder(db: Db, actor: StaffPrincipal, input: { 
   const { paymentWindowMinutes } = await checkoutSettings(db);
   try {
     return await db.transaction().execute(async tx => {
-      const d = await openDraft(tx, input.draftId);
+      const d = await openDraft(tx, input.draftId, actor);
       const retail = d.channel === 'retail';
       if (retail !== (IN_STORE_PAYMENTS as readonly string[]).includes(input.payment))
         throw new DomainError('invalid', retail ? 'An order at a branch is paid in the store: cash, card or UPI.' : 'Choose online payment or cash on delivery.');

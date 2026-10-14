@@ -10,7 +10,7 @@
    payment whose browser never came back is still confirmed by Razorpay's signed notification. */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { UnavailableError } from '@kitsyuu/contracts';
-import type { PaymentProvider, ProviderPayment } from './provider.ts';
+import type { PaymentProvider, ProviderPayment, ProviderRefund } from './provider.ts';
 
 export interface RazorpayConfig {
   keyId: string; keySecret: string; webhookSecret?: string;
@@ -57,6 +57,10 @@ export function razorpayProvider(cfg: RazorpayConfig): PaymentProvider {
     failureReason: (p.error_description as string) ?? null, raw: p,
   });
   const fetchPayment = async (id: string) => toPayment(await call('GET', `/v1/payments/${encodeURIComponent(id)}`));
+  // Razorpay sends notes as an object, or as an empty array when there are none.
+  const toRefund = (r: Record<string, unknown>): ProviderRefund => ({ id: String(r.id), amountPaise: Number(r.amount),
+    status: r.status === 'processed' ? 'processed' : r.status === 'failed' ? 'failed' : 'pending',
+    notes: r.notes && typeof r.notes === 'object' && !Array.isArray(r.notes) ? Object.fromEntries(Object.entries(r.notes).map(([k, v]) => [k, String(v)])) : {}, raw: r });
 
   return {
     code: 'razorpay',
@@ -85,8 +89,11 @@ export function razorpayProvider(cfg: RazorpayConfig): PaymentProvider {
     async refund(input) {
       const r = await call<Record<string, unknown>>('POST', `/v1/payments/${encodeURIComponent(input.paymentId)}/refund`, { amount: input.amountPaise, notes: input.notes });
       if (Number(r.amount) !== input.amountPaise) throw new Error(`Razorpay refund ${String(r.id)}: amount mismatch`);
-      const status = r.status === 'processed' ? 'processed' : r.status === 'failed' ? 'failed' : 'pending';
-      return { id: String(r.id), amountPaise: Number(r.amount), status, raw: r };
+      return toRefund(r);
+    },
+    /** 2026-10-14: read only (GET); used to reconcile refunds left pending. */
+    async listRefunds(paymentId) {
+      return ((await call<{ items?: Record<string, unknown>[] }>('GET', `/v1/payments/${encodeURIComponent(paymentId)}/refunds?count=100`)).items ?? []).map(toRefund);
     },
     async listPayments(sessionRef) {
       return ((await call<{ items: Record<string, unknown>[] }>('GET', `/v1/orders/${encodeURIComponent(sessionRef)}/payments`)).items ?? []).map(toPayment);

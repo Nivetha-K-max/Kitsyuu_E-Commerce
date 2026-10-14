@@ -23,6 +23,7 @@ export const RATE_LIMITS = {
   'password-forgot':  { limit: 5,   windowSeconds: HOUR },       // per address
   'password-email':   { limit: 3,   windowSeconds: HOUR },       // per email
   'password-reset':   { limit: 10,  windowSeconds: HOUR },       // per address (guessing reset links)
+  'verify-email-confirm': { limit: 10, windowSeconds: HOUR },    // per address (guessing confirmation links; 2026-10-14)
   'newsletter':       { limit: 5,   windowSeconds: HOUR },       // per address
   'ticket-open':      { limit: 5,   windowSeconds: HOUR },       // per customer
   'ticket-reply':     { limit: 30,  windowSeconds: HOUR },       // per customer

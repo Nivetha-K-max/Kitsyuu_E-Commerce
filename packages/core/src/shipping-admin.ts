@@ -7,7 +7,7 @@
    courier plugs in through the CarrierProvider interface with keys from the environment. */
 import { recordAudit, sql, type Db, type Queryable } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { requirePermission, type Mailer, type StaffPrincipal } from '@kitsyuu/auth';
+import { can, requirePermission, type Mailer, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 import { applyOrderTransition, lockOrder } from './order-state.ts';
 import { recordShipmentForTransition } from './fulfilment.ts';
@@ -131,12 +131,20 @@ export async function saveCourier(db: Db, actor: StaffPrincipal, input: { code: 
 // ---------------------------------------------------------------- shipments
 const OPEN_SHIPMENTS = ['pending', 'processing', 'packed', 'shipped', 'in_transit', 'failed_delivery'] as const;
 
+/** 2026-10-14: the customer's name, contact and delivery address on shipments need shipping.addresses as well as
+    shipping.read (migration 20261014005100). Without it they are left out of what these loaders return, not just hidden. */
+export const canSeeShippingAddress = (actor: StaffPrincipal) => can(actor, 'shipping.addresses');
+
 export async function listShipments(db: Db, actor: StaffPrincipal, query: { q?: string; status: string; courier?: string; page: number }) {
   requirePermission(actor, 'shipping.read');
+  const address = canSeeShippingAddress(actor);
+  const none = sql<string | null>`null::text`;
   let q = db.selectFrom('shipments as s').innerJoin('orders as o', 'o.id', 's.order_id').leftJoin('couriers as c', 'c.code', 's.carrier_code')
     .select(['s.id', 's.order_id', 'o.order_number', 'o.status as order_status', 's.status', 's.carrier_code', 'c.name as courier_name', 's.tracking_number',
-      's.tracking_url', 's.shipped_at', 's.delivered_at', 's.failed_at', 's.failure_reason', 's.updated_at',
-      sql<string | null>`o.shipping_address->>'city'`.as('city'), sql<string | null>`o.shipping_address->>'state'`.as('state')]);
+      's.tracking_url', 's.shipped_at', 's.delivered_at', 's.failed_at', 's.failure_reason', 's.updated_at', 's.packing_state',
+      (address ? sql<string | null>`o.shipping_address->>'city'` : none).as('city'), (address ? sql<string | null>`o.shipping_address->>'state'` : none).as('state'),
+      // Who the shipment is for: the order contact's name, else its email (2026-10-14: was read by the page itself).
+      (address ? sql<string | null>`coalesce(nullif(o.contact->>'name', ''), nullif(o.contact->>'email', ''))` : none).as('customer')]);
   if (query.status === 'open') q = q.where('s.status', 'in', [...OPEN_SHIPMENTS]);
   else if (query.status !== 'all') q = q.where('s.status', '=', query.status as never);
   if (query.courier) q = q.where('s.carrier_code', '=', query.courier);
@@ -155,7 +163,8 @@ export async function getShipmentDetail(db: Db, actor: StaffPrincipal, shipmentI
   if (!s) throw new NotFoundError('Shipment not found.');
   const events = await db.selectFrom('shipment_events as e').leftJoin('staff_users as u', 'u.id', 'e.staff_user_id')
     .select(['e.id', 'e.status', 'e.note', 'e.source', 'e.created_at', 'u.email as staff_email']).where('e.shipment_id', '=', shipmentId).orderBy('e.created_at').orderBy('e.id').execute();
-  return { shipment: s, events: events.map(e => ({ ...e, id: String(e.id) })) };
+  const address = canSeeShippingAddress(actor);   // 2026-10-14: the delivery address only with shipping.addresses
+  return { shipment: { ...s, shipping_address: address ? s.shipping_address : null }, canSeeAddress: address, events: events.map(e => ({ ...e, id: String(e.id) })) };
 }
 
 /** Delivery statuses this module moves a shipment to from each status (shipped / delivered also move the order). */

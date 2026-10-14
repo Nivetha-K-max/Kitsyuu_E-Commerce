@@ -178,13 +178,15 @@ try {
   const sku = await ev(`[...document.querySelector('#location-adjust-form select[name=variant]').options].find(o=>o.value===${JSON.stringify(variantValue)}).textContent.match(/\\(([^)]+)\\)/)[1]`);
   await fill('#location-adjust-form select[name=variant]', variantValue); await fill('#location-adjust-form input[name=delta]', '20');
   await fill('#location-adjust-form select[name=reason]', 'restock'); await fill('#location-adjust-form input[name=note]', 'Received 20 units from supplier.');
-  await fill('#location-adjust-form input[name=unitCost]', '850');
+  // 2026-10-14: unit costs are for staff with costs.read only; the manager role has no cost field or column.
+  ok('manager: no unit cost field on the branch form', !(await exists('#location-adjust-form input[name=unitCost]')));
   await autoConfirm();   // Phase 8: a location adjustment asks before it is written to the ledger
   await submit('#location-adjust-form');
   ok('restock at the branch: "Now 20 at this location"', /Now 20 at this location/.test(await message('#location-adjust-form')), await message('#location-adjust-form'));
   await visit(branchPath, '!!document.querySelector("[data-location-movements]")');
   const row = await ev(`[...document.querySelectorAll('[data-location-movements] tbody tr')][0].innerText.replace(/\\s+/g,' ')`);
-  ok('history: item, reason + note, before 0, +20, after 20, unit cost ₹850, staff', /Restock/.test(row) && /Received 20 units/.test(row) && / 0 \+20 20 ₹850/.test(row) && /manager/i.test(row), row);
+  ok('history: item, reason + note, before 0, +20, after 20, staff; no unit cost column for the manager', /Restock/.test(row) && /Received 20 units/.test(row) && / 0 \+20 20 /.test(row) && !/₹/.test(row) && /manager/i.test(row)
+    && !/Unit cost/.test(await text('[data-location-movements] thead')), row);
 
   // ---------- sales staff: draft for a customer (online) ----------
   ok('sales staff sign in', await signIn('sales', 'WF Sales'));

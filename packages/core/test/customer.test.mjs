@@ -39,7 +39,7 @@ let asha, ashaSession, ravi, raviSession;
 
 async function signupAndVerify(email, name) {
   await signupCustomer(db, mailer, {email, password: PW, fullName: name}, {...ctx, ...links});
-  const r = await verifyCustomerEmail(db, {token: linkIn(mailsTo(email).at(-1))}, ctx);
+  const r = await verifyCustomerEmail(db, {token: linkIn(mailsTo(email).at(-1)), password: PW}, ctx);
   assert.ok(r.ok);
   return r.token;
 }
@@ -55,22 +55,23 @@ test('signup creates an unconfirmed account and emails a confirmation link; no s
   assert.equal((await owner.selectFrom('customer_sessions').select('id').where('customer_id', '=', c.id).execute()).length, 0);
 });
 
-test('login before confirming: correct password → "unverified" and a new link; wrong password → "invalid"', async () => {
+test('login before confirming: correct password → "unverified" and NO email (2026-10-14); wrong password → "invalid"; a new link only when asked', async () => {
   const before = mailsTo('asha@test.local').length;
   assert.deepEqual(await loginCustomer(db, mailer, {email: 'asha@test.local', password: PW}, {...ctx, ...links}), {ok: false, error: 'unverified'});
-  assert.equal(mailsTo('asha@test.local').length, before + 1);
+  assert.equal(mailsTo('asha@test.local').length, before, 'a login never sends a confirmation email (sign-up takeover path S2)');
   assert.deepEqual(await loginCustomer(db, mailer, {email: 'asha@test.local', password: 'wrong password here'}, {...ctx, ...links}), {ok: false, error: 'invalid'});
-  assert.equal(mailsTo('asha@test.local').length, before + 1);   // no link for a wrong password
+  await resendCustomerVerification(db, mailer, {email: 'asha@test.local'}, {...ctx, ...links});
+  assert.equal(mailsTo('asha@test.local').length, before + 1, '"send a new link" still works');
 });
 
 test('confirmation link signs in once; the earlier (superseded) link and a reused link are refused', async () => {
   const [first, latest] = mailsTo('asha@test.local').slice(-2).map(linkIn);
-  assert.deepEqual(await verifyCustomerEmail(db, {token: first}, ctx), {ok: false, error: 'invalid_link'});
-  const r = await verifyCustomerEmail(db, {token: latest}, ctx);
+  assert.deepEqual(await verifyCustomerEmail(db, {token: first, password: PW}, ctx), {ok: false, error: 'invalid_link'});
+  const r = await verifyCustomerEmail(db, {token: latest, password: PW}, ctx);
   assert.ok(r.ok);
   ashaSession = r.token; asha = await principal(ashaSession);
   assert.equal(asha.emailVerified, true);
-  assert.deepEqual(await verifyCustomerEmail(db, {token: latest}, ctx), {ok: false, error: 'invalid_link'});
+  assert.deepEqual(await verifyCustomerEmail(db, {token: latest, password: PW}, ctx), {ok: false, error: 'invalid_link'});
   assert.deepEqual(await auditActions(asha.customerId), ['customer.signup', 'auth.email_verification_request', 'auth.email_verification_request', 'customer.email_verify']);
 });
 

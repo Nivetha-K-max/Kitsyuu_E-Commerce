@@ -734,3 +734,7 @@ export interface Database {
   store_credit_accounts: StoreCreditAccountsTable; store_credit_entries: StoreCreditEntriesTable;
   credit_accounts: CreditAccountsTable; credit_bills: CreditBillsTable; credit_repayments: CreditRepaymentsTable;
 }
+
+// ============================== staff branch scope (migration 20261014005000, local only until reviewed) ==============================
+export interface StaffLocationsTable { staff_user_id: string; location_id: string; created_at: Generated<Timestamp>; created_by: string | null }
+export interface Database { staff_locations: StaffLocationsTable }

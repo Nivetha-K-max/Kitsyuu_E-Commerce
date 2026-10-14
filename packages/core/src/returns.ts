@@ -16,7 +16,7 @@ import { adjustPointsForRefunds } from './loyalty.ts';
 import { customerRef, returnsOwnedBy } from './customers.ts';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { requirePermission, type CustomerPrincipal, type Mailer, type RequestContext, type StaffPrincipal } from '@kitsyuu/auth';
-import type { PaymentProvider } from './payments/provider.ts';
+import type { PaymentProvider, ProviderRefund } from './payments/provider.ts';
 import type { MutationContext } from './staff.ts';
 import { raiseAlertSafely } from './alerts.ts';
 import { hello, sendCustomerEmail, storeLink } from './customer-email.ts';
@@ -428,7 +428,7 @@ export async function refundReturn(db: Db, actor: StaffPrincipal, provider: Paym
   let answer: Awaited<ReturnType<NonNullable<PaymentProvider['refund']>>> | null = null; let failure: string | null = null;
   try {
     answer = await provider!.refund!({ paymentId: pending.payment.provider_payment_id!, amountPaise: input.amount, currency: pending.payment.currency,
-      notes: { return_number: pending.number, order_number: pending.orderNumber } });
+      notes: { return_number: pending.number, order_number: pending.orderNumber, kitsyuu_refund_id: pending.refundId } });
     if (answer.status === 'failed') failure = 'The provider reported the refund as failed.';
   } catch (e) {
     failure = e instanceof DomainError ? e.message : `The provider did not accept the refund: ${String((e as Error).message ?? e).slice(0, 200)}`;
@@ -512,6 +512,101 @@ export async function settlePendingRefund(db: Db, actor: StaffPrincipal, input: 
       before: { status: 'pending', provider_refund_id: f.provider_refund_id }, after: { status: input.outcome, provider_refund_id: input.outcome === 'processed' ? reference : f.provider_refund_id },
       metadata: { order_number: o.order_number, return_number: ret?.number ?? null, amount_paise: f.amount_paise, note } });
     return { status: input.outcome, orderNumber: o.order_number, returnId: ret?.id ?? null, returnNumber: ret?.number ?? null };
+  });
+}
+
+/** 2026-10-14: how old a pending provider refund must be before it is checked automatically (the request and its answer
+    take a few seconds; this keeps the check away from a refund that is still being asked for). */
+export const RECONCILE_REFUNDS_AFTER_MINUTES = 2;
+
+export interface RefundReconcileRun {
+  checked: number; processed: number; failed: number; stillPending: number; needsStaff: number; errors: number;
+  /** Returns whose refund was confirmed in this run (the caller emails the customer, as for a refund made by staff). */
+  refundedReturnIds: string[];
+}
+
+/** 2026-10-14: settles provider refunds left 'pending' from what the PROVIDER reports now. Only reads from the provider
+    (listRefunds): it never asks for a refund, so it can never refund twice. For each pending refund through this provider:
+      · the provider's refund is found by the id recorded for it, or (when the answer was never recorded) by the platform's
+        refund id sent in its notes; it must be exactly one refund, for exactly the recorded amount;
+      · 'processed' → the same outcome as a processed answer (payment, order, return moved on); 'failed' → failed, the money
+        can be refunded again and staff are alerted; still 'pending' → left as it is;
+      · not found, ambiguous, a different amount, or a provider error → left pending and staff are alerted once (dedupe
+        key), so a person settles it with settlePendingRefund. Nothing is assumed.
+    Each change is made once: the refund is re-read under lock (return → order → refund, as every refund path does) and
+    changed only while it is still 'pending'; a second run, or two runs at once, change nothing more. Audited as the
+    system ('refund.reconciled'). */
+export async function reconcilePendingRefunds(db: Db, provider: PaymentProvider | null,
+  opts: { limit?: number; olderThanMinutes?: number } = {}): Promise<RefundReconcileRun> {
+  const run: RefundReconcileRun = { checked: 0, processed: 0, failed: 0, stillPending: 0, needsStaff: 0, errors: 0, refundedReturnIds: [] };
+  if (!provider?.listRefunds) return run;
+  const due = await db.selectFrom('refunds as f').innerJoin('payments as p', 'p.id', 'f.payment_id').innerJoin('orders as o', 'o.id', 'f.order_id')
+    .select(['f.id', 'f.amount_paise', 'f.provider_refund_id', 'f.order_id', 'f.return_id', 'p.provider_payment_id', 'o.order_number'])
+    .where('f.status', '=', 'pending').where('f.method', '=', 'provider').where('p.provider', '=', provider.code)
+    .where(sql<boolean>`f.created_at <= now() - make_interval(mins => ${opts.olderThanMinutes ?? RECONCILE_REFUNDS_AFTER_MINUTES})`)
+    .orderBy('f.created_at').limit(Math.min(opts.limit ?? 50, 200)).execute();
+  const needsStaff = async (d: (typeof due)[number], why: string) => {
+    run.needsStaff++;
+    await raiseAlertSafely(db, { kind: 'refund.failed', title: `Refund for order ${d.order_number} needs checking with the payment provider`, body: why,
+      entityType: d.return_id ? 'return_requests' : 'orders', entityId: d.return_id ?? d.order_id, link: d.return_id ? `/returns/${d.return_id}` : `/payments/${d.order_id}`,
+      dedupeKey: `refund.reconcile:${d.id}`, severity: 'warning' });
+  };
+  for (const d of due) {
+    run.checked++;
+    if (!d.provider_payment_id) { await needsStaff(d, 'The payment has no provider payment id, so the refund cannot be looked up automatically.'); continue; }
+    let found: ProviderRefund[];
+    try { found = await provider.listRefunds(d.provider_payment_id); }
+    catch (e) { run.errors++; console.error('[refunds] reconcile: provider lookup failed', d.id, (e as Error).message); continue; }
+    const match = d.provider_refund_id ? found.filter(r => r.id === d.provider_refund_id) : found.filter(r => r.notes?.kitsyuu_refund_id === d.id);
+    if (match.length !== 1) {
+      await needsStaff(d, match.length ? 'More than one provider refund matches this refund.' : "The payment provider has no matching refund (the request may not have reached it). Check the provider's dashboard and settle it on the refund.");
+      continue;
+    }
+    const r = match[0];
+    if (r.amountPaise !== d.amount_paise) { await needsStaff(d, `The provider's refund ${r.id} is for a different amount than recorded.`); continue; }
+    if (r.status === 'pending') { run.stillPending++; continue; }
+    let applied: { changed: boolean; returnId: string | null; refunded: boolean };
+    try { applied = await applyReconciledRefund(db, d.id, r); }
+    catch (e) {
+      if ((e as { code?: string }).code === '23505') { await needsStaff(d, `The provider's refund id ${r.id} is already recorded for another refund.`); continue; }
+      run.errors++; console.error('[refunds] reconcile: could not record', d.id, (e as Error).message); continue;
+    }
+    if (!applied.changed) continue;                      // settled meanwhile (by staff, or another run)
+    if (r.status === 'processed') { run.processed++; if (applied.refunded && applied.returnId) run.refundedReturnIds.push(applied.returnId); }
+    else {
+      run.failed++;
+      await raiseAlertSafely(db, { kind: 'refund.failed', title: `Refund failed for order ${d.order_number}`, body: `The payment provider reported refund ${r.id} as failed. Nothing was refunded; it can be made again.`,
+        entityType: d.return_id ? 'return_requests' : 'orders', entityId: d.return_id ?? d.order_id, link: d.return_id ? `/returns/${d.return_id}` : `/payments/${d.order_id}`, dedupeKey: `refund.reconcile.failed:${d.id}` });
+    }
+  }
+  return run;
+}
+
+async function applyReconciledRefund(db: Db, refundId: string, r: ProviderRefund) {
+  return db.transaction().execute(async tx => {
+    const seen = await tx.selectFrom('refunds').select(['order_id', 'return_id']).where('id', '=', refundId).executeTakeFirstOrThrow();
+    const ret = seen.return_id ? await tx.selectFrom('return_requests').select(['id', 'number', 'status']).where('id', '=', seen.return_id).forUpdate().executeTakeFirst() : undefined;
+    const o = await tx.selectFrom('orders').select('order_number').where('id', '=', seen.order_id).forUpdate().executeTakeFirstOrThrow();
+    const f = await tx.selectFrom('refunds').select(['id', 'payment_id', 'order_id', 'amount_paise', 'status', 'method', 'provider_refund_id']).where('id', '=', refundId).forUpdate().executeTakeFirstOrThrow();
+    if (f.status !== 'pending' || f.method !== 'provider') return { changed: false, returnId: null, refunded: false };
+    let refunded = false;
+    if (r.status === 'processed') {
+      await tx.updateTable('refunds').set({ status: 'processed', provider_refund_id: r.id, processed_at: sql<Date>`now()`, processed_by: null }).where('id', '=', f.id).execute();
+      await markPaymentRefunded(tx, f.order_id, f.payment_id);
+      if (ret && ret.status === 'refund_pending') {
+        await tx.updateTable('return_requests').set({ status: 'refunded', refund_amount_paise: f.amount_paise }).where('id', '=', ret.id).execute();
+        await event(tx, ret.id, ret.status, 'refunded', `Refund ${r.id} confirmed by the payment provider (checked automatically)`, { type: 'system' });
+        refunded = true;
+      }
+    } else {
+      await tx.updateTable('refunds').set({ status: 'failed', provider_refund_id: r.id, failure_reason: 'The payment provider reported the refund as failed (checked automatically).' }).where('id', '=', f.id).execute();
+      await tx.updateTable('order_edits').set({ refund_id: null }).where('refund_id', '=', f.id).execute();   // it can be made again
+      if (ret) await event(tx, ret.id, ret.status, ret.status, `Refund ${r.id} reported as failed by the payment provider (checked automatically)`, { type: 'system' });
+    }
+    await recordAudit(tx, { actorType: 'system', action: 'refund.reconciled', entityType: 'refunds', entityId: f.id,
+      before: { status: 'pending', provider_refund_id: f.provider_refund_id }, after: { status: r.status, provider_refund_id: r.id },
+      metadata: { order_number: o.order_number, return_number: ret?.number ?? null, amount_paise: f.amount_paise, source: 'provider_check' } });
+    return { changed: true, returnId: ret?.id ?? null, refunded };
   });
 }
 

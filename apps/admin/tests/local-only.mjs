@@ -2,6 +2,9 @@
    The three URLs written by database/scripts/test-db.mjs are checked every time they are read: each must be present, on
    localhost, in the kitsyuu_test database, with the expected role. A missing or different value stops the run: without this
    check a missing ADMIN_DATABASE_URL would let the test server fall back to apps/admin/.env.local. Values are never printed. */
+import {testDbName} from '../../../database/scripts/lib/test-db-name.mjs';
+// 2026-10-14: kitsyuu_test, or the isolated kitsyuu_e2e_… database named by KITSYUU_TEST_DB (never anything else).
+const DB = () => `/${testDbName()}`;
 const EXPECTED = {ADMIN_DATABASE_URL: 'kitsyuu_admin', WEBSITE_DATABASE_URL: 'kitsyuu_website', KITSYUU_DB_URL: null};
 
 export function assertLocalTestEnv(env) {
@@ -11,7 +14,7 @@ export function assertLocalTestEnv(env) {
     let u;
     try { u = new URL(value); } catch { throw new Error(`refusing: ${name} is not a database URL`); }
     if (!['localhost', '127.0.0.1'].includes(u.hostname)) throw new Error(`refusing: ${name} does not point at this machine`);
-    if (u.pathname !== '/kitsyuu_test') throw new Error(`refusing: ${name} is not the local test database (kitsyuu_test)`);
+    if (u.pathname !== DB()) throw new Error(`refusing: ${name} is not the local test database (${DB().slice(1)})`);
     if (role && decodeURIComponent(u.username) !== role) throw new Error(`refusing: ${name} does not use the ${role} role`);
   }
   return env;
@@ -22,6 +25,6 @@ export function assertLocalTestEnv(env) {
 export function assertLocalOwnerUrl(value) {
   let u;
   try { u = new URL(value ?? ''); } catch { throw new Error('refusing: KITSYUU_DB_URL is missing or not a database URL'); }
-  if (!['localhost', '127.0.0.1'].includes(u.hostname) || u.pathname !== '/kitsyuu_test') throw new Error('refusing: KITSYUU_DB_URL is not the local test database (kitsyuu_test on this machine)');
+  if (!['localhost', '127.0.0.1'].includes(u.hostname) || u.pathname !== DB()) throw new Error(`refusing: KITSYUU_DB_URL is not the local test database (${DB().slice(1)} on this machine)`);
   return value;
 }

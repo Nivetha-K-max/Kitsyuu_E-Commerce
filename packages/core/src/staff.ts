@@ -42,7 +42,53 @@ export async function getStaff(db: Db, actor: StaffPrincipal, staffId: string) {
     id: r.id, email: r.email, fullName: r.full_name, status: r.status, lastLoginAt: r.last_login_at as Date | null, createdAt: r.created_at as Date,
     passwordChangedAt: r.password_changed_at as Date | null, disabledAt: r.disabled_at as Date | null,
     roles: (await rolesOf(db, [r.id])).get(r.id) ?? [], activeSessions: sessions.n, inviteExpiresAt: (pending?.expires_at as Date | undefined) ?? null,
+    locations: await staffLocationsOf(db, r.id), alwaysAllBranches: await alwaysAllBranches(db, r.id),
   };
+}
+
+// ---------------------------------------------------------------- branch scope (2026-10-14)
+/** The locations a staff member is assigned to (empty = every location). */
+async function staffLocationsOf(q: Queryable, staffId: string) {
+  return q.selectFrom('staff_locations as sl').innerJoin('locations as l', 'l.id', 'sl.location_id')
+    .select(['l.id', 'l.code', 'l.name', 'l.is_online', 'l.is_active']).where('sl.staff_user_id', '=', staffId).orderBy('l.is_online', 'desc').orderBy('l.sort_order').orderBy('l.name').execute();
+}
+
+/** True when assignments do not limit this person (they hold staff.manage): the same rule as loadLocationScope, so the
+    page can say so. */
+async function alwaysAllBranches(q: Queryable, staffId: string): Promise<boolean> {
+  const r = await q.selectFrom('staff_user_roles as sur').innerJoin('role_permissions as rp', 'rp.role_id', 'sur.role_id').select('sur.role_id')
+    .where('sur.staff_user_id', '=', staffId).where('rp.permission_code', '=', 'staff.manage')
+    .executeTakeFirst();
+  return !!r;
+}
+
+/** Every location, for choosing a staff member's branches (staff.manage; not limited by the chooser's own branches). */
+export async function staffLocationChoices(db: Db, actor: StaffPrincipal) {
+  requirePermission(actor, 'staff.manage');
+  return db.selectFrom('locations').select(['id', 'code', 'name', 'kind', 'is_online', 'is_active']).orderBy('is_online', 'desc').orderBy('sort_order').orderBy('name').execute();
+}
+
+/** Sets the locations a staff member may work at (none = every location). Staff holding staff.manage and administrators
+    are never limited, whatever is set here (see loadLocationScope). Takes effect on their next request. */
+export async function setStaffLocations(db: Db, actor: StaffPrincipal, input: { staffId: string; locationIds: string[] }, ctx: MutationContext) {
+  requirePermission(actor, 'staff.manage');
+  const ids = [...new Set(input.locationIds)];
+  if (ids.some(id => !/^[0-9a-f-]{36}$/i.test(id))) throw new NotFoundError('One of the chosen locations does not exist.');
+  await db.transaction().execute(async tx => {
+    const staff = await tx.selectFrom('staff_users').select('id').where('id', '=', input.staffId).forUpdate().executeTakeFirst();
+    if (!staff) throw new NotFoundError('Staff member not found.');
+    await assertOutranksOrEqual(tx, actor, input.staffId);
+    const known = ids.length ? await tx.selectFrom('locations').select(['id', 'code']).where('id', 'in', ids).execute() : [];
+    if (known.length !== ids.length) throw new NotFoundError('One of the chosen locations does not exist.');
+    const current = await tx.selectFrom('staff_locations as sl').innerJoin('locations as l', 'l.id', 'sl.location_id').select(['l.id', 'l.code'])
+      .where('sl.staff_user_id', '=', input.staffId).execute();
+    const add = ids.filter(id => !current.some(c => c.id === id)), remove = current.filter(c => !ids.includes(c.id)).map(c => c.id);
+    if (!add.length && !remove.length) return;
+    if (remove.length) await tx.deleteFrom('staff_locations').where('staff_user_id', '=', input.staffId).where('location_id', 'in', remove).execute();
+    if (add.length) await tx.insertInto('staff_locations').values(add.map(id => ({ staff_user_id: input.staffId, location_id: id, created_by: actor.staffId }))).execute();
+    await recordAudit(tx, { actorType: 'staff', staffId: actor.staffId, action: 'staff.locations_update', entityType: 'staff_users', entityId: input.staffId,
+      before: { locations: current.map(c => c.code).sort() }, after: { locations: known.map(k => k.code).sort() }, ...auditCtx(ctx) });
+  });
 }
 
 async function roleSet(q: Queryable, roleIds: string[]) {

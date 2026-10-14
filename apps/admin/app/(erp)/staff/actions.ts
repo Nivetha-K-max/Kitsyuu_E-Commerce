@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { inviteStaffInput, setStaffRolesInput, setStaffStatusInput, updateStaffInput, uuid, type ActionState, DomainError } from '@kitsyuu/contracts';
-import { inviteStaff, resendInvite, revokeStaffSessions, setStaffRoles, setStaffStatus, updateStaff, resetStaffTwoFactor } from '@kitsyuu/core';
+import { inviteStaff, resendInvite, revokeStaffSessions, setStaffLocations, setStaffRoles, setStaffStatus, updateStaff, resetStaffTwoFactor } from '@kitsyuu/core';
 import { z } from 'zod';
 import { handle } from '@/lib/actions';
 import { db, inviteUrl, mailer, requestContext, requireActor } from '@/lib/server';
@@ -57,6 +57,18 @@ export async function resendInviteAction(_: ActionState, form: FormData): Promis
 export async function revokeSessionsAction(_: ActionState, form: FormData): Promise<ActionState> {
   const actor = await requireActor();
   const r = await handle(staffIdOnly, form, async input => { await revokeStaffSessions(db(), actor, input.staffId, await ctx()); return { ok: true, message: 'Signed out of every other session.' }; });
+  if (r.ok) revalidatePath('/staff', 'layout');
+  return r;
+}
+
+/** 2026-10-14: the branches (locations) a staff member may work at. None ticked = every branch. */
+const staffLocationsInput = z.object({ staffId: uuid, locationIds: z.array(uuid).max(200) });
+export async function setStaffLocationsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const actor = await requireActor();
+  const r = await handle(staffLocationsInput, form, async input => {
+    await setStaffLocations(db(), actor, input, await ctx());
+    return { ok: true, message: input.locationIds.length ? 'Branches saved.' : 'Branches saved: all branches.' };
+  }, { locationIds: form.getAll('locationIds').map(String) });
   if (r.ok) revalidatePath('/staff', 'layout');
   return r;
 }

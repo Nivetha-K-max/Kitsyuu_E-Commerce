@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { draftSizeOptions, getDraftOrder, lineProblemText, settingsShipping, type DraftAddress, type DraftPayment } from '@kitsyuu/core';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Forbidden, PageHead, SectionTitle, StatusBadge } from '@/components/ui';
@@ -40,7 +40,8 @@ export default async function DraftPage({ params, searchParams }: { params: Para
   const sp = await searchParams;
   const want = (Array.isArray(sp.payment) ? sp.payment[0] : sp.payment) as DraftPayment | undefined;
   const config = { shipping: settingsShipping(() => db()), discounts: [] };
-  const peek = await getDraftOrder(db(), actor, id, { config }).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  // 2026-10-14: another branch's draft is not shown to staff assigned elsewhere (as if it did not exist)
+  const peek = await getDraftOrder(db(), actor, id, { config }).catch(e => { if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); throw e; });
   const choices: DraftPayment[] = peek.draft.channel === 'retail' ? ['cash', 'card', 'upi'] : ['online', 'cod'];
   const payment = want && choices.includes(want) ? want : choices[0];
   const v = payment === peek.payment ? peek : await getDraftOrder(db(), actor, id, { payment, config });

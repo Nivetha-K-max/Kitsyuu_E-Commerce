@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { after } from 'next/server';
 import { can } from '@kitsyuu/auth';
 import { orderPaymentListQuery, paymentEventListQuery, paymentListQuery, type OrderPaymentListQuery, type PaymentEventListQuery, type PaymentListQuery } from '@kitsyuu/contracts';
 import { getPaymentExceptions, listOrderPayments, listPaymentEvents, listPayments, PAYMENT_PAGE_SIZE } from '@kitsyuu/core';
 import { Empty, Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime, formatPaise, STATUS_LABEL } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
+import { checkPendingRefundsThrottled } from '@/lib/payments';
 import FilterForm from '@/components/FilterForm';
 import { FilterLink, NavFrame, NavLink } from '@/components/NavFrame';
 import { orderStage } from '../orders/order-ui';
@@ -33,6 +35,10 @@ const EXCEPTION_HELP: Record<string, string> = {
 export default async function PaymentsPage({ searchParams }: { searchParams: SP }) {
   const actor = await requireActor();
   if (!can(actor, 'billing.read')) return <><PageHead section="Commerce" title="Payments" /><Forbidden permission="billing.read" /></>;
+  /* 2026-10-14: after this page has been sent, provider refunds left pending are checked with the provider (read only; at
+     most once every 5 minutes per server; nothing happens without a refund provider). /api/jobs/reconcile-refunds does the
+     same on a timer. It never delays or changes the page. */
+  after(() => checkPendingRefundsThrottled());
   const sp = await searchParams;
   const view: View = VIEWS.some(([v]) => v === one(sp.view)) ? one(sp.view) as View : 'payments';
   const exceptions = await getPaymentExceptions(db(), actor);

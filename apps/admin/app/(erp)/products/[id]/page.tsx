@@ -97,7 +97,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
   // Rare actions: each opens the place on this page (or the module) that does it. Shown only to those who may do it.
   const more: MoreItem[] = [
     ...(write ? [{ label: 'Edit details', href: `${self}#det-h` }, { label: 'Change status…', href: `${self}#status-h` }] : []),
-    ...(write || can(actor, 'pricing.manage') ? [{ label: 'Change price', href: `${self}?tab=pricing` }] : []),
+    ...(can(actor, 'pricing.manage') ? [{ label: 'Change price', href: `${self}?tab=pricing` }] : []),
     ...(adjust && variants && variants.length > 0 ? [{ label: 'Adjust stock', href: `${self}?tab=variants#adjust-h` }] : []),
     ...(write ? [{ label: 'Add an image', href: `${self}?tab=media#upload-h` }] : []),
     ...(variants ? [{ label: 'Open in Inventory', href: `/inventory?q=${encodeURIComponent(p.id)}` }] : []),
@@ -337,7 +337,10 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   <ActionForm action={updateVariantAction} submitLabel="Save size" variant="ghost" className="form compact" id={`size-${v.variant_sku}`} label={`Settings for size ${v.size}`}>
                     <Hidden name="productId" value={p.id} /><Hidden name="variantId" value={v.variant_id} /><Hidden name="expectedVersion" value={v.version} />
                     <Checkbox name="isActive" label="Offered in the store" defaultChecked={v.is_active} />
-                    <Field name="price" label="Price override (₹)" defaultValue={v.price_paise === null ? '' : paiseToRupees(v.price_paise).replace(/,/g, '')} hint="Blank = product price." />
+                    {/* 2026-10-14: a size's price is a price change (pricing.manage); without it the current value is sent back unchanged. */}
+                    {can(actor, 'pricing.manage')
+                      ? <Field name="price" label="Price override (₹)" defaultValue={v.price_paise === null ? '' : paiseToRupees(v.price_paise).replace(/,/g, '')} hint="Blank = product price." />
+                      : <Hidden name="price" value={v.price_paise === null ? '' : paiseToRupees(v.price_paise).replace(/,/g, '')} />}
                     <Field name="reorderLevel" label="Reorder level" defaultValue={v.own_reorder_level === null ? '' : String(v.own_reorder_level)} hint={`Blank = default (${v.reorder_level}).`} />
                   </ActionForm>
                   <ActionForm action={setBarcodeAction} submitLabel="Save barcode" variant="ghost" className="form compact" id={`barcode-${v.variant_id}`} label={`Barcode of ${v.variant_sku}`}>
@@ -409,7 +412,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
       <>
         <Section id="price-h" title="Price" name="price" hint="Tax-inclusive. A change applies to carts priced from now on; placed orders keep their price.">
           <p className="price-now" data-current-price>₹{paiseToRupees(p.price_paise)}{compareAt ? <small className="ent-was"> was {formatPaise(compareAt)}</small> : null}</p>
-          {write ? <PriceForm action={updatePriceAction} productId={p.id} currentPaise={p.price_paise} />
+          {write && manage ? <PriceForm action={updatePriceAction} productId={p.id} currentPaise={p.price_paise} />
             : manage ? (
               <ActionForm action={setPricingAction} submitLabel="Save price" id="product-price-form" label="Product price">
                 <Hidden name="productId" value={p.id} />
@@ -418,7 +421,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
                   <Field name="compareAt" label="Compare-at price (₹)" defaultValue={rupeesField(compareAt)} hint="Optional “was” price; must be above the price." />
                 </div>
               </ActionForm>
-            ) : <p className="note" data-readonly="price">Changing the price needs the products.write permission.</p>}
+            ) : <p className="note" data-readonly="price">Changing the price needs the pricing.manage permission.</p>}
           {write && manage && (
             <ActionForm action={setPricingAction} submitLabel="Save compare-at price" variant="ghost" id="product-price-form" label="Compare-at price">
               <Hidden name="productId" value={p.id} /><Hidden name="price" value={rupeesField(p.price_paise)} />
@@ -429,7 +432,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pa
 
         <Section id="min-h" title="Minimum price" name="min-price" hint="The floor for staff discounts on draft orders and at the counter.">
           <p data-min-price>Minimum price after a staff discount: <b>{p.min_price_paise ? `₹${paiseToRupees(p.min_price_paise)}` : 'none'}</b></p>
-          {write && (
+          {write && manage && (
             <ActionForm action={setMinPriceAction} submitLabel="Save minimum price" variant="ghost" id="min-price-form" label="Minimum price">
               <Hidden name="productId" value={p.id} />
               <Field name="minPrice" label="Minimum price, ₹ (optional)" defaultValue={p.min_price_paise ? paiseToRupees(p.min_price_paise).replace(/,/g, '') : ''} hint="Staff discounts can never take this product below it. Empty: no minimum." />

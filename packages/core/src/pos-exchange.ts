@@ -12,7 +12,7 @@
      return the same units. */
 import { recordAudit, sql, type Db, type Tx } from '@kitsyuu/db';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
-import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { can, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { alreadyReturned, markPaymentRefunded, refundable, returnSettings } from './returns.ts';
 import { completePosSale, quotePosSale, type PosLineInput, type PosTender } from './pos.ts';
 import { moveStoreCredit } from './store-credit.ts';
@@ -79,6 +79,9 @@ async function work(q: Db | Tx, actor: StaffPrincipal, o: OrderRow, locationId: 
 /** What the exchange comes to, before anything is saved: shown to the customer as Collect / Store credit / Refund / Even. */
 export async function quoteCounterExchange(db: Db, actor: StaffPrincipal, input: { orderId: string; locationId: string; items: ExchangeReturnLine[]; replacements: PosLineInput[] }) {
   requirePermission(actor, 'returns.manage');
+  // 2026-10-14: the goods come back into, and the replacement leaves, the branch the counter is at: it must be one of the
+  // staff member's branches. The original sale may be from any branch or the website (a customer may return anywhere).
+  requireLocation(actor, input.locationId);
   const o = await db.selectFrom('orders').select([...ORDER_COLS]).where('id', '=', input.orderId).executeTakeFirst() as OrderRow | undefined;
   if (!o) throw new NotFoundError('Order not found.');
   const elig = await eligibility(db, o);
@@ -115,6 +118,7 @@ export async function settleCounterExchange(db: Db, actor: StaffPrincipal, input
       const s = await tx.selectFrom('pos_sessions as s').innerJoin('locations as l', 'l.id', 's.location_id').select(['s.id', 's.number', 's.staff_id', 's.status', 's.location_id', 'l.name as location_name'])
         .where('s.id', '=', input.sessionId).forUpdate('s').executeTakeFirst();
       if (!s || s.staff_id !== actor.staffId || s.status !== 'open') throw new ConflictError('Your cashier session is not open: open a session to take a return at the counter.');
+      requireLocation(actor, s.location_id);   // 2026-10-14
       const o = await tx.selectFrom('orders').select([...ORDER_COLS]).where('id', '=', input.orderId).forUpdate().executeTakeFirst() as OrderRow | undefined;
       if (!o) throw new NotFoundError('Order not found.');
       const prior = await tx.selectFrom('return_requests').select(['id', 'number', 'order_id', 'settlement', 'settlement_paise', 'exchange_order_id']).where('idempotency_key', '=', rkey).executeTakeFirst();

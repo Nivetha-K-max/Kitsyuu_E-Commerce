@@ -46,7 +46,7 @@ async function sendLink(db: Db, mailer: Mailer, s: AuthSettings, customer: { id:
     ? { to: customer.email, subject: 'Reset your KITSYUU password',
         text: `A password reset was requested for your KITSYUU account.\n\nSet a new password: ${url(token)}\n\nThe link works once and expires in ${lifetime}. If you did not ask for this, you can ignore this email.` }
     : { to: customer.email, subject: 'Confirm your KITSYUU account',
-        text: `Welcome to KITSYUU.\n\nConfirm your email address to finish creating your account: ${url(token)}\n\nThe link works once and expires in ${lifetime}. If you did not create an account, you can ignore this email.` });
+        text: `Welcome to KITSYUU.\n\nConfirm your email address and set your password to finish creating your account: ${url(token)}\n\nThe link works once and expires in ${lifetime}. If you did not create an account, you can ignore this email: nothing happens until a password is set from this link.` });
   return true;
 }
 
@@ -54,7 +54,11 @@ async function sendLink(db: Db, mailer: Mailer, s: AuthSettings, customer: { id:
 
 /** Creates an account and emails a confirmation link. The response is identical whether or not the email already has an
     account: an unconfirmed existing account gets its confirmation link again; a confirmed one gets nothing (no email can be
-    used to spam its owner). The password is always hashed, so the time taken does not differ either. */
+    used to spam its owner). The password is always hashed, so the time taken does not differ either.
+    2026-10-14 (sign-up takeover fix): signing up again on an address that is still unconfirmed REPLACES the pending password
+    and name (the latest registrant's), and the new link supersedes every earlier one. Nothing chosen at sign-up is ever
+    activated by itself anyway: the account becomes usable only when the owner of the inbox sets a password on the
+    confirmation page (verifyCustomerEmail). */
 export async function signupCustomer(db: Db, mailer: Mailer, input: { email: string; password: string; fullName: string },
   ctx: RequestContext & { verifyUrl: (token: string) => string }): Promise<void> {
   const s = await authSettings(db);
@@ -70,13 +74,36 @@ export async function signupCustomer(db: Db, mailer: Mailer, input: { email: str
     });
     if (!created) return;                                           // created concurrently: treat as existing
     customer = { ...created, email_verified_at: null, status: 'active' };
+  } else if (customer.status === 'active' && !customer.email_verified_at) {
+    // Still unconfirmed: the pending credentials become this registrant's (only while it stays unconfirmed).
+    await db.transaction().execute(async tx => {
+      const r = await tx.updateTable('customers').set({ password_hash: passwordHash, password_changed_at: sql<Date>`now()`, full_name: input.fullName })
+        .where('id', '=', customer!.id).where('email_verified_at', 'is', null).executeTakeFirst();
+      if (Number(r.numUpdatedRows) === 1) await recordAudit(tx, { ...customerAudit(customer!.id, ctx), action: 'customer.signup_pending_replaced' });
+    });
   }
   if (customer.status === 'active' && !customer.email_verified_at) await sendLink(db, mailer, s, customer, 'email_verification', ctx, ctx.verifyUrl);
 }
 
-/** Confirms the email address from the emailed link and signs the customer in. */
-export async function verifyCustomerEmail(db: Db, input: { token: string }, ctx: RequestContext): Promise<SessionResult | { ok: false; error: 'invalid_link' }> {
+/** 2026-10-14: is this confirmation link still usable? Read only: opening the link (a GET, which email link scanners make
+    too) must change nothing. The confirmation page uses it to show the form or "this link is not valid". */
+export async function checkCustomerVerificationLink(db: Db, input: { token: string }): Promise<boolean> {
+  const row = await db.selectFrom('auth_tokens as t').innerJoin('customers as c', 'c.id', 't.customer_id').select('t.id')
+    .where('t.token_hash', '=', hashToken(input.token)).where('t.purpose', '=', 'email_verification')
+    .where('t.used_at', 'is', null).where('t.expires_at', '>', sql<Date>`now()`).where('c.status', '=', 'active').executeTakeFirst();
+  return !!row;
+}
+
+/** Confirms the email address and signs the customer in.
+    2026-10-14 (sign-up takeover fix): the person confirming SETS the account's password here. Anyone can register someone
+    else's address, but only the owner of the inbox receives this link, so the password the account ends up with is always
+    theirs; a password chosen at sign-up (possibly by someone else) is replaced and never becomes usable. It is a separate
+    step (a form posted from the confirmation page), so a mail scanner that opens the link confirms nothing. On success:
+    every existing session of the account ends, every other outstanding link (confirmation or password reset) stops
+    working, and a new session starts for this browser. */
+export async function verifyCustomerEmail(db: Db, input: { token: string; password: string }, ctx: RequestContext): Promise<SessionResult | { ok: false; error: 'invalid_link' }> {
   const s = await authSettings(db);
+  const passwordHash = await hashPassword(input.password);
   return db.transaction().execute(async tx => {
     const row = await tx.selectFrom('auth_tokens as t').innerJoin('customers as c', 'c.id', 't.customer_id')
       .select(['t.id as token_id', 'c.id as customer_id'])
@@ -85,10 +112,13 @@ export async function verifyCustomerEmail(db: Db, input: { token: string }, ctx:
       .forUpdate().executeTakeFirst();
     if (!row) return { ok: false as const, error: 'invalid_link' as const };
     await tx.updateTable('auth_tokens').set({ used_at: sql<Date>`now()` }).where('id', '=', row.token_id).execute();
-    await tx.updateTable('customers').set({ email_verified_at: sql<Date>`coalesce(email_verified_at, now())`, last_login_at: sql<Date>`now()` })
-      .where('id', '=', row.customer_id).execute();
+    await tx.updateTable('auth_tokens').set({ used_at: sql<Date>`now()`, metadata: JSON.stringify({ superseded: 'email_verified' }) })
+      .where('customer_id', '=', row.customer_id).where('purpose', 'in', ['email_verification', 'password_reset']).where('used_at', 'is', null).execute();
+    await tx.updateTable('customers').set({ password_hash: passwordHash, password_changed_at: sql<Date>`now()`,
+      email_verified_at: sql<Date>`coalesce(email_verified_at, now())`, last_login_at: sql<Date>`now()` }).where('id', '=', row.customer_id).execute();
+    const ended = await revokeAllCustomerSessions(tx, row.customer_id);
     const session = await createCustomerSession(tx, row.customer_id, ctx, s);
-    await recordAudit(tx, { ...customerAudit(row.customer_id, ctx), action: 'customer.email_verify', metadata: { session_id: session.sessionId } });
+    await recordAudit(tx, { ...customerAudit(row.customer_id, ctx), action: 'customer.email_verify', metadata: { session_id: session.sessionId, password_set: true, sessions_ended: ended } });
     return { ok: true as const, token: session.token, expiresAt: session.expiresAt, customerId: row.customer_id };
   });
 }
@@ -128,9 +158,10 @@ export async function loginCustomer(db: Db, mailer: Mailer, input: { email: stri
   // The password was right: from here on the answer may depend on the account (the caller knows the password).
   const migratedHash = legacy ? await hashPassword(input.password) : null;
   if (!customer.email_verified_at) {
+    // 2026-10-14 (sign-up takeover fix): no confirmation email is sent from here any more. Whoever registered the address
+    // (not necessarily its owner) could otherwise make it send one at will. The login page offers "send a new link".
     if (migratedHash) await db.updateTable('customers').set({ password_hash: migratedHash }).where('id', '=', customer.id).where('password_hash', 'is', null).execute();
     await recordLoginAttempt(db, { realm: 'customer', email: input.email, ip, succeeded: false, reason: 'unverified' });
-    await sendLink(db, mailer, s, customer, 'email_verification', ctx, ctx.verifyUrl);
     return { ok: false, error: 'unverified' };
   }
   return db.transaction().execute(async tx => {

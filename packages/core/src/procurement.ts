@@ -8,7 +8,7 @@
    (PO_TRANSITIONS) and every change is audited in the same transaction. */
 import { recordAudit, sql, type Db, type Tx } from '@kitsyuu/db';
 import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { can, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -415,6 +415,8 @@ export async function receiveGoods(db: Db, actor: StaffPrincipal, input: { purch
         if (c.variant_id && !Number.isInteger(l.qty)) throw new DomainError('invalid', 'Products are received in whole pieces.');
         if (l.qty > qty(c.qty_ordered) - qty(c.qty_received) + 1e-9) throw new ConflictError('More was entered than is still outstanding on a line.');
       }
+      // 2026-10-14: product sizes go into the order's location's stock: only staff who may work there receive them.
+      if (lines.some(l => byId.get(l.lineId)!.variant_id)) requireLocation(actor, location);
       const { n } = (await sql<{ n: string }>`select public.next_document_number('goods_receipt', 'GRN') as n`.execute(tx)).rows[0];
       const g = await tx.insertInto('goods_receipts').values({ purchase_order_id: p.id, received_by: actor.staffId, note: input.note, receipt_number: n,
         vendor_ref: input.vendorRef?.trim() || null, location_id: location }).returning('id').executeTakeFirstOrThrow();

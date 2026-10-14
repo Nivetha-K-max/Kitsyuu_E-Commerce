@@ -14,8 +14,8 @@
    Permissions: inventory.read (see), inventory.adjust (adjust stock at a location), inventory.transfer (transfers),
    locations.manage (add / edit locations). Every change is audited. */
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
-import { ConflictError, DomainError, NotFoundError } from '@kitsyuu/contracts';
-import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { ConflictError, DomainError, ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
+import { can, canUseLocation, locationScope, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import type { MutationContext } from './staff.ts';
 
 const auditCtx = (ctx: MutationContext) => ({ ip: ctx.ip ?? null, userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null });
@@ -30,7 +30,17 @@ export async function listLocations(db: Queryable, actor: StaffPrincipal, opts: 
     sql<number>`(select coalesce(sum(s.qty), 0)::int from public.location_stock s where s.location_id = l.id)`.as('units'),
     sql<number>`(select count(*)::int from public.location_stock s where s.location_id = l.id and s.qty > 0)`.as('sizes')]);
   if (opts.activeOnly) q = q.where('l.is_active', '=', true);
+  // 2026-10-14: staff assigned to branches see only those (the online location too, only if assigned to it).
+  const scope = locationScope(actor);
+  if (scope) q = q.where('l.id', 'in', scope);
   return q.orderBy('l.is_online', 'desc').orderBy('l.sort_order').orderBy('l.name').execute();
+}
+
+/** 2026-10-14: where a transfer may go: every active location, whatever branches the sender is assigned to (a branch sends
+    stock to any other location; it is received there by staff of that location). */
+export async function transferDestinations(db: Queryable, actor: StaffPrincipal) {
+  requirePermission(actor, 'inventory.transfer');
+  return db.selectFrom('locations').select(['id', 'name', 'is_online']).where('is_active', '=', true).orderBy('is_online', 'desc').orderBy('sort_order').orderBy('name').execute();
 }
 
 export async function onlineLocationId(q: Queryable): Promise<string> {
@@ -82,6 +92,7 @@ export async function getLocationStock(db: Db, actor: StaffPrincipal, input: { l
   requirePermission(actor, 'inventory.read');
   const loc = await db.selectFrom('locations').selectAll().where('id', '=', input.locationId).executeTakeFirst();
   if (!loc) throw new NotFoundError('Location not found.');
+  requireLocation(actor, loc.id);   // 2026-10-14
   let q = db.selectFrom('product_variants as v').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('location_stock as s', join => join.onRef('s.variant_id', '=', 'v.id').on('s.location_id', '=', loc.id))
     .select(['v.id as variant_id', 'v.sku', 'v.size', 'v.colour_slug', 'p.id as product_id', 'p.name', 'p.sku as product_sku', 'p.status', 'v.is_active',
@@ -96,7 +107,9 @@ export async function getLocationStock(db: Db, actor: StaffPrincipal, input: { l
       'm.unit_cost_paise', 'm.order_id', 'p.name as product_name', sql<number>`(m.balance_after - m.delta)::int`.as('balance_before')])
     .where(eb => loc.is_online ? eb.or([eb('m.location_id', '=', loc.id), eb('m.location_id', 'is', null)]) : eb('m.location_id', '=', loc.id))
     .orderBy('m.created_at', 'desc').orderBy('m.id', 'desc').limit(50).execute();
-  return { location: loc, rows, movements, units: rows.reduce((n, r) => n + r.qty, 0) };
+  // 2026-10-14: unit costs only for staff with costs.read (the same rule as purchase prices and stock value).
+  const canSeeCosts = can(actor, 'costs.read');
+  return { location: loc, rows, movements: canSeeCosts ? movements : movements.map(m => ({ ...m, unit_cost_paise: null })), units: rows.reduce((n, r) => n + r.qty, 0), canSeeCosts };
 }
 
 /** Staff change the stock of one size at one location (a delivery, damage, a correction, an in-store sale…). The online
@@ -107,6 +120,9 @@ export async function adjustLocationStock(db: Db, actor: StaffPrincipal,
   if (!Number.isInteger(input.delta) || input.delta === 0) throw new DomainError('invalid', 'Enter a whole number other than 0.');
   // Optional unit cost (2026-10-01): only for stock coming in (a restock / delivery), kept on its ledger row.
   if (input.unitCostPaise != null && (input.delta < 0 || !Number.isInteger(input.unitCostPaise) || input.unitCostPaise < 0)) throw new DomainError('invalid', 'A unit cost can only be entered for stock coming in.');
+  // 2026-10-14: costs are entered only by staff who may see them (costs.read), as on purchase orders.
+  if (input.unitCostPaise != null) requirePermission(actor, 'costs.read');
+  requireLocation(actor, input.locationId);   // 2026-10-14: only at the staff member's own locations (the online one included)
   try {
     return await db.transaction().execute(async tx => {
       const reason = await tx.selectFrom('inventory_reasons').select(['code', 'is_system', 'is_active']).where('code', '=', input.reason).executeTakeFirst();
@@ -151,6 +167,9 @@ export async function listTransfers(db: Db, actor: StaffPrincipal, query: { stat
       sql<number>`(select coalesce(sum(l.qty), 0)::int from public.stock_transfer_lines l where l.transfer_id = t.id)`.as('units'),
       sql<number>`(select count(*)::int from public.stock_transfer_lines l where l.transfer_id = t.id)`.as('lines')]);
   if (query.status && ['draft', 'sent', 'received', 'cancelled'].includes(query.status)) q = q.where('t.status', '=', query.status as 'draft');
+  // 2026-10-14: staff assigned to branches see the transfers that leave from or arrive at one of them.
+  const scope = locationScope(actor);
+  if (scope) q = q.where(eb => eb.or([eb('t.from_location_id', 'in', scope), eb('t.to_location_id', 'in', scope)]));
   return q.orderBy('t.created_at', 'desc').limit(200).execute();
 }
 
@@ -162,6 +181,8 @@ export async function getTransfer(db: Db, actor: StaffPrincipal, id: string) {
       'f.name as from_name', 'd.name as to_name', 'c.email as created_by', 's.email as sent_by', 'r.email as received_by'])
     .where('t.id', '=', id).executeTakeFirst();
   if (!t) throw new NotFoundError('Transfer not found.');
+  // 2026-10-14: staff assigned to branches open only transfers from or to one of them.
+  if (!canUseLocation(actor, t.from_location_id) && !canUseLocation(actor, t.to_location_id)) throw new ForbiddenError('You are not assigned to either branch of this transfer.');
   const lines = await db.selectFrom('stock_transfer_lines as l').innerJoin('product_variants as v', 'v.id', 'l.variant_id').innerJoin('products as p', 'p.id', 'v.product_id')
     .leftJoin('location_stock as s', join => join.onRef('s.variant_id', '=', 'l.variant_id').on('s.location_id', '=', t.from_location_id))
     .select(['l.id', 'l.variant_id', 'l.qty', 'v.sku', 'v.size', 'p.name', variantLabel.as('label'), sql<number>`coalesce(s.qty, 0)::int`.as('at_source')])
@@ -178,6 +199,8 @@ export async function createTransfer(db: Db, actor: StaffPrincipal,
   if (!lines.length) throw new DomainError('invalid', 'Enter a quantity for at least one size.');
   if (lines.some(l => !Number.isInteger(l.qty) || l.qty > 100_000)) throw new DomainError('invalid', 'Quantities are whole numbers.');
   if (new Set(lines.map(l => l.variantId)).size !== lines.length) throw new DomainError('invalid', 'A size is listed twice.');
+  // 2026-10-14: a transfer is raised by the sending side: staff assigned to branches send from one of theirs (to anywhere).
+  requireLocation(actor, input.fromLocationId);
   return db.transaction().execute(async tx => {
     const locs = await tx.selectFrom('locations').select(['id', 'is_active', 'name']).where('id', 'in', [input.fromLocationId, input.toLocationId]).execute();
     if (locs.length !== 2) throw new NotFoundError('Location not found.');
@@ -219,6 +242,7 @@ export async function sendTransfer(db: Db, actor: StaffPrincipal, input: { trans
   requirePermission(actor, 'inventory.transfer');
   return db.transaction().execute(async tx => {
     const t = await lockTransfer(tx, input.transferId);
+    requireLocation(actor, t.from_location_id);   // 2026-10-14: sent by the source
     if (t.status !== 'draft') throw new ConflictError('Only a draft transfer can be sent.');
     const units = await moveLines(tx, t, t.from_location_id, -1, 'transfer_out', actor.staffId, `${t.number} sent`);
     await tx.updateTable('stock_transfers').set({ status: 'sent', sent_by: actor.staffId, sent_at: sql<Date>`now()` }).where('id', '=', t.id).execute();
@@ -232,6 +256,7 @@ export async function receiveTransfer(db: Db, actor: StaffPrincipal, input: { tr
   requirePermission(actor, 'inventory.transfer');
   return db.transaction().execute(async tx => {
     const t = await lockTransfer(tx, input.transferId);
+    requireLocation(actor, t.to_location_id);   // 2026-10-14: received at the destination
     if (t.status !== 'sent') throw new ConflictError('Only a sent transfer can be received.');
     const dest = await tx.selectFrom('locations').select('is_active').where('id', '=', t.to_location_id).executeTakeFirstOrThrow();
     if (!dest.is_active) throw new ConflictError('The receiving location is inactive.');
@@ -242,17 +267,26 @@ export async function receiveTransfer(db: Db, actor: StaffPrincipal, input: { tr
   });
 }
 
-/** Cancels a draft (nothing moved) or a sent transfer (the stock goes back to the source). */
+/** Cancels a draft (nothing moved) or a sent transfer (the stock goes back to the source).
+    Who may cancel (branch scope, 2026-10-14): the sending branch, as before (a draft, or a sent transfer: its stock comes
+    back). The receiving branch only while the transfer is still a DRAFT: nothing has been posted to the stock ledger yet,
+    so cancelling moves no stock. Once sent, the stock has left the sender, and only the sender can take it back. The
+    status is re-read under the transfer's row lock, so a send and a cancel can never both go through. Audited with the side
+    that cancelled. */
 export async function cancelTransfer(db: Db, actor: StaffPrincipal, input: { transferId: string; note: string }, ctx: MutationContext) {
   requirePermission(actor, 'inventory.transfer');
   if (!input.note.trim()) throw new DomainError('invalid', 'Give a reason.');
   return db.transaction().execute(async tx => {
     const t = await lockTransfer(tx, input.transferId);
+    const sender = canUseLocation(actor, t.from_location_id), receiver = canUseLocation(actor, t.to_location_id);
+    if (!sender && !receiver) throw new ForbiddenError('You are not assigned to either branch of this transfer.');
     if (t.status !== 'draft' && t.status !== 'sent') throw new ConflictError('This transfer is already closed.');
+    if (!sender && t.status !== 'draft')
+      throw new ConflictError('This transfer has been sent: its stock has already left the sending branch, so only the sending branch can cancel it now. Receive it, or ask the sending branch to cancel it.');
     const back = t.status === 'sent' ? await moveLines(tx, t, t.from_location_id, 1, 'transfer_in', actor.staffId, `${t.number} cancelled: back to the sender`) : 0;
     await tx.updateTable('stock_transfers').set({ status: 'cancelled', note: [t.note, `Cancelled: ${input.note.trim()}`].filter(Boolean).join(' · ').slice(0, 500) }).where('id', '=', t.id).execute();
     await recordAudit(tx, { ...staffAudit(actor, ctx), action: 'transfer.cancel', entityType: 'stock_transfers', entityId: t.id,
-      before: { status: t.status }, after: { status: 'cancelled', units_returned: back }, metadata: { note: input.note.trim() } });
+      before: { status: t.status }, after: { status: 'cancelled', units_returned: back }, metadata: { note: input.note.trim(), cancelled_by: sender ? 'sending branch' : 'receiving branch' } });
     return { unitsReturned: back };
   });
 }

@@ -22,6 +22,7 @@ import {fileURLToPath} from 'node:url';
 import {startFakeRazorpay, TEST_KEY_ID} from '../../../packages/core/test/fake-razorpay.mjs';
 import {startFakeRedisRest} from '../../../packages/core/test/fake-redis-rest.mjs';
 import {localStoreEnv} from './local-store-env.mjs';
+import {testDbName, testEnvFile} from '../../../database/scripts/lib/test-db-name.mjs';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.join(WEB, '../..');
@@ -54,8 +55,8 @@ async function startServer(port, logName, env) {
 }
 try {
   if (!step('create local test database', node(['--env-file=' + ENV_TEST, 'database/scripts/test-db.mjs', '--create']))) throw new Error('could not create the test database');
-  const env = readEnv(path.join(REPO, 'apps/admin/tests/.output/test.env'));
-  if (!/@localhost[:/].*kitsyuu_test/.test(env.WEBSITE_DATABASE_URL) || !/kitsyuu_website/.test(env.WEBSITE_DATABASE_URL)) throw new Error('refusing: not the local website role');
+  const env = readEnv(testEnvFile());   // 2026-10-14: KITSYUU_TEST_DB → an isolated database
+  if (!new RegExp(`@localhost[:/].*/${testDbName()}$`).test(env.WEBSITE_DATABASE_URL) || !/kitsyuu_website/.test(env.WEBSITE_DATABASE_URL)) throw new Error('refusing: not the local website role');
   const keySecret = randomBytes(16).toString('hex'), webhookSecret = randomBytes(16).toString('hex');
   rzp = await startFakeRazorpay({keySecret, webhookSecret});
   // Explicit values win over .env.local: every customer-data and payment setting here is local; only the public catalogue settings are reused.

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';   // 2026-10-14: shop / collection links prefetch on intent, not on sight
 import { getCatalogue } from '@/lib/catalogue';
 import { imageOf, indexCatalogue, pad, plural, url } from '@/lib/catalogue-utils';
 import type { Product } from '@/lib/types';
@@ -48,7 +49,7 @@ export default async function StoreHome() {
       <section className="st-section ch-na" aria-labelledby="st-na-title" data-offer-trigger>
         <div className="st-wrap">
           <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(naList.length, 'piece') : ''}</span></div>
-          <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><Link className="text-link" href={url.collection('new-arrivals')}>View all new arrivals <span aria-hidden="true">↗</span></Link></div>
+          <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><IntentLink className="text-link" href={url.collection('new-arrivals')}>View all new arrivals <span aria-hidden="true">↗</span></IntentLink></div>
         </div>
         {naList.length > 0 && (
           <div className="ch-na-reel" data-scroll="pin" data-steps={naList.length} style={{ ['--n' as string]: naList.length }}>
@@ -96,8 +97,8 @@ export default async function StoreHome() {
           <h2 id="st-hero-title">Shop the<br /><em>rotation.</em></h2>
           <p data-brand-home-intro>{copy.homeIntro}</p>
           <div className="st-hero-actions">
-            <Link className="button" href={url.shop()}>Shop all products</Link>
-            <Link className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></Link>
+            <IntentLink className="button" href={url.shop()}>Shop all products</IntentLink>
+            <IntentLink className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></IntentLink>
           </div>
         </div>
         <HeroTurntable />
@@ -107,7 +108,7 @@ export default async function StoreHome() {
       <section className="st-section ch-cats" aria-labelledby="st-cat-title">
         <div className="st-wrap">
           <div className="section-label"><span>02 — SHOP BY CATEGORY</span><span>TOPS / BOTTOMS / OUTERWEAR</span></div>
-          <div className="st-section-head"><h2 id="st-cat-title">Start with<br /><em>the shape.</em></h2><Link className="text-link" href={url.shop()}>All products <span aria-hidden="true">↗</span></Link></div>
+          <div className="st-section-head"><h2 id="st-cat-title">Start with<br /><em>the shape.</em></h2><IntentLink className="text-link" href={url.shop()}>All products <span aria-hidden="true">↗</span></IntentLink></div>
         </div>
         <div className="ch-cat-reel" data-scroll="pin" data-steps={cats.length} style={{ ['--n' as string]: cats.length }}>
           <div className="ch-cat-stage st-wrap">
@@ -118,19 +119,19 @@ export default async function StoreHome() {
                   <li key={c.id} className={`ch-cat-item${i === 0 ? ' is-current' : ''}`} data-step-item={i} style={{ ['--i' as string]: i }}>
                     <div className="ch-cat-text">
                       <span className="ch-count" aria-hidden="true"><b>{pad(i + 1)}</b> / {pad(cats.length)}</span>
-                      <Link className="st-cat ch-cat-link" href={url.shop({ category: c.id })}>
+                      <IntentLink className="st-cat ch-cat-link" href={url.shop({ category: c.id })}>
                         <span className="st-cat-meta"><span className="st-cat-name">{c.label}</span><span className="st-cat-count">{plural(list.length, 'piece')}</span></span>
-                      </Link>
+                      </IntentLink>
                       <ul className="st-cat-subs" aria-label={`${c.label} categories`}>
-                        {idx.children(c.id).map(s => <li key={s.id}><Link href={url.shop({ category: s.id })}>{s.label}</Link></li>)}
+                        {idx.children(c.id).map(s => <li key={s.id}><IntentLink href={url.shop({ category: s.id })}>{s.label}</IntentLink></li>)}
                       </ul>
                     </div>
-                    <Link className="ch-cat-visual" href={url.shop({ category: c.id })} tabIndex={-1} aria-hidden="true">
+                    <IntentLink className="ch-cat-visual" href={url.shop({ category: c.id })} tabIndex={-1} aria-hidden="true">
                       <span className="ch-frame ch-cat-photo">
                         {photo ? <img src={photo.src} alt="" width={photo.w} height={photo.h} loading="lazy" decoding="async" /> : lead && <Cutout p={lead} />}
                       </span>
                       {lead && <span className="ch-frame ch-cat-piece">{photo ? <Cutout p={lead} /> : second && <Cutout p={second} />}</span>}
-                    </Link>
+                    </IntentLink>
                   </li>
                 );
               })}
@@ -147,7 +148,7 @@ export default async function StoreHome() {
         </div>
         <div className="st-editorial-copy">
           <span className="ch-frame ch-ed-inset" aria-hidden="true" data-reveal><img src="/assets/volume.webp" alt="" width={1672} height={941} loading="lazy" decoding="async" /></span>
-          <p className="eyebrow">03 — AFTER HOURS</p><h2 id="st-ed-title">Wide legs.<br />Washed<br /><em>layers.</em></h2><p>Balloon trousers, wide denim and washed tops. Start with the volume below and build the rest around it.</p><Link className="text-link" href={url.shop({ category: 'bottoms' })}>Shop bottoms <span aria-hidden="true">↗</span></Link>
+          <p className="eyebrow">03 — AFTER HOURS</p><h2 id="st-ed-title">Wide legs.<br />Washed<br /><em>layers.</em></h2><p>Balloon trousers, wide denim and washed tops. Start with the volume below and build the rest around it.</p><IntentLink className="text-link" href={url.shop({ category: 'bottoms' })}>Shop bottoms <span aria-hidden="true">↗</span></IntentLink>
         </div>
       </section>
 
@@ -161,7 +162,7 @@ export default async function StoreHome() {
       {/* 05 — Outerwear: jacket 01, then jacket 02. With two jackets (desktop) the card stays pinned while the second one
           wipes in, and the page moves on only when the change is complete (Choreo + lib/scroll-gate.ts). */}
       <section className="st-section" aria-labelledby="st-ow-title"><div className={`st-wrap st-feature${outer.length === 2 ? ' ch-ow-wrap' : ''}`}>
-        <div className="st-feature-copy"><p className="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br /><em>closures.</em></h2><p>Cropped and stand-collar jackets from the catalogue.</p><Link className="button button-outline" href={url.shop({ category: 'outerwear' })}>Shop outerwear</Link></div>
+        <div className="st-feature-copy"><p className="eyebrow">05 — OUTERWEAR</p><h2 id="st-ow-title">Hardware<br /><em>closures.</em></h2><p>Cropped and stand-collar jackets from the catalogue.</p><IntentLink className="button button-outline" href={url.shop({ category: 'outerwear' })}>Shop outerwear</IntentLink></div>
         <div className="ch-ow-reel" data-scroll="pin" data-steps={outer.length || undefined}>
           <ul className="st-feature-items ch-ow" data-steps={outer.length || undefined}>{outer.map(p => <ProductCard key={p.id} p={p} categoryPath={idx.categoryPath(p)} />)}</ul>
         </div>

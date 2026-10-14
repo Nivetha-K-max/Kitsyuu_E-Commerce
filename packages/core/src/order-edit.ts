@@ -269,7 +269,7 @@ export async function refundOrderEdit(db: Db, actor: StaffPrincipal, provider: P
   let answer: Awaited<ReturnType<NonNullable<PaymentProvider['refund']>>> | null = null, failure: string | null = null;
   try {
     answer = await provider!.refund!({ paymentId: pending.payment.provider_payment_id!, amountPaise: pending.amount, currency: pending.payment.currency,
-      notes: { order_number: pending.orderNumber, reason: 'order edited' } });
+      notes: { order_number: pending.orderNumber, reason: 'order edited', kitsyuu_refund_id: pending.refundId } });
     if (answer.status === 'failed') failure = 'The provider reported the refund as failed.';
   } catch (e) {
     failure = e instanceof DomainError ? e.message : `The provider did not accept the refund: ${String((e as Error).message ?? e).slice(0, 200)}`;

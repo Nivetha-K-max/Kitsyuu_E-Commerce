@@ -21,7 +21,7 @@
    film (lib/scroll-gate.ts: a wheel or trackpad gesture stops at the hero's edge; touch, keyboard and scrollbar scrolling
    that overshoots is brought back to it). The wait is at most FILM_SECONDS, then scrolling is normal again: nothing here
    can hold the page for longer. With reduced motion none of this runs. */
-import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';   // 2026-10-14: the first screen's links prefetch on intent, not on sight
 import { useEffect, useRef } from 'react';
 import { url } from '@/lib/catalogue-utils';
 import { reducedMotion } from '@/lib/motion';
@@ -218,8 +218,8 @@ export default function BrandHero({ copy = { heroTop: '', heroEyebrow: '', heroL
             <p className="st-brand-hero-lead" data-brand-lead>{copy.heroLead}</p>
           </div>
           <div className="st-brand-hero-actions">
-            <Link className="button" href={url.shop()}>Shop now</Link>
-            <Link className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></Link>
+            <IntentLink className="button" href={url.shop()}>Shop now</IntentLink>
+            <IntentLink className="text-link" href={url.collection('new-arrivals')}>New arrivals <span aria-hidden="true">↗</span></IntentLink>
             {/* The story page runs the landing's own script, so it is a full page load (not a client-side <Link>). */}
             <a className="text-link" href="/our-story">Our story <span aria-hidden="true">↗</span></a>
           </div>

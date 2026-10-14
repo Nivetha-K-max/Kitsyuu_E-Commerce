@@ -18,7 +18,7 @@ import {
   placeOrder, preparePayment, priceHistory, reconciliation, refundReturn, removeCartLine, replyAsCustomer, replyToTicket, requestReturn, returnAction,
   saveBanner, saveCampaign, saveCourier, saveCustomerAddress, saveDiscount, saveExpense, saveSegment, saveShippingRate, saveShippingZone, saveTaxRate,
   schedulePriceChange, sendCartReminder, setCartCoupon, setCartRecovery, setFinanceNoteStatus, setProductPricing, settingsShipping, getSegment, financeSummary,
-  submitPaymentResult, testPaymentProvider, unreadNotifications, updateOrderStatus, updateReturnItem, updateSetting, updateShipmentStatus, getShipmentDetail,
+  submitPaymentResult, testPaymentProvider, unreadNotifications, updateOrderStatus, updateReturnItem, updateSetting, updateShipmentStatus, getShipmentDetail, listShipments,
   listTickets, updateTicket, notifyTicketReply, promotionReport,
 } from '@kitsyuu/core';
 
@@ -202,6 +202,20 @@ test('shipping: zone rates at checkout (free-from, no zone = refused); courier t
   const detail = await getShipmentDetail(admin, manager, sh.id);
   assert.deepEqual(detail.events.map(e => e.status), ['processing', 'packed', 'shipped', 'in_transit', 'failed_delivery', 'delivered'].filter(x => detail.events.some(e => e.status === x)));
   assert.ok(detail.events.some(e => e.status === 'failed_delivery' && e.note === 'Nobody home'));
+  // 2026-10-14: the customer and delivery address need shipping.addresses. Every role that had shipping.read keeps them for
+  // now (the inventory manager provisionally); a role with shipping.read alone gets the shipment without them.
+  assert.ok(detail.canSeeAddress && detail.shipment.shipping_address?.line1, 'manager: the address');
+  const inv = await getShipmentDetail(admin, inventory, sh.id);
+  assert.ok(inv.canSeeAddress && inv.shipment.shipping_address?.line1, 'inventory manager: unchanged until the role matrix is reviewed');
+  const listed = (await listShipments(admin, manager, {status: 'all', page: 1})).rows.find(r => r.id === sh.id);
+  assert.ok(listed.customer && listed.city, 'list: customer and city with the permission');
+  const shipOnly = {...inventory, permissions: new Set([...inventory.permissions].filter(p => p !== 'shipping.addresses'))};
+  const bare = await getShipmentDetail(admin, shipOnly, sh.id);
+  assert.deepEqual([bare.canSeeAddress, bare.shipment.shipping_address, bare.shipment.order_number], [false, null, detail.shipment.order_number], 'shipping.read alone: no address');
+  const bareRow = (await listShipments(admin, shipOnly, {status: 'all', page: 1})).rows.find(r => r.id === sh.id);
+  assert.deepEqual([bareRow.customer, bareRow.city, bareRow.state, bareRow.order_number], [null, null, null, listed.order_number], 'list: no customer, city or state');
+  assert.deepEqual((await q(`select r.code from role_permissions rp join roles r on r.id = rp.role_id where rp.permission_code = 'shipping.addresses' order by 1`)).map(r => r.code),
+    ['admin', 'inventory_manager', 'manager', 'sales', 'super_admin', 'support'], 'granted to exactly these roles');
   await set(root, 'shipping.method', 'none');
 });
 

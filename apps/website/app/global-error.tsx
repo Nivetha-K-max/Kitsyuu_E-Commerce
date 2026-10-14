@@ -6,7 +6,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
     <html lang="en" className="st">
       <head>
         {/* Same versioned stylesheet URLs as app/layout.tsx (they are cached for a year). */}
-        <link rel="stylesheet" href={`/fonts.css?v=${V}`} /><link rel="stylesheet" href={`/styles.css?v=${V}`} /><link rel="stylesheet" href={`/store.css?v=${V}`} />
+        <link rel="stylesheet" href={`/store-fonts.css?v=${V}`} /><link rel="stylesheet" href={`/styles.css?v=${V}`} /><link rel="stylesheet" href={`/store.css?v=${V}`} />
         <title>Catalogue unavailable | KITSYUU Store</title>
       </head>
       <body className="store">

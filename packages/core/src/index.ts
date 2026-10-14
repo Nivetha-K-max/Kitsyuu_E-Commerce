@@ -120,6 +120,7 @@ export {
 export { globalSearch, type SearchGroup, type SearchHit } from './search.ts';
 export { securityAlerts } from './system.ts';
 export { resetStaffTwoFactor } from './staff.ts';
+export { setStaffLocations, staffLocationChoices } from './staff.ts';   // 2026-10-14: branch scope
 export { attentionSummary, type AttentionItem } from './attention.ts';
 // ---------- ERP module 8: notifications and alerts ----------
 export {
@@ -146,7 +147,7 @@ export {
 // ---------- ERP module 3: returns and refunds ----------
 export {
   returnSettings, customerReturnOptions, requestReturn, listCustomerReturns, getCustomerReturn, cancelReturnByCustomer, listReturns, getReturn, returnAction,
-  updateReturnItem, refundReturn, settlePendingRefund, PENDING_REFUND_SETTLE_AFTER_MINUTES, notifyReturn, returnsReport, createStaffReturn, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
+  updateReturnItem, refundReturn, settlePendingRefund, PENDING_REFUND_SETTLE_AFTER_MINUTES, reconcilePendingRefunds, RECONCILE_REFUNDS_AFTER_MINUTES, type RefundReconcileRun, notifyReturn, returnsReport, createStaffReturn, actionsFor as returnActionsFor, RETURN_FLOW, RETURN_PAGE_SIZE,
 } from './returns.ts';
 // ---------- ERP module 4: marketing ----------
 export {
@@ -189,7 +190,7 @@ export type { PaymentChoice } from './pricing.ts';
 // ---------- client change request, third pass ----------
 export {
   listLocations, onlineLocationId, saveLocation, getLocationStock, adjustLocationStock, stockByLocation, listTransfers, getTransfer, createTransfer,
-  sendTransfer, receiveTransfer, cancelTransfer, locationReport, LOCATION_KINDS,
+  sendTransfer, receiveTransfer, cancelTransfer, locationReport, LOCATION_KINDS, transferDestinations,
 } from './locations.ts';
 export { listColours, addColourVariant, setVariantColour, setImageColour, colourLabel } from './colour-variants.ts';
 export { lineLabel } from './cart.ts';

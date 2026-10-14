@@ -119,6 +119,9 @@ test('size settings: price override in paise, reorder level, offered flag; stale
   const [v] = await q(`select id, (extract(epoch from updated_at) * 1000000)::bigint::text version from product_variants where product_id = $1 and size = 'M'`, [P]);
   const input = updateVariantInput.parse({variantId: v.id, isActive: 'on', price: '1,999.50', reorderLevel: '2', expectedVersion: v.version});
   assert.deepEqual([input.price, input.reorderLevel], [199950, 2]);
+  // 2026-10-14: a size's price needs pricing.manage as well as products.write; other size settings do not.
+  const writeOnly = {...manager, permissions: new Set([...manager.permissions].filter(p => p !== 'pricing.manage'))};
+  await assert.rejects(updateVariant(db, writeOnly, input, ctx), ForbiddenError);
   assert.equal((await updateVariant(db, manager, input, ctx)).changed, 2);
   await assert.rejects(updateVariant(db, manager, input, ctx), ConflictError, 'stale version');
   const [after] = await q(`select price_paise, reorder_level, (extract(epoch from updated_at) * 1000000)::bigint::text version from product_variants where id = $1`, [v.id]);

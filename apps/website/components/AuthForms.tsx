@@ -3,7 +3,7 @@
    forms only collect input and show the server's answer. */
 import Link from 'next/link';
 import { ActionForm, Field, Hidden } from './forms';
-import { forgotPasswordAction, loginAction, logoutAction, resendVerificationAction, resetPasswordAction, signupAction } from '@/app/auth-actions';
+import { forgotPasswordAction, loginAction, logoutAction, resendVerificationAction, resetPasswordAction, signupAction, verifyEmailAction } from '@/app/auth-actions';
 
 const NOTICES: Record<string, { text: string; ok: boolean }> = {
   session: { text: 'Your session has ended. Please log in again.', ok: false },
@@ -70,6 +70,18 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <Hidden name="token" value={token} />
       <Field name="password" label="New password" type="password" autoComplete="new-password" required hint="At least 12 characters." />
       <Field name="confirm" label="Repeat new password" type="password" autoComplete="new-password" required />
+    </ActionForm>
+  );
+}
+
+/** 2026-10-14: the confirmation page's form. Confirming an account sets its password (sign-up takeover fix). */
+export function VerifyEmailForm({ token }: { token: string }) {
+  return (
+    <ActionForm action={verifyEmailAction} submitLabel="Confirm and log in" pendingLabel="Confirming…" label="Confirm your account"
+      footer={<p className="st-auth-alt">Link not working? <Link href="/forgot-password">Send a new one</Link>.</p>}>
+      <Hidden name="token" value={token} />
+      <Field name="password" label="Password" type="password" autoComplete="new-password" required hint="At least 12 characters. You can use the one you chose when you signed up." />
+      <Field name="confirm" label="Repeat password" type="password" autoComplete="new-password" required />
     </ActionForm>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { can } from '@kitsyuu/auth';
+import { can, canUseLocation } from '@kitsyuu/auth';
 import { posContext, posReport } from '@kitsyuu/core';
 import RangeForm from '@/components/RangeForm';
 import { Forbidden, PageHead } from '@/components/ui';
@@ -18,7 +18,8 @@ export default async function PosReportPage({ searchParams }: { searchParams: SP
   const today = istDate(new Date());
   const valid = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today;
   const from = valid(one(sp.from)), to = valid(one(sp.to)) < from ? from : valid(one(sp.to));
-  const locationId = /^[0-9a-f-]{36}$/i.test(one(sp.location)) ? one(sp.location) : null;
+  // 2026-10-14: a branch the staff member is not assigned to falls back to "all (their) branches" instead of an error.
+  const locationId = /^[0-9a-f-]{36}$/i.test(one(sp.location)) && canUseLocation(actor, one(sp.location)) ? one(sp.location) : null;
   const [r, c] = await Promise.all([posReport(db(), actor, { from, to, locationId }), posContext(db(), actor)]);
   const card = (label: string, value: string, attr: string) => <div className="kpi" data-kpi={attr}><span className="kpi-label">{label}</span><b>{value}</b></div>;
   return (

@@ -8,8 +8,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { can, canUseLocation } from '@kitsyuu/auth';
+import { ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { getTransfer } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden } from '@/components/forms';
 import { Entity, Facts, Section } from '@/components/frame';
@@ -31,10 +31,14 @@ export default async function TransferPage({ params, searchParams }: { params: P
   if (!can(actor, 'inventory.read')) return <><PageHead section="Catalogue" title="Transfer" crumbs={crumbs} /><Forbidden permission="inventory.read" /></>;
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const { transfer: t, lines } = await getTransfer(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const { transfer: t, lines } = await getTransfer(db(), actor, id).catch(e => { if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); throw e; });   // 2026-10-14: transfers not touching their branches
   const manage = can(actor, 'inventory.transfer'), units = lines.reduce((n, l) => n + l.qty, 0);
   const short = t.status === 'draft' ? lines.filter(l => l.qty > l.at_source) : [];
   const open = t.status === 'draft' || t.status === 'sent';
+  // 2026-10-14: each side sees only the steps it may take (the server checks the same): the sender sends and may cancel while
+  // the transfer is open; the receiver receives, and may cancel only a draft (nothing has moved yet).
+  const sender = canUseLocation(actor, t.from_location_id), receiver = canUseLocation(actor, t.to_location_id);
+  const canCancel = open && (sender || (receiver && t.status === 'draft'));
   const tabs = TABS.filter(x => x[0] !== 'activity' || can(actor, 'audit.read'));
   const tab: Tab = tabs.find(x => x[0] === sp.tab)?.[0] ?? 'sizes';
   const self = `/transfers/${t.id}`;
@@ -47,13 +51,13 @@ export default async function TransferPage({ params, searchParams }: { params: P
         { label: 'Units', value: `${formatNumber(units)} in ${lines.length} size${lines.length === 1 ? '' : 's'}`, attr: 'units' },
       ]}
       actions={manage && open ? <div className="ord-head-actions">
-        {t.status === 'draft' && (
+        {t.status === 'draft' && sender && (
           <ActionForm action={sendTransferAction} submitLabel="Send transfer" id="send-transfer-form" label="Send the transfer" className="inline-form"
             confirmText={`Send ${t.number}? ${units} unit(s) leave ${t.from_name} now.`}>
             <Hidden name="transferId" value={t.id} />
           </ActionForm>
         )}
-        {t.status === 'sent' && (
+        {t.status === 'sent' && receiver && (
           <ActionForm action={receiveTransferAction} submitLabel="Mark as received" id="receive-transfer-form" label="Receive the transfer" className="inline-form"
             confirmText={`Receive ${t.number}? ${units} unit(s) are added to ${t.to_name}.`}>
             <Hidden name="transferId" value={t.id} />
@@ -87,7 +91,7 @@ export default async function TransferPage({ params, searchParams }: { params: P
             ...(t.status !== 'draft' ? [{ label: 'Stock ledger', value: <Link href={`/inventory/movements?q=${encodeURIComponent(t.number)}`} data-link="transfer-movements">Movements of {t.number}</Link> }] : []),
           ]} />
         </Section>
-        {manage && open && (
+        {manage && canCancel && (
           <Section id="tc-h" title="Cancel transfer" name="cancel-transfer" hint={t.status === 'sent' ? `The ${units} unit(s) go back to ${t.from_name}.` : 'Nothing has moved yet.'}>
             <ActionForm action={cancelTransferAction} submitLabel="Cancel transfer" variant="danger" id="cancel-transfer-form" label="Cancel the transfer"
               confirmText={t.status === 'sent' ? `Cancel ${t.number}? The ${units} unit(s) go back to ${t.from_name}.` : `Cancel ${t.number}? Nothing has moved yet.`}>

@@ -39,6 +39,8 @@ export async function updateVariant(db: Db, actor: StaffPrincipal, input: Update
     const after = { is_active: input.isActive, price_paise: input.price, reorder_level: input.reorderLevel };
     const changed = (Object.keys(after) as (keyof typeof after)[]).filter(k => v[k] !== after[k]);
     if (!changed.length) return { changed: 0, sku: v.sku };
+    // 2026-10-14: a size's own price is a price change: it needs pricing.manage as well.
+    if (changed.includes('price_paise')) requirePermission(actor, 'pricing.manage');
     if (v.is_active && !input.isActive) {
       const p = await tx.selectFrom('products').select('status').where('id', '=', v.product_id).forUpdate().executeTakeFirstOrThrow();
       const others = await tx.selectFrom('product_variants').select(sql<number>`count(*)::int`.as('n'))

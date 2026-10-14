@@ -26,7 +26,7 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
   }
   let data;
   try { data = await getShipmentDetail(db(), actor, id); } catch (e) { if (e instanceof NotFoundError) notFound(); throw e; }
-  const { shipment: s, events } = data;
+  const { shipment: s, events, canSeeAddress } = data;
   const couriers = (await listCouriers(db(), actor)).filter(c => c.is_active || c.code === s.carrier_code);
   const moves = SHIPMENT_MOVES[s.status] ?? [];
   const ship = (s.shipping_address ?? {}) as Record<string, string | null>;
@@ -46,7 +46,8 @@ export default async function ShipmentPage({ params }: { params: Promise<{ id: s
             <dt>In transit</dt><dd>{formatDateTime(s.in_transit_at as Date)}</dd>
             <dt>Delivered</dt><dd>{formatDateTime(s.delivered_at as Date)}</dd>
             {s.failed_at && <><dt>Delivery failed</dt><dd>{formatDateTime(s.failed_at as Date)} — {s.failure_reason}</dd></>}
-            <dt>Deliver to</dt><dd>{[ship.name ?? ship.full_name, ship.line1, ship.line2, ship.city, ship.state, ship.pin].filter(Boolean).join(', ')}</dd>
+            {/* 2026-10-14: the delivery address needs shipping.addresses (core leaves it out otherwise). */}
+            <dt>Deliver to</dt><dd data-deliver-to>{canSeeAddress ? [ship.name ?? ship.full_name, ship.line1, ship.line2, ship.city, ship.state, ship.pin].filter(Boolean).join(', ') : <span className="note">Seeing the address needs the shipping.addresses permission.</span>}</dd>
           </dl>
         </section>
         <section className="card" aria-labelledby="su-h" data-section="shipment-update">

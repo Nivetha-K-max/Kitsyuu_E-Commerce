@@ -132,7 +132,10 @@ try {
   await fill('main [name=fullName]', 'Help Customer'); await fill('main [name=email]', email); await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
   await click('main form:not(:has([data-logout])) button[type=submit]');
   let link = null; for (let i = 0; i < 80 && !(link = lastLink(email)); i++) await w(250);
-  await b.goto(link, 'document.readyState === "complete"');
+  // 2026-10-14: the link opens the confirmation page; confirming sets the password (sign-up takeover fix).
+  await b.goto(link, '!!document.querySelector("main [name=confirm]")');
+  await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
+  await click('main form:not(:has([data-logout])) button[type=submit]');
   ok('a new customer signs up and confirms their email', await until(`location.pathname === '/account'`));
   const [me] = await q(`select id from customers where email = $1`, [email]);
   await go('/shop'); await openHelp(); await tab('message');

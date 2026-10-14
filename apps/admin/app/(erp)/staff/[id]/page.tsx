@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
 import { NotFoundError, uuid } from '@kitsyuu/contracts';
-import { getStaff, listRoles } from '@kitsyuu/core';
+import { getStaff, listRoles, staffLocationChoices } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden } from '@/components/forms';
 import RoleChecks from '@/components/RoleChecks';
 import { Forbidden, PageHead, StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
-import { resendInviteAction, resetTwoFactorAction, revokeSessionsAction, setStaffRolesAction, setStaffStatusAction, updateStaffAction } from '../actions';
+import { resendInviteAction, resetTwoFactorAction, revokeSessionsAction, setStaffLocationsAction, setStaffRolesAction, setStaffStatusAction, updateStaffAction } from '../actions';
 import { Entity, Section } from '@/components/frame';
 import RecordActivity from '@/components/RecordActivity';
 
@@ -26,6 +26,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
   const staff = await getStaff(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
   const manage = can(actor, 'staff.manage');
   const roles = manage && can(actor, 'roles.read') ? await listRoles(db(), actor) : [];
+  const locations = manage ? await staffLocationChoices(db(), actor) : [];   // 2026-10-14: branch scope
   const self = staff.id === actor.staffId;
   const spv = await searchParams;
   const invited = spv.notice === 'invited';
@@ -48,6 +49,7 @@ export default async function StaffDetailPage({ params, searchParams }: { params
           <h2>Account</h2>
           <dl className="facts" data-staff-facts>
             <dt>Roles</dt><dd>{staff.roles.length ? staff.roles.map(r => <span className="badge" key={r.id}>{r.name}</span>) : '—'}</dd>
+            <dt>Branches</dt><dd data-staff-branches>{staff.alwaysAllBranches || !staff.locations.length ? 'All branches' : staff.locations.map(l => <span className="badge" key={l.id}>{l.name}</span>)}</dd>
             <dt>Last sign-in</dt><dd>{formatDateTime(staff.lastLoginAt)}</dd>
             <dt>Password set</dt><dd>{formatDateTime(staff.passwordChangedAt)}</dd>
             <dt>Active sessions</dt><dd data-active-sessions>{staff.activeSessions}</dd>
@@ -77,6 +79,25 @@ export default async function StaffDetailPage({ params, searchParams }: { params
                 <RoleChecks roles={roles} actorPermissions={actor.permissions} selected={staff.roles.map(r => r.id)} />
               </ActionForm>
             ) : <p className="note">Assigning roles also needs roles.read.</p>}
+          </section>
+          <section className="card" data-section="branches">
+            <h2>Branches</h2>
+            <p className="note">{staff.alwaysAllBranches
+              ? 'This person can manage staff or is an administrator, so they always work at all branches; branches ticked here take effect only if that changes.'
+              : 'Tick the branches this person works at: POS, stock, transfers, stock counts and branch orders are then limited to them. Tick none for all branches.'}</p>
+            <ActionForm action={setStaffLocationsAction} submitLabel="Save branches">
+              <Hidden name="staffId" value={staff.id} />
+              <fieldset className="fieldset">
+                <legend>Branches</legend>
+                {locations.map(l => (
+                  <label className="check" key={l.id} data-location={l.code}>
+                    <input type="checkbox" name="locationIds" value={l.id} defaultChecked={staff.locations.some(x => x.id === l.id)} />
+                    <span>{l.name} <span className="mono note">{l.code}</span>
+                      <small>{l.is_online ? 'Online stock' : l.kind === 'retail' ? 'Retail branch' : l.kind === 'warehouse' ? 'Warehouse' : 'Other'}{l.is_active ? '' : ' · inactive'}</small></span>
+                  </label>
+                ))}
+              </fieldset>
+            </ActionForm>
           </section>
           <section className="card" data-section="access">
             <h2>Access</h2>

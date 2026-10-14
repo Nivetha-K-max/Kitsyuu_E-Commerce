@@ -44,7 +44,10 @@ async function signUp(email, name, ref) {
   const carried = await ev(`document.querySelector('main input[name=ref]')?.value ?? null`);
   await fill('main [name=fullName]', name); await fill('main [name=email]', email); await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
   await submit();
-  await b.goto(lastLink(email), 'document.readyState === "complete"');
+  // 2026-10-14: the link opens the confirmation page; confirming sets the password (sign-up takeover fix).
+  await b.goto(lastLink(email), '!!document.querySelector("main [name=confirm]")');
+  await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
+  await submit();
   await until(`location.pathname === '/account'`);
   return carried;
 }

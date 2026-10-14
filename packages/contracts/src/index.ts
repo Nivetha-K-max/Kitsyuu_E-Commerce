@@ -374,7 +374,9 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
 
 export const signupInput = z.object({ fullName, email, password: newPassword, confirm: z.string() })
   .refine(v => v.password === v.confirm, confirmMatches);
-export const verifyEmailInput = z.object({ token: oneTimeToken });
+/** 2026-10-14 (sign-up takeover fix): confirming an account sets its password, so the form carries one (was the token only). */
+export const verifyEmailInput = z.object({ token: oneTimeToken, password: newPassword, confirm: z.string() })
+  .refine(v => v.password === v.confirm, confirmMatches);
 
 /** Indian mobile number, stored as the 10 digits (an optional +91 / 0 prefix and spaces or hyphens are accepted). */
 export const indianMobile = z.string().trim().transform(v => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, ''))

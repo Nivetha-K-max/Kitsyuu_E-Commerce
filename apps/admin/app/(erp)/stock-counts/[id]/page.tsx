@@ -7,7 +7,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { getStockCount } from '@kitsyuu/core';
 import { ActionForm, Hidden } from '@/components/forms';
 import { Entity, Section } from '@/components/frame';
@@ -29,7 +29,7 @@ export default async function StockCountPage({ params, searchParams }: { params:
   if (!can(actor, 'inventory.read')) return <><PageHead section="Catalogue" title="Stock count" crumbs={crumbs} /><Forbidden permission="inventory.read" /></>;
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const { count: c, lines } = await getStockCount(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const { count: c, lines } = await getStockCount(db(), actor, id).catch(e => { if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); throw e; });   // 2026-10-14: other branches' counts
   const edit = can(actor, 'inventory.count') && c.status === 'open';
   const counted = lines.filter(l => l.counted_qty !== null), differ = counted.filter(l => l.difference !== 0);
   const tabs = TABS.filter(t => t[0] !== 'activity' || can(actor, 'audit.read'));

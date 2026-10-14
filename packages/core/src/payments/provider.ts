@@ -47,6 +47,11 @@ export interface PaymentProvider {
       throws when the provider refuses or cannot be reached. Providers that cannot refund omit it (staff then refund outside
       the platform and record it manually with the reference). A refund is never reported as done unless the provider says so. */
   refund?(input: { paymentId: string; amountPaise: number; currency: string; notes: Record<string, string> }): Promise<ProviderRefund>;
+  /** 2026-10-14: the refunds the provider holds for a payment, as it reports them now (reconciling refunds left pending).
+      READ ONLY: never creates or changes a refund. Providers that cannot say omit it. */
+  listRefunds?(paymentId: string): Promise<ProviderRefund[]>;
 }
 
-export interface ProviderRefund { id: string; amountPaise: number; status: 'pending' | 'processed' | 'failed'; raw?: unknown }
+/** notes: what was sent with the refund request (reconciliation matches a refund whose answer was never recorded by
+    the platform's own refund id, sent as notes.kitsyuu_refund_id). */
+export interface ProviderRefund { id: string; amountPaise: number; status: 'pending' | 'processed' | 'failed'; notes?: Record<string, string>; raw?: unknown }

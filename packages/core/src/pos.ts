@@ -16,7 +16,7 @@
 import { createHash } from 'node:crypto';
 import { recordAudit, sql, type Db, type Queryable, type Tx } from '@kitsyuu/db';
 import { ConflictError, DomainError, ForbiddenError, NotFoundError, MAX_QTY_PER_LINE } from '@kitsyuu/contracts';
-import { can, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
+import { can, locationScope, requireLocation, requirePermission, type StaffPrincipal } from '@kitsyuu/auth';
 import { priceOrder, type CartTotals } from './pricing.ts';
 import { lineLabel, pricedLine, variantQuery, type PricedLine } from './cart.ts';
 import { checkStaffDiscount, inStore, staffDiscountMaxBp, staffRule } from './draft-orders.ts';
@@ -48,12 +48,17 @@ const inr = (paise: number) => `${paise < 0 ? '−' : ''}₹${(Math.abs(paise) /
 /** What the POS screen needs: the branches, the cashier's open session, the discount limit and what this staff member may do. */
 export async function posContext(db: Db, actor: StaffPrincipal) {
   requirePermission(actor, 'pos.access');
+  // 2026-10-14: a staff member assigned to branches is offered only those branches.
+  const scope = locationScope(actor);
+  let branches = db.selectFrom('locations').select(['id', 'code', 'name', 'address']).where('is_online', '=', false).where('is_active', '=', true).orderBy('sort_order').orderBy('name');
+  let others = db.selectFrom('locations').select(['id', 'code', 'name', 'is_online', 'is_active']).where(eb => eb.or([eb('is_online', '=', true), eb('is_active', '=', false)])).orderBy('sort_order').orderBy('name');
+  if (scope) { branches = branches.where('id', 'in', scope); others = others.where('id', 'in', scope); }
   const [locations, session, maxDiscountBp, otherLocations] = await Promise.all([
-    db.selectFrom('locations').select(['id', 'code', 'name', 'address']).where('is_online', '=', false).where('is_active', '=', true).orderBy('sort_order').orderBy('name').execute(),
+    branches.execute(),
     openSessionOf(db, actor.staffId),
     staffDiscountMaxBp(db),
     // Locations POS cannot bill at, so the screen can say why they are not in the list (the online stock; switched off).
-    db.selectFrom('locations').select(['id', 'code', 'name', 'is_online', 'is_active']).where(eb => eb.or([eb('is_online', '=', true), eb('is_active', '=', false)])).orderBy('sort_order').orderBy('name').execute(),
+    others.execute(),
   ]);
   return { locations, otherLocations, session, maxDiscountBp, methods: POS_PAYMENT_METHODS.map(m => ({ code: m, label: METHOD_LABEL[m] })),
     can: { sell: can(actor, 'pos.sell'), discount: can(actor, 'orders.discount'), void: can(actor, 'pos.void'), reports: can(actor, 'pos.reports'), invoice: can(actor, 'finance.manage') } };
@@ -72,6 +77,7 @@ export async function openPosSession(db: Db, actor: StaffPrincipal, input: { loc
   return db.transaction().execute(async tx => {
     const l = await tx.selectFrom('locations').select(['id', 'name', 'is_online', 'is_active']).where('id', '=', input.locationId).executeTakeFirst();
     if (!l) throw new NotFoundError('Branch not found.');
+    requireLocation(actor, l.id);
     if (l.is_online) throw new DomainError('invalid', `${l.name} is the online stock, not a branch: choose the store you are billing at.`);
     if (!l.is_active) throw new ConflictError(`${l.name} is inactive.`);
     if (await openSessionOf(tx, actor.staffId)) throw new ConflictError('You already have an open session. Close it before opening another.');
@@ -134,6 +140,8 @@ export async function closePosSession(db: Db, actor: StaffPrincipal, input: { se
     const s = await tx.selectFrom('pos_sessions').selectAll().where('id', '=', input.sessionId).forUpdate().executeTakeFirst();
     if (!s) throw new NotFoundError('Session not found.');
     if (s.staff_id !== actor.staffId && !can(actor, 'pos.reports')) throw new ForbiddenError('Only the cashier of this session or a manager can close it.');
+    // 2026-10-14: a manager closes other cashiers' sessions only at their own branches (a cashier can always close their own).
+    if (s.staff_id !== actor.staffId) requireLocation(actor, s.location_id);
     if (s.status !== 'open') throw new ConflictError(`Session ${s.number} is already closed.`);
     const sum = await posSessionSummary(tx, s.id);
     const variance = input.countedCashPaise - sum.expectedCashPaise;
@@ -158,6 +166,9 @@ export async function listPosSessions(db: Db, actor: StaffPrincipal, opts: { all
     .orderBy('s.opened_at', 'desc').limit(opts.limit ?? 100);
   // Cashiers see their own sessions; managers (pos.reports) see every cashier's.
   if (!(opts.all && can(actor, 'pos.reports'))) q = q.where('s.staff_id', '=', actor.staffId);
+  // 2026-10-14: and only at the branches they are assigned to.
+  const scope = locationScope(actor);
+  if (scope) q = q.where('s.location_id', 'in', scope);
   return q.execute();
 }
 
@@ -169,6 +180,7 @@ export type PosProduct = { productId: string; name: string; imagePath: string | 
     or SKU match returns just that size (a scan adds it straight to the bill). */
 export async function searchPosProducts(db: Db, actor: StaffPrincipal, input: { locationId: string; q: string }): Promise<{ exact: PosVariant & { productId: string; name: string } | null; products: PosProduct[] }> {
   requirePermission(actor, 'pos.access');
+  requireLocation(actor, input.locationId);
   const term = input.q.trim().slice(0, 80);
   if (!term) return { exact: null, products: [] };
   const like = `${term.toLowerCase().replace(/[%_\\]/g, m => '\\' + m)}%`;
@@ -194,6 +206,7 @@ export async function searchPosProducts(db: Db, actor: StaffPrincipal, input: { 
     by name). Shown on the counter before anything is searched, so the cashier sees the branch's stock at a glance. */
 export async function listPosBranchStock(db: Db, actor: StaffPrincipal, input: { locationId: string; limit?: number }): Promise<{ products: PosProduct[]; more: boolean }> {
   requirePermission(actor, 'pos.access');
+  requireLocation(actor, input.locationId);
   const limit = Math.min(Math.max(input.limit ?? 40, 1), 100);
   const rows = await variantQuery(db).innerJoin('location_stock as ls', join => join.onRef('ls.variant_id', '=', 'v.id').on('ls.location_id', '=', input.locationId))
     .select(['v.barcode', sql<string | null>`(select c.label from public.categories c where c.id = p.category_id)`.as('category_label'), sql<number>`ls.qty::int`.as('branch_qty'), 'v.sort_order'])
@@ -264,6 +277,7 @@ async function priceBill(q: Queryable, locationId: string, input: { lines: PosLi
 /** The bill as the counter shows it (always priced on the server: price, sale price, discount limits, tax, branch stock). */
 export async function quotePosSale(db: Db, actor: StaffPrincipal, input: { locationId: string; lines: PosLineInput[]; customerId?: string | null; discount: PosDiscountInput; couponCode?: string | null; usePoints?: boolean }) {
   requirePermission(actor, 'pos.access');
+  requireLocation(actor, input.locationId);
   if (input.discount && input.discount.percent > 0) requirePermission(actor, 'orders.discount');
   const r = await priceBill(db, input.locationId, input);
   return { ...r, problems: r.lines.filter(l => l.problem).map(l => l.problem === 'unavailable' ? `${lineLabel(l)} is not offered.`
@@ -337,6 +351,8 @@ export async function completePosSale(db: Db, actor: StaffPrincipal, input: PosS
         .where('s.id', '=', input.sessionId).forUpdate('s').executeTakeFirst();
       if (!s) throw new NotFoundError('Cashier session not found.');
       if (s.staff_id !== actor.staffId) throw new ForbiddenError('This is another cashier’s session: open your own session.');
+      // 2026-10-14: a cashier moved off this branch since opening the session can close it but no longer sell on it.
+      requireLocation(actor, s.location_id);
       if (s.status !== 'open') throw new ConflictError(`Session ${s.number} is closed: open a new session to keep billing.`);
       if (!s.is_active) throw new ConflictError(`${s.location_name} is inactive.`);
       const prior = await tx.selectFrom('orders').select(['id', 'order_number', 'pos_number', 'total_paise', 'pricing', 'status']).where('idempotency_key', '=', key).where('channel', '=', 'retail').executeTakeFirst();
@@ -468,11 +484,12 @@ export async function getPosSale(db: Db, actor: StaffPrincipal, orderId: string)
   const o = await db.selectFrom('orders as o').leftJoin('locations as l', 'l.id', 'o.location_id').leftJoin('staff_users as u', 'u.id', 'o.created_by')
     .leftJoin('pos_sessions as s', 's.id', 'o.pos_session_id').leftJoin('customers as c', 'c.id', 'o.customer_id')
     .select(['o.id', 'o.order_number', 'o.pos_number', 'o.status', 'o.payment_status', 'o.payment_method', 'o.created_at', 'o.subtotal_paise', 'o.discount_paise', 'o.tax_paise',
-      'o.shipping_paise', 'o.total_paise', 'o.prices_include_tax', 'o.pricing', 'o.contact', 'o.staff_discount_bp', 'o.staff_discount_reason', 'o.customer_id', 'o.loyalty_points_used', 'o.cod_fee_paise',
+      'o.shipping_paise', 'o.total_paise', 'o.prices_include_tax', 'o.pricing', 'o.contact', 'o.staff_discount_bp', 'o.staff_discount_reason', 'o.customer_id', 'o.loyalty_points_used', 'o.cod_fee_paise', 'o.location_id',
       'l.name as location_name', 'l.address as location_address', 'l.code as location_code', 'u.email as cashier_email', 'u.full_name as cashier_name',
       's.number as session_number', 's.status as session_status', 's.staff_id as session_staff_id', 'c.email as customer_email', 'c.full_name as customer_name'])
     .where('o.id', '=', orderId).executeTakeFirst();
   if (!o || !o.pos_number) throw new NotFoundError('POS sale not found.');
+  requireLocation(actor, o.location_id);   // 2026-10-14: another branch's bill is not shown to staff assigned elsewhere
   const [items, payment, invoice, returns] = await Promise.all([
     db.selectFrom('order_items').select(['id', 'name', 'sku', 'size', 'colour', 'qty', 'unit_price_paise', 'line_total_paise']).where('order_id', '=', o.id).orderBy('name').execute(),
     db.selectFrom('payments').select(['id', 'method', 'amount_paise', 'status', 'raw', 'captured_at']).where('order_id', '=', o.id).where('provider', '=', 'pos').executeTakeFirst(),
@@ -501,6 +518,8 @@ export async function listPosSales(db: Db, actor: StaffPrincipal, opts: { sessio
     .where('o.pos_number', 'is not', null).orderBy('o.created_at', 'desc').limit(opts.limit ?? 50);
   if (opts.sessionId) q = q.where('o.pos_session_id', '=', opts.sessionId);
   if (!can(actor, 'pos.reports')) q = q.where('o.created_by', '=', actor.staffId);
+  const scope = locationScope(actor);   // 2026-10-14: only the branches the staff member is assigned to
+  if (scope) q = q.where('o.location_id', 'in', scope);
   return q.execute();
 }
 
@@ -521,6 +540,7 @@ export async function voidPosSale(db: Db, actor: StaffPrincipal, input: { orderI
       .select(['o.id', 'o.order_number', 'o.pos_number', 'o.status', 'o.location_id', 'o.total_paise', 's.status as session_status', 's.number as session_number'])
       .where('o.id', '=', input.orderId).forUpdate('o').executeTakeFirst();
     if (!o || !o.pos_number) throw new NotFoundError('POS sale not found.');
+    requireLocation(actor, o.location_id);   // 2026-10-14
     if (o.status === 'cancelled') throw new ConflictError(`${o.pos_number} is already voided.`);
     if (o.session_status !== 'open') throw new ConflictError(`Session ${o.session_number} is closed: a sale from a closed session is returned through Returns & refunds.`);
     const openReturn = await tx.selectFrom('return_requests').select('number').where('order_id', '=', o.id).where('status', 'not in', ['rejected', 'cancelled']).executeTakeFirst();
@@ -573,14 +593,19 @@ export async function posReport(db: Db, actor: StaffPrincipal, range: { from: st
   requirePermission(actor, 'pos.reports');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(range.from) || !/^\d{4}-\d{2}-\d{2}$/.test(range.to) || range.from > range.to) throw new DomainError('invalid', 'Choose a valid date range.');
   const inRange = sql<boolean>`(o.created_at at time zone 'Asia/Kolkata')::date between ${range.from}::date and ${range.to}::date`;
+  // 2026-10-14: a manager assigned to branches reports on those branches only (one of them, or all of them together).
+  if (range.locationId) requireLocation(actor, range.locationId);
+  const scope = range.locationId ? null : locationScope(actor);
   let base = db.selectFrom('orders as o').innerJoin('locations as l', 'l.id', 'o.location_id').leftJoin('staff_users as u', 'u.id', 'o.created_by')
     .where('o.pos_number', 'is not', null).where(inRange);
   if (range.locationId) base = base.where('o.location_id', '=', range.locationId);
+  if (scope) base = base.where('o.location_id', 'in', scope);
   const sales = await base.select(['o.id', 'o.status', 'o.payment_method', 'o.subtotal_paise', 'o.discount_paise', 'o.tax_paise', 'o.total_paise', 'l.name as location', 'u.email as cashier']).execute();
   let refundQ = db.selectFrom('refunds as r').innerJoin('orders as o', 'o.id', 'r.order_id')
     .select(['r.amount_paise', 'r.reference', 'o.payment_method']).where('o.pos_number', 'is not', null).where('r.status', '=', 'processed')
     .where(sql<boolean>`(r.processed_at at time zone 'Asia/Kolkata')::date between ${range.from}::date and ${range.to}::date`);
   if (range.locationId) refundQ = refundQ.where('o.location_id', '=', range.locationId);
+  if (scope) refundQ = refundQ.where('o.location_id', 'in', scope);
   const refunds = await refundQ.execute();
   const sum = (xs: { total_paise: number }[]) => xs.reduce((n, x) => n + x.total_paise, 0);
   // 2026-10-13: voided sales are left out here, as they are in the by-cashier and by-branch tables (they were counted here only).
@@ -594,6 +619,7 @@ export async function posReport(db: Db, actor: StaffPrincipal, range: { from: st
   let repayQ = db.selectFrom('credit_repayments as r').innerJoin('credit_bills as b', 'b.id', 'r.bill_id').innerJoin('orders as o', 'o.id', 'b.order_id').select(['r.method', 'r.amount_paise'])
     .where(sql<boolean>`(r.created_at at time zone 'Asia/Kolkata')::date between ${range.from}::date and ${range.to}::date`);
   if (range.locationId) repayQ = repayQ.where('o.location_id', '=', range.locationId);
+  if (scope) repayQ = repayQ.where('o.location_id', 'in', scope);
   const repaymentsPaise = (await repayQ.execute()).reduce((n, x) => n + x.amount_paise, 0);
   const group = (key: 'cashier' | 'location') => Object.values(sales.reduce<Record<string, { name: string; count: number; amountPaise: number; voided: number }>>((acc, s) => {
     const k = s[key] ?? '—'; const g = acc[k] ??= { name: k, count: 0, amountPaise: 0, voided: 0 };

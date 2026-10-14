@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { asset, formatMoney, imageOf, url, type Index } from '@/lib/catalogue-utils';
 import type { Product } from '@/lib/types';
@@ -8,6 +8,7 @@ import { useHydrated, useStore } from './StoreProvider';
 import { useAuth } from './AuthProvider';
 import { Icons } from './icons';
 import ThemeToggle from './ThemeToggle';
+import IntentLink from './IntentLink';
 
 type Active = { key?: string; exact?: boolean; sub?: string | null; tool?: string };
 
@@ -89,12 +90,8 @@ function megaFor(idx: Index, key: string): { cols: MegaCol[]; tiles: MegaTile[] 
 }
 
 /* Mega-menu links are mounted (hidden) on every page; prefetching them all whenever a page loads would fetch every
-   category and product page in the menus. They are prefetched when pointed at or focused instead. */
-function MenuLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
-  const router = useRouter();
-  const warm = () => router.prefetch(href);
-  return <Link href={href} className={className} prefetch={false} onMouseEnter={warm} onFocus={warm}>{children}</Link>;
-}
+   category and product page in the menus. They are prefetched when pointed at, focused or touched instead (IntentLink). */
+const MenuLink = IntentLink;
 
 /* The menus are mounted (hidden) on every page, and a hidden picture near the top of the page still downloads even when
    lazy. So the tile photos are only rendered once the visitor first points at or focuses the menu bar (performance,
@@ -176,15 +173,16 @@ export default function Header() {
         onPointerEnter={() => setWarm(true)} onFocus={() => setWarm(true)}>
         <ul className="st-nav-main">
           {menus.map(i => {
-            const on = active.key === i.key, mega = i.mega;
+            // 2026-10-14: Home is prerendered (a normal Link); the others are rendered per request and prefetch on intent.
+            const on = active.key === i.key, mega = i.mega, NavLink = i.key === 'home' ? Link : IntentLink;
             return (
               <li key={i.key} className={mega ? `has-mega${megaOff === i.key ? ' is-off' : ''}` : undefined}
                 onMouseLeave={mega ? () => setMegaOff(null) : undefined}>
-                <Link href={i.href} {...(on ? (active.exact ? { 'aria-current': 'page' as const } : { className: 'is-active' }) : {})}>{i.label}</Link>
+                <NavLink href={i.href} {...(on ? (active.exact ? { 'aria-current': 'page' as const } : { className: 'is-active' }) : {})}>{i.label}</NavLink>
                 {mega && <MegaMenu label={i.label} data={mega} onPick={() => setMegaOff(i.key)} warm={warm} />}
                 {i.children.length > 0 && (
                   <ul className="st-nav-sub">
-                    {i.children.map(c => <li key={c.id}><Link href={url.shop({ category: c.id })} {...(active.sub === c.id ? { 'aria-current': 'page' as const } : {})}>{c.label}</Link></li>)}
+                    {i.children.map(c => <li key={c.id}><IntentLink href={url.shop({ category: c.id })} {...(active.sub === c.id ? { 'aria-current': 'page' as const } : {})}>{c.label}</IntentLink></li>)}
                   </ul>
                 )}
               </li>
@@ -192,17 +190,17 @@ export default function Header() {
           })}
         </ul>
         <ul className="st-nav-extra">
-          <li><Link href={wishHref} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</Link></li>
-          <li><Link href={accountHref} {...cur('account')}>{accountLabel}</Link></li>
+          <li><IntentLink href={wishHref} {...cur('wishlist')}>Wishlist (<span data-badge="wish">{wishCount}</span>)</IntentLink></li>
+          <li><IntentLink href={accountHref} {...cur('account')}>{accountLabel}</IntentLink></li>
           <li><a href="/our-story">Our story</a></li>
         </ul>
       </nav>
       <div className="st-tools">
         <ThemeToggle />
-        <Link className="st-tool" href={url.search()} {...cur('search')}>{Icons.search}<span className="st-tool-label">Search</span></Link>
-        <Link className="st-tool st-tool-wish" href={wishHref} {...cur('wishlist')}>{Icons.heart}<span className="st-tool-label">Wishlist</span> <span className="st-count-badge">(<span data-badge="wish">{wishCount}</span>)<span className="sr-only"> saved</span></span></Link>
-        <Link className="st-tool" href={url.cart} {...cur('cart')}>{Icons.bag}<span className="st-tool-label">Cart</span> <span className="st-count-badge">(<span data-badge="cart">{cartCount}</span>)<span className="sr-only"> items</span></span></Link>
-        <Link className="st-tool st-tool-account" href={accountHref} data-auth={signedIn ? 'customer' : hydrated && auth.status === 'guest' ? 'guest' : 'unknown'} {...cur('account')}>{Icons.user}<span className="st-tool-label">{accountLabel}</span></Link>
+        <IntentLink className="st-tool" href={url.search()} {...cur('search')}>{Icons.search}<span className="st-tool-label">Search</span></IntentLink>
+        <IntentLink className="st-tool st-tool-wish" href={wishHref} {...cur('wishlist')}>{Icons.heart}<span className="st-tool-label">Wishlist</span> <span className="st-count-badge">(<span data-badge="wish">{wishCount}</span>)<span className="sr-only"> saved</span></span></IntentLink>
+        <IntentLink className="st-tool" href={url.cart} {...cur('cart')}>{Icons.bag}<span className="st-tool-label">Cart</span> <span className="st-count-badge">(<span data-badge="cart">{cartCount}</span>)<span className="sr-only"> items</span></span></IntentLink>
+        <IntentLink className="st-tool st-tool-account" href={accountHref} data-auth={signedIn ? 'customer' : hydrated && auth.status === 'guest' ? 'guest' : 'unknown'} {...cur('account')}>{Icons.user}<span className="st-tool-label">{accountLabel}</span></IntentLink>
         <button className="st-tool st-menu-toggle" type="button" aria-expanded={open} aria-controls="st-nav" ref={toggle} onClick={() => setOpen(o => !o)}>{Icons.menu}<span className="st-menu-label">{open ? 'Close' : 'Menu'}</span></button>
       </div>
     </header>

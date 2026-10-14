@@ -109,7 +109,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: SP })
     const presetId = one(sp.customer) ?? '';
     const [all, branches, preset] = await Promise.all([
       listDraftOrders(db(), actor, { status: draftStatus }),
-      db().selectFrom('locations').select(['id', 'name']).where('is_online', '=', false).where('is_active', '=', true).orderBy('sort_order').orderBy('name').execute(),
+      // 2026-10-14: a branch draft can be started only at the staff member's own branches
+      db().selectFrom('locations').select(['id', 'name']).where('is_online', '=', false).where('is_active', '=', true)
+        .$if(!!actor.locationIds, qb => qb.where('id', 'in', [...actor.locationIds!])).orderBy('sort_order').orderBy('name').execute(),
       /^[0-9a-f-]{36}$/i.test(presetId) ? db().selectFrom('customers').select(['id', 'email', 'full_name']).where('id', '=', presetId).executeTakeFirst() : null,
     ]);
     const term = query.q?.toLowerCase();

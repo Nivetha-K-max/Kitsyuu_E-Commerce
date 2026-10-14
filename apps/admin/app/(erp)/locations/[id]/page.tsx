@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { LOCATION_KINDS, getLocationStock, listAdjustmentReasons } from '@kitsyuu/core';
 import { ActionForm, Checkbox, Field, Hidden, Select, TextArea } from '@/components/forms';
 import { Entity, Section } from '@/components/frame';
@@ -25,8 +25,8 @@ export default async function LocationPage({ params, searchParams }: { params: P
   const { id } = await params, sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const q = (sp.q ?? '').trim().slice(0, 80), all = sp.all === '1';
-  const { location: l, rows, movements, units } = await getLocationStock(db(), actor, { locationId: id, q: q || undefined, inStockOnly: !all && !q })
-    .catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const { location: l, rows, movements, units, canSeeCosts } = await getLocationStock(db(), actor, { locationId: id, q: q || undefined, inStockOnly: !all && !q })
+    .catch(e => { if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); throw e; });   // 2026-10-14: unassigned branches
   const adjust = can(actor, 'inventory.adjust') && l.is_active;
   const reasons = adjust ? await listAdjustmentReasons(db(), actor, { retail: l.kind === 'retail' && !l.is_online }) : [];
   // The form offers every size (with what is here now), not only the sizes already in stock here: a new branch receives its
@@ -92,7 +92,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
             <Field name="delta" label="Change" required hint="e.g. 5 to add, -2 to take away" />
             <Select name="reason" label="Reason" required options={[{ value: '', label: 'Choose a reason…' }, ...reasons.map(r => ({ value: r.code, label: r.label }))]} />
             <Field name="note" label="Note (optional)" hint='e.g. "Received 20 units from supplier."' />
-            <Field name="unitCost" label="Unit cost, ₹ (optional, stock coming in)" hint="What one unit cost, kept with this delivery in the stock history." />
+            {canSeeCosts && <Field name="unitCost" label="Unit cost, ₹ (optional, stock coming in)" hint="What one unit cost, kept with this delivery in the stock history." />}
           </ActionForm>
         </section>
       )}
@@ -102,7 +102,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
         <p className="note">The latest {movements.length} rows of the stock ledger for this location. <Link href={`/inventory/movements?location=${l.id}`}>Search and filter all of them</Link>.</p>
         {movements.length === 0 ? <Empty compact title="No movements yet" /> : (
           <div className="table-wrap"><table data-location-movements>
-            <thead><tr><th>When</th><th>Item</th><th>Reason</th><th className="num">Before</th><th className="num">Change</th><th className="num">After</th><th className="num">Unit cost</th><th>By</th></tr></thead>
+            <thead><tr><th>When</th><th>Item</th><th>Reason</th><th className="num">Before</th><th className="num">Change</th><th className="num">After</th>{canSeeCosts && <th className="num">Unit cost</th>}<th>By</th></tr></thead>
             <tbody>{movements.map(m => (
               <tr key={String(m.id)}>
                 <td>{formatDateTime(m.created_at as Date)}</td>
@@ -111,7 +111,7 @@ export default async function LocationPage({ params, searchParams }: { params: P
                 <td className="num">{m.balance_before}</td>
                 <td className="num">{m.delta > 0 ? `+${m.delta}` : m.delta}</td>
                 <td className="num">{m.balance_after}</td>
-                <td className="num">{m.unit_cost_paise != null ? formatPaise(m.unit_cost_paise) : '—'}</td>
+                {canSeeCosts && <td className="num">{m.unit_cost_paise != null ? formatPaise(m.unit_cost_paise) : '—'}</td>}
                 <td>{m.staff_email ?? '—'}</td>
               </tr>
             ))}</tbody>

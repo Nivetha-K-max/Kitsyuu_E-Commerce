@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { can } from '@kitsyuu/auth';
-import { NotFoundError } from '@kitsyuu/contracts';
+import { ForbiddenError, NotFoundError } from '@kitsyuu/contracts';
 import { billFromOrder, companyDetails, getPosSale, returnSettings } from '@kitsyuu/core';
 import { ActionForm, Field, Hidden, Select, TextArea } from '@/components/forms';
 import PrintButton from '@/components/PrintButton';
@@ -23,7 +23,7 @@ export default async function PosSalePage({ params, searchParams }: { params: Pa
   if (!can(actor, 'pos.access')) return <><PageHead title="POS bill" crumbs={crumbs} /><Forbidden permission="pos.access" /></>;
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const v = await getPosSale(db(), actor, id).catch(e => { if (e instanceof NotFoundError) notFound(); throw e; });
+  const v = await getPosSale(db(), actor, id).catch(e => { if (e instanceof NotFoundError || e instanceof ForbiddenError) notFound(); throw e; });   // 2026-10-14: other branches' bills
   const [company, rs, reasons] = await Promise.all([companyDetails(db()), returnSettings(db()),
     db().selectFrom('return_reasons').select(['code', 'label']).where('is_active', '=', true).orderBy('sort_order').execute()]);
   const { sale: s, items, payment, pos } = v;

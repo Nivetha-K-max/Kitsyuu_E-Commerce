@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import IntentLink from '@/components/IntentLink';
 import { RETURNS_POLICY } from '@/lib/store-policy';
 import type { Catalogue } from '@/lib/types';
 import { asset, indexCatalogue, url } from '@/lib/catalogue-utils';
@@ -21,7 +22,7 @@ export default function Footer({ catalogue, policy = RETURNS_POLICY, tagline = '
             </Link>
             <p data-brand-tagline>{tagline.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}</p>
           </div>
-          <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><Link href={i.href}>{i.label}</Link></li>)}</ul></nav>
+          <nav aria-labelledby="st-f-shop"><h2 id="st-f-shop">Shop</h2><ul>{shop.map(i => <li key={i.href}><IntentLink href={i.href}>{i.label}</IntentLink></li>)}</ul></nav>
           <nav aria-labelledby="st-f-brand"><h2 id="st-f-brand">KITSYUU</h2><ul><li><a href="/our-story">The story</a></li><li><a href="/our-story#edit">Style studies</a></li><li><a href="/our-story#about">Our world</a></li></ul></nav>
           <div><h2>Orders</h2><p className="st-footer-note" data-returns-policy>{policy}</p></div>
         </div>

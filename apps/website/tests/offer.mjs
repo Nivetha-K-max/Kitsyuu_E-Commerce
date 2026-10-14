@@ -115,7 +115,10 @@ try {
   await go('/signup', '!!document.querySelector("main [name=email]")');
   await fill('main [name=fullName]', 'Offer Customer'); await fill('main [name=email]', email); await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
   await submit();
-  await b.goto(lastLink(email), 'document.readyState === "complete"');
+  // 2026-10-14: the link opens the confirmation page; confirming sets the password (sign-up takeover fix).
+  await b.goto(lastLink(email), '!!document.querySelector("main [name=confirm]")');
+  await fill('main [name=password]', PW); await fill('main [name=confirm]', PW);
+  await submit();
   ok('a new customer signs up and confirms their email', await until(`location.pathname === '/account'`));
   const [me] = await q(`select id from customers where email = $1`, [email]);
   await newSession(); await scrollIn();

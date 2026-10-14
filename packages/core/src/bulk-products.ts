@@ -35,8 +35,8 @@ const PERMISSION: Record<BulkAction['action'], string> = {
   sale_percent: 'pricing.manage', sale_clear: 'pricing.manage',
   price_set: 'products.write', price_percent: 'products.write', vendor_add: 'procurement.manage', vendor_remove: 'procurement.manage',
 };
-/** Publishing also needs products.publish (product approval, 2026-10-01). */
-const extraPermission = (a: BulkAction) => (a.action === 'publish' ? 'products.publish' : null);
+/** Publishing also needs products.publish (product approval, 2026-10-01); a price change also needs pricing.manage (2026-10-14). */
+const extraPermission = (a: BulkAction) => (a.action === 'publish' ? 'products.publish' : a.action === 'price_set' || a.action === 'price_percent' ? 'pricing.manage' : null);
 export const BULK_MAX_PRODUCTS = 200;
 
 export async function bulkEditProducts(db: Db, actor: StaffPrincipal, input: { productIds: string[] } & BulkAction, ctx: MutationContext,

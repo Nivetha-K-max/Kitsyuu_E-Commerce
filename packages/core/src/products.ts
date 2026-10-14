@@ -232,9 +232,11 @@ export async function setProductStatus(db: Db, actor: StaffPrincipal, input: Set
   });
 }
 
-/** Changes the product's base price (integer paise). Refused if the price changed since the form was opened. */
+/** Changes the product's base price (integer paise). Refused if the price changed since the form was opened.
+    2026-10-14: a price change needs pricing.manage as well as products.write. */
 export async function updateProductPrice(db: Db, actor: StaffPrincipal, input: UpdatePriceInput, ctx: MutationContext) {
   requirePermission(actor, 'products.write');
+  requirePermission(actor, 'pricing.manage');
   return db.transaction().execute(async tx => {
     const p = await tx.selectFrom('products').select(['price_paise']).where('id', '=', input.productId).forUpdate().executeTakeFirst();
     if (!p) throw new NotFoundError('Product not found.');
@@ -264,9 +266,10 @@ export async function setProductCategory(db: Db, actor: StaffPrincipal, input: {
 }
 
 /** The lowest price this product may be sold for after a staff discount (2026-10-01); null removes it. It must be below the
-    price: a staff discount can never take a line under it (draft-orders.ts). */
+    price: a staff discount can never take a line under it (draft-orders.ts). A price control: needs pricing.manage too (2026-10-14). */
 export async function setProductMinPrice(db: Db, actor: StaffPrincipal, input: { productId: string; minPricePaise: number | null }, ctx: MutationContext) {
   requirePermission(actor, 'products.write');
+  requirePermission(actor, 'pricing.manage');
   return db.transaction().execute(async tx => {
     const p = await tx.selectFrom('products').select(['price_paise', 'min_price_paise']).where('id', '=', input.productId).forUpdate().executeTakeFirst();
     if (!p) throw new NotFoundError('Product not found.');

@@ -117,6 +117,9 @@ test('price update: authorized, audited with previous and new price, refused whe
   assert.deepEqual([a.before_data, a.after_data, a.staff_id], [{price_paise: original.price_paise}, {price_paise: 259950}, root.staffId]);
   await assert.rejects(updateProductPrice(db, root, input, ctx), ConflictError, 'stale expected price');
   await assert.rejects(updateProductPrice(db, invMgr, {...input, expectedPricePaise: 259950}, ctx), ForbiddenError);
+  // 2026-10-14: products.write alone (e.g. a custom role) cannot change a price: pricing.manage is needed too.
+  const writeOnly = {...root, permissions: new Set([...root.permissions].filter(p => p !== 'pricing.manage'))};
+  await assert.rejects(updateProductPrice(db, writeOnly, {...input, price: 249900, expectedPricePaise: 259950}, ctx), ForbiddenError);
   await updateProductPrice(db, root, {productId: PID, price: original.price_paise, expectedPricePaise: 259950}, ctx);
   assert.equal((await owner.selectFrom('products').select('price_paise').where('id', '=', PID).executeTakeFirstOrThrow()).price_paise, original.price_paise, 'restored');
   const tax = await sql`select count(*)::int n, max(rate_bp) bp from tax_rates`.execute(owner);
