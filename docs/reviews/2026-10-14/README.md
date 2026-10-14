@@ -11,5 +11,7 @@ The SQL files are review material, kept outside `database/migrations/` on purpos
 | `legacy-auth-policies.draft.sql` | DRAFT migration retiring them. Not applied anywhere and not rehearsed yet. |
 | `legacy-auth-preflight.sql` | Read-only validation checks (Q1–Q8), wrapped in a read-only transaction. Run before and after. |
 | `legacy-auth-rollback.sql` | Undo script restoring the original policies, functions, trigger and grants. |
+| `production-rollout-005000-005100.md` | Rollout review for migrations 005000 and 005100: exact SQL, ledger options, order of operations, rollback limits, impact on staff roles, role-permission matrix. |
+| `production-preflight-005000-005100.sql` | Read-only production checks for that rollout (validated on a throwaway local database). |
 
 Any production use needs the owner's explicit approval.
