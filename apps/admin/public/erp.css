@@ -1,0 +1,499 @@
+/* KITSYUU ERP — design system 3.0, "Minimal White" (owner's choice of the six dashboard concepts, 2026-10-15).
+   Loaded after admin.css (app/layout.tsx), so it wins without !important: admin.css keeps the layout mechanics every
+   page relies on; this file sets the whole visual language through the same tokens and class names. Remove the <link>
+   to go back to the previous look.
+
+   Pure white canvas; very light grey (#F2F3F5) for secondary surfaces; cool grey hairlines (#D7DBE0); deep slate text
+   (#252B35) with near-black (#111111) for emphasis and the one primary action. Green, amber and red appear only as
+   states (rising / needs attention / genuine errors), always with a word or a sign next to them. Flat surfaces with a
+   border, no gradients, shadows only on things that float (menus, dialogs). One face (Inter), one scale, 8px controls,
+   12px cards. Motion stays (short, opacity/transform only) and stops with reduced motion. */
+
+/* ================= tokens ================= */
+:root{
+  --font:'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --fs-title:24px;--fs-section:15px;--fs-body:14px;--fs-table:13.5px;--fs-label:12px;--fs-help:12.5px;--fs-btn:13px;--fs-figure:26px;
+  --radius-sm:6px;--radius:8px;--radius-lg:12px;--radius-xl:16px;--pill:999px;
+  --ease:cubic-bezier(.2,.7,.2,1);--dur:140ms;
+  --side-w:232px;--side-rail:60px;--top-h:60px;--gutter:28px;
+  --white:#ffffff;--grey:#f2f3f5;--line:#d7dbe0;--slate:#252b35;--ink:#111111;
+  --bg:#ffffff;--sidebar:#ffffff;--surface:#ffffff;--surface-raised:#ffffff;--surface-2:#f8f9fa;--surface-3:#f2f3f5;--surface-4:#e8eaee;
+  --border:#d7dbe0;--border-strong:#b9bfc8;--hairline:#e7e9ed;
+  --text:#252b35;--text-strong:#111111;--text-primary:var(--text);--text-2:#3a414c;--muted:#5d6470;--text-muted:var(--muted);--faint:#9aa1ab;
+  --accent:#111111;--accent-hover:#2b3038;--accent-soft:#f2f3f5;--accent-text:#111111;--on-accent:#ffffff;
+  --primary:var(--accent);--primary-hover:var(--accent-hover);--primary-soft:var(--accent-soft);--primary-text:var(--accent-text);--on-primary:var(--on-accent);
+  --success:#1d7348;--success-soft:#e8f4ed;--warning:#8a5300;--warning-soft:#fdf3de;--danger:#b42318;--danger-hover:#912018;--danger-soft:#fdecea;
+  --info:#2f5b9a;--info-soft:#eaf0f8;
+  --trend-up:#2f8a5b;--trend-down:#c4413a;--trend-flat:#9aa1ab;--chart-now:#252b35;--chart-prev:#9aa1ab;
+  --input-bg:#ffffff;--row-hover:#f8f9fa;--row-selected:#f2f3f5;--overlay:rgba(17,17,17,.32);
+  --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+  --shadow-md:0 1px 2px rgba(16,24,40,.05);
+  --shadow-lg:0 12px 32px rgba(16,24,40,.12),0 2px 6px rgba(16,24,40,.06);
+  --focus:0 0 0 2px #ffffff,0 0 0 4px rgba(37,43,53,.55);
+  color-scheme:light
+}
+:root[data-theme=dark]{
+  --bg:#0e1116;--sidebar:#0e1116;--surface:#151a21;--surface-raised:#1a2029;--surface-2:#181d25;--surface-3:#1f2630;--surface-4:#28303c;
+  --border:#2b323d;--border-strong:#3d4652;--hairline:#222934;
+  --text:#e6e9ee;--text-strong:#ffffff;--text-2:#c8ced7;--muted:#9aa3af;--faint:#6b7480;
+  --accent:#f2f3f5;--accent-hover:#ffffff;--accent-soft:#1f2630;--accent-text:#f2f3f5;--on-accent:#111111;
+  --success:#6cc59a;--success-soft:rgba(108,197,154,.12);--warning:#e8b85a;--warning-soft:rgba(232,184,90,.12);--danger:#f19a90;--danger-hover:#f5b3ab;--danger-soft:rgba(241,154,144,.12);
+  --info:#9dbcef;--info-soft:rgba(157,188,239,.12);
+  --trend-up:#6cc59a;--trend-down:#f19a90;--trend-flat:#6b7480;--chart-now:#c8ced7;--chart-prev:#6b7480;
+  --input-bg:#11151b;--row-hover:#181d25;--row-selected:#1f2630;--overlay:rgba(0,0,0,.6);
+  --shadow-sm:none;--shadow-md:none;--shadow-lg:0 0 0 1px var(--border),0 18px 44px rgba(0,0,0,.5);
+  --focus:0 0 0 2px var(--bg),0 0 0 4px rgba(230,233,238,.6);
+  color-scheme:dark
+}
+html,body{background:var(--bg);color:var(--text);font-size:var(--fs-body)}
+::selection{background:rgba(37,43,53,.16)}
+:focus-visible{outline:none;box-shadow:var(--focus)}
+.note,.lead,.eyebrow,.card-sub,.muted{color:var(--muted)}
+
+/* ================= shell: compact white sidebar, clear active state ================= */
+.side{background:var(--sidebar);border-right:1px solid var(--border);padding:0}
+.side-head{height:var(--top-h);padding:0 12px 0 14px;border-bottom:1px solid var(--hairline)}
+.brand{height:40px;padding:0 6px;border-radius:var(--radius)}
+.brand:hover{background:var(--surface-3)}
+/* the logo mark stays the plain store logo (owner's brand decision, 2026-10-07): no square behind it */
+.brand-mark{width:22px;height:30px}
+.brand b{font-size:14px;font-weight:700;letter-spacing:.14em;color:var(--text-strong)}
+.brand small{font-size:11.5px;color:var(--muted);letter-spacing:.01em}
+.nav{padding:12px 10px 14px}
+.nav-section+.nav-section{margin-top:14px;padding-top:0;border-top:0}
+.nav-group{padding:0 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--muted)}
+.nav a,.side-link{height:34px;margin:0 0 1px;padding:0 10px;gap:10px;border-radius:var(--radius);background:transparent;box-shadow:none;color:var(--text-2);font-size:13.5px;font-weight:500;
+  transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease)}
+.nav a .icon,.side-link .icon{width:17px;height:17px;color:var(--muted)}
+.nav a:hover,.side-link:hover{background:var(--surface-3);color:var(--text-strong);box-shadow:none;text-decoration:none}
+.nav a:hover .icon{color:var(--text-strong)}
+.nav a[aria-current=page],.nav a[aria-current=page]:hover{background:var(--surface-3);color:var(--text-strong);font-weight:600;box-shadow:none}
+.nav a[aria-current=page] .icon,.nav a[aria-current=page]:hover .icon{color:var(--text-strong)}
+.nav a[aria-current=page]:before{display:block;content:'';position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--text-strong)}
+.nav a[aria-current=page]:after{display:none}
+.nav a span,.nav a .nav-label{overflow:visible;text-overflow:clip}
+:root[data-sidebar=collapsed] .nav a{width:40px;padding:0}
+:root[data-sidebar=collapsed] .nav a[aria-current=page]:before{left:-10px}
+.side-foot{border-top:1px solid var(--hairline);padding:8px 10px 10px}
+.user-trigger{border-radius:var(--radius)}
+
+/* top bar: white, one hairline below; where-am-I, search, notifications, theme, profile */
+.topbar{height:var(--top-h);padding:0 var(--gutter);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:saturate(1.2) blur(10px);-webkit-backdrop-filter:saturate(1.2) blur(10px);border-bottom:1px solid var(--border)}
+.topbar-context{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0}
+.topbar-context span+span:before{content:'/';width:auto;height:auto;margin:0 8px;border:0;transform:none;color:var(--faint)}
+.topbar-context [aria-current]{color:var(--text-strong);font-weight:600}
+.topbar-context .crumb-link{color:var(--muted)}
+.topbar-context .crumb-link:hover{color:var(--text-strong)}
+.cmd-trigger,.topbar-tools .cmd-trigger{height:36px;padding:0 8px 0 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);color:var(--muted);font-size:13px;box-shadow:none;
+  transition:border-color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
+.cmd-trigger:hover{border-color:var(--border-strong);background:var(--surface);color:var(--text-2)}
+.cmd-trigger kbd{background:var(--surface);border:1px solid var(--border);border-bottom-width:1px;box-shadow:none;color:var(--muted)}
+@media (min-width:761px){.topbar-tools .cmd-trigger{flex:0 1 420px;min-width:220px}}
+.icon-btn{width:36px;height:36px;border-radius:var(--radius);color:var(--text-2)}
+.icon-btn:hover,.icon-btn[data-state=open]{background:var(--surface-3);color:var(--text-strong)}
+.topbar-tools{gap:4px}
+.bell-dot{background:var(--danger);box-shadow:0 0 0 2px var(--bg)}
+.avatar{background:var(--slate);color:#fff;font-weight:600}
+:root[data-theme=dark] .avatar{background:#e6e9ee;color:#111}
+@media (min-width:1024px){
+  .topbar .avatar-btn{height:40px;padding:0 10px 0 4px;border-radius:var(--radius);border:1px solid transparent}
+  .topbar .avatar-btn:hover,.topbar .avatar-btn[data-state=open]{background:var(--surface-3)}
+}
+.main{padding:0 var(--gutter) 64px;max-width:1480px}
+
+/* ================= page head ================= */
+.page-head{padding-top:24px;padding-bottom:0;margin-bottom:20px;gap:12px 16px;align-items:flex-end;border:0}
+.page-head h1,h1.page-title{font-size:var(--fs-title);font-weight:650;letter-spacing:-.02em;line-height:1.2;color:var(--text-strong)}
+.eyebrow,.page-head .lead{font-size:13.5px;margin-top:4px}
+.crumbs{font-size:12.5px;color:var(--muted);letter-spacing:0;margin-bottom:6px}
+.crumbs a{color:var(--muted)}
+.crumbs a:hover{color:var(--text-strong)}
+.crumb-sep{margin:0 6px;color:var(--faint)}
+
+/* ================= surfaces: a border, never a heavy shadow ================= */
+.card,.form-panel,.gate,.ent-body,.search-groups>*,.table-wrap,.kpi,.state,.empty,.dt{border:1px solid var(--border);box-shadow:none}
+.card,.form-panel,.gate,.ent-body,.kpi,.table-wrap{background:var(--surface);border-radius:var(--radius-lg)}
+.card{padding:20px}
+.card .table-wrap,.ent-section .table-wrap,.table-wrap.flush{border-radius:var(--radius)}
+.card>h2,.section-title,.card-head h2,.gate h2{font-size:var(--fs-section);font-weight:600;letter-spacing:-.005em;color:var(--text-strong)}
+.card-head{margin-bottom:14px;gap:12px}
+.card-sub{font-size:12.5px}
+.section-foot{border-top:1px solid var(--hairline);margin-top:16px;padding-top:14px}
+:root[data-theme=dark] .ent-body{border-color:var(--border)}
+.ent-section{border-top-color:var(--hairline)}
+
+/* ================= buttons: one solid primary; outlined secondary; red only for destructive ================= */
+.btn{height:36px;min-height:36px;padding:0 14px;gap:6px;border:1px solid var(--accent);border-radius:var(--radius);background:var(--accent);color:var(--on-accent);
+  font-size:var(--fs-btn);font-weight:600;letter-spacing:0;box-shadow:none;transition:background-color var(--dur) var(--ease),border-color var(--dur) var(--ease),color var(--dur) var(--ease)}
+.btn:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:var(--on-accent);text-decoration:none}
+.btn:active{transform:translateY(.5px)}
+.btn.ghost,.btn.secondary,.card .btn.ghost,.ent-section .btn.ghost,.form-panel .btn.ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);font-weight:500;box-shadow:none}
+.btn.ghost:hover,.btn.secondary:hover,.card .btn.ghost:hover,.ent-section .btn.ghost:hover,.form-panel .btn.ghost:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text-strong)}
+.btn.sm,.inline-form .btn{height:30px;min-height:30px;padding:0 11px;border-radius:var(--radius-sm);font-size:12.5px}
+.btn.danger,.btn.ghost.danger,.card .btn.danger,.ent-section .btn.danger,.form-panel .btn.danger{background:var(--surface);border:1px solid color-mix(in srgb,var(--danger) 38%,var(--surface));color:var(--danger);font-weight:600;box-shadow:none}
+.btn.danger:hover,.btn.ghost.danger:hover,.card .btn.danger:hover,.ent-section .btn.danger:hover{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.btn.link,.btn.plain{height:auto;min-height:0;padding:0 2px;border:0;background:none;color:var(--text);font-weight:500}
+.btn.link:hover,.btn.plain:hover{background:none;color:var(--text-strong)}
+.btn[disabled],.btn[aria-disabled=true]{opacity:.45;cursor:not-allowed;transform:none}
+.ent-head .actions .btn{height:36px;min-height:36px}
+
+/* ================= forms: white fields, cool grey border, slate focus ================= */
+.input,input.input,select.input,textarea.input,.field input:not([type=checkbox]):not([type=radio]):not([type=file]),.field select,.field textarea,.form input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.form select,.form textarea,.dt-search input,.dt-filter{min-height:38px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--input-bg);color:var(--text);font-size:13.5px;box-shadow:none;
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+textarea.input,.field textarea,.form textarea{min-height:84px}
+.input:hover,.field input:hover,.field select:hover,.field textarea:hover,.form input:hover,.form select:hover,.form textarea:hover{border-color:var(--border-strong)}
+.input:focus,.field input:focus,.field select:focus,.field textarea:focus,.form input:focus,.form select:focus,.form textarea:focus,.dt-search input:focus,.dt-filter:focus{outline:none;border-color:var(--slate);box-shadow:0 0 0 3px rgba(37,43,53,.1)}
+:root[data-theme=dark] .input:focus,:root[data-theme=dark] .field input:focus,:root[data-theme=dark] .field select:focus,:root[data-theme=dark] .field textarea:focus,:root[data-theme=dark] .form input:focus,:root[data-theme=dark] .form select:focus{border-color:var(--text-2);box-shadow:0 0 0 3px rgba(230,233,238,.12)}
+.card .input,.card .field input,.card .field select,.card .field textarea,.form-panel .field input,.form-panel .field select,.form-panel .field textarea,.ent-section .field input,.ent-section .field select,.ent-section .field textarea{background:var(--input-bg);border-color:var(--border)}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
+input[type=checkbox],input[type=radio]{accent-color:var(--slate)}
+:root[data-theme=dark] input[type=checkbox],:root[data-theme=dark] input[type=radio]{accent-color:#e6e9ee}
+.field label,.field>span:first-child,label.field-label,.form label{font-size:12.5px;font-weight:600;color:var(--text-2)}
+.field .hint,.field small,.field-hint{font-size:12px;color:var(--muted)}
+.field-error{color:var(--danger);font-size:12.5px}
+[aria-invalid=true]{border-color:var(--danger)!important;background:var(--danger-soft)!important}
+.req{color:var(--danger)}
+.msg{border-radius:var(--radius);padding:10px 12px;font-size:13px;border:1px solid transparent}
+.msg.error{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 25%,transparent);color:var(--danger)}
+.msg.ok{background:var(--success-soft);border-color:color-mix(in srgb,var(--success) 25%,transparent);color:var(--success)}
+.dropzone{border:1px dashed var(--border-strong);border-radius:var(--radius-lg);background:var(--surface-2)}
+.dropzone:hover{border-color:var(--slate)}
+
+/* ================= tables: light header, hairline rows, quiet hover ================= */
+.table-wrap{overflow:auto}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:var(--fs-table)}
+th{position:sticky;top:0;z-index:1;height:38px;padding:9px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.01em;text-align:left;white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--hairline);color:var(--text);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--row-hover)}
+tbody tr[aria-selected=true] td,tbody tr[data-selected] td{background:var(--row-selected)}
+td.num,td.qty,td.money,.ord-amount{color:var(--text-strong);font-weight:500}
+.row-link{color:var(--text-strong);font-weight:600}
+.mono,.ord-no,td .mono{font-size:12px;color:var(--muted)}
+.ord-placed,.ord-table td.nowrap{white-space:nowrap}
+.dt-toolbar{gap:8px}
+.dt-foot{border-top:1px solid var(--hairline);color:var(--muted);font-size:12.5px}
+.sort-btn{color:inherit}
+
+/* ================= status: soft tint, dot and word ================= */
+.badge{height:22px;padding:0 8px;gap:6px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;letter-spacing:0;white-space:nowrap}
+.badge:before{width:6px;height:6px}
+.ord-count{min-width:20px;height:18px;padding:0 6px;border-radius:var(--pill);background:var(--surface-4);color:var(--text-2);font-size:11.5px;font-weight:600;opacity:1;margin-left:2px}
+[aria-current] .ord-count{background:var(--slate);color:#fff}
+:root[data-theme=dark] [aria-current] .ord-count{background:#e6e9ee;color:#111}
+
+/* ================= internal views: a segmented control; filter chips; entity tabs underline ================= */
+.tabs,.ord-views,.subnav{display:inline-flex;flex-wrap:wrap;gap:2px;width:fit-content;max-width:100%;padding:3px;border:0;border-radius:var(--radius);background:var(--surface-3)}
+.tabs .btn,.tabs .btn.ghost,.tabs a,.ord-views a{height:30px;min-height:30px;padding:0 12px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-2);font-size:13px;font-weight:500;box-shadow:none}
+.tabs .btn:hover,.tabs .btn.ghost:hover,.tabs a:hover,.ord-views a:hover{background:color-mix(in srgb,var(--surface) 70%,transparent);color:var(--text-strong);border:0}
+.tabs .btn:not(.ghost),.tabs .btn[aria-current],.tabs .btn.ghost[aria-current],.tabs a[aria-current],.ord-views a[aria-current]{background:var(--surface);color:var(--text-strong);font-weight:600;border:0;
+  box-shadow:0 1px 2px rgba(16,24,40,.08),0 0 0 1px rgba(16,24,40,.06)}
+:root[data-theme=dark] .tabs .btn:not(.ghost),:root[data-theme=dark] .tabs .btn[aria-current],:root[data-theme=dark] .tabs a[aria-current],:root[data-theme=dark] .ord-views a[aria-current]{background:var(--surface-4);box-shadow:none}
+.ord-chip{height:30px;padding:0 12px;border:1px solid var(--border);border-radius:var(--pill);background:var(--surface);box-shadow:none;color:var(--text-2);font-size:12.5px;font-weight:500}
+.ord-chip:hover{border-color:var(--border-strong);color:var(--text-strong);text-decoration:none}
+.ord-chip[aria-current],.ord-chip[aria-pressed=true]{background:var(--slate);border-color:var(--slate);color:#fff;font-weight:600}
+:root[data-theme=dark] .ord-chip[aria-current],:root[data-theme=dark] .ord-chip[aria-pressed=true]{background:#e6e9ee;border-color:#e6e9ee;color:#111}
+.ord-chip[aria-current] .ord-count,.ord-chip[aria-pressed=true] .ord-count{background:rgba(255,255,255,.2);color:inherit}
+.ent-tabs{display:flex;gap:2px;padding:0 12px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:none;width:auto}
+.ent-tab{height:44px;padding:0 12px;border-radius:0;background:none;color:var(--muted);font-size:13.5px;font-weight:500;box-shadow:none}
+.ent-tab:hover{background:none;color:var(--text-strong)}
+.ent-tab:after{left:8px;right:8px;height:2px;background:var(--text-strong)}
+.ent-tab[aria-current]{background:none;color:var(--text-strong);font-weight:600;box-shadow:none}
+
+/* ================= entity detail: one bordered surface, sections divided by hairlines ================= */
+.ent-media{border-radius:var(--radius);box-shadow:none;border:1px solid var(--hairline)}
+.ent-facts dt,.ent-dl dt{color:var(--muted)}
+.ent-figures{display:flex;flex-wrap:wrap;gap:16px 40px}
+.ent-figures>div{background:none;border:0;box-shadow:none;padding:0}
+.ent-figures dd{font-size:22px;font-weight:650;color:var(--text-strong)}
+.ent-rows{border-color:var(--border);border-radius:var(--radius)}
+.ent-row{border-top-color:var(--hairline)}
+
+/* ================= figures on module pages (reports, finance, carts …) ================= */
+.kpi{padding:16px 18px;transition:border-color var(--dur) var(--ease)}
+.kpi dt{font-size:12.5px;font-weight:500;color:var(--muted)}
+.kpi dd{font-size:var(--fs-figure);font-weight:650;letter-spacing:-.02em;color:var(--text-strong)}
+.kpi dd small{color:var(--muted)}
+.kpi-icon{width:28px;height:28px;border-radius:var(--radius);background:var(--surface-3);color:var(--text-2)}
+.pipeline .kpi,.pipe,.kpi.pipe{border:0;box-shadow:none;padding:12px 0;border-radius:0;background:none}
+
+/* ================= overlays, menus, states ================= */
+.dialog,.drawer,[role=dialog].sheet{border:1px solid var(--border);box-shadow:var(--shadow-lg)}
+.dialog{border-radius:var(--radius-xl)}
+.drawer{border-radius:0;border-width:0 0 0 1px}
+.drawer-head{border-bottom:1px solid var(--hairline)}
+.drawer-head h2,.dialog h2{font-size:17px;font-weight:650;color:var(--text-strong)}
+.dialog-overlay{background:var(--overlay)}
+.menu,[role=menu],.popover,.cmdk,.cmd-palette,.chart-tip{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-raised);box-shadow:var(--shadow-lg)}
+.menu,[role=menu]{padding:4px}
+.menu-item,[role=menuitem]{border-radius:var(--radius-sm);padding:8px 10px;font-size:13px}
+.menu-item:hover,.menu-item[data-highlighted],[role=menuitem][data-highlighted]{background:var(--surface-3)}
+.menu-label{color:var(--muted)}
+.menu-sep{background:var(--hairline)}
+.tooltip{border-radius:var(--radius-sm);font-size:12px;background:var(--ink);color:#fff;border:0}
+:root[data-theme=dark] .tooltip{background:#e6e9ee;color:#111}
+.tooltip kbd{background:transparent;color:inherit;border-color:rgba(255,255,255,.3)}
+.state,.empty{padding:36px 24px;border-style:dashed;border-color:var(--border);border-radius:var(--radius-lg);background:var(--surface);text-align:center}
+.empty.compact{padding:22px 16px}
+.card .empty,.card .state,.ent-section .empty{background:var(--surface-2)}
+.state-icon,.empty-icon{width:40px;height:40px;margin:0 auto 10px;border-radius:var(--radius);background:var(--surface-3);color:var(--text-2);display:grid;place-items:center}
+.state-title,.empty-title{font-size:14.5px;font-weight:600;color:var(--text-strong)}
+.state-text,.empty-text{color:var(--muted)}
+.pager a,.pager-page{border-radius:var(--radius)}
+.sk,.sk-cell,.sk-panel{border-radius:var(--radius-sm);background:var(--surface-3)}
+[data-sonner-toaster] [data-sonner-toast]{border:1px solid var(--border)!important;border-radius:var(--radius-lg)!important;box-shadow:var(--shadow-lg)!important;font-family:var(--font)!important}
+
+/* pictures in lists */
+td img,.thumb,.product-thumb,.pthumb,.pthumb img,.pos-grid img{border-radius:var(--radius-sm)}
+
+/* ================= dashboard ================= */
+.dash .page-head{margin-bottom:18px}
+.dkpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 16px}
+.dkpi{display:flex;flex-direction:column;gap:8px;min-width:0;padding:16px 18px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface)}
+.dkpi dt{display:flex;align-items:center;gap:8px;margin:0;font-size:12.5px;font-weight:500;color:var(--muted)}
+.dkpi-icon{display:grid;place-items:center;width:26px;height:26px;border-radius:var(--radius-sm);background:var(--surface-3);color:var(--text-2);flex:none}
+.dkpi dd{margin:0;font-size:var(--fs-figure);font-weight:650;line-height:1.15;letter-spacing:-.02em;color:var(--text-strong);font-variant-numeric:tabular-nums lining-nums}
+.dkpi dd small{display:block;margin-top:4px;font-size:12px;font-weight:400;letter-spacing:0;line-height:1.4;color:var(--muted)}
+.dkpi-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:auto;padding-top:8px;border-top:1px solid var(--hairline)}
+.delta{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;white-space:nowrap}
+.delta b{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;background:var(--surface-3);color:var(--text-2)}
+.delta.up b{background:var(--success-soft);color:var(--success)}
+.delta.down b{background:var(--danger-soft);color:var(--danger)}
+.delta small{color:var(--muted);font-size:12px}
+.spark-bars .spark-bar{fill:var(--chart-now);opacity:.9}
+.spark-bars .spark-stub{fill:var(--border)}
+.spark-bars.up .spark-bar{fill:var(--trend-up)}
+.spark-bars.down .spark-bar{fill:var(--trend-down)}
+.spark-bars.flat .spark-bar{fill:var(--faint)}
+
+.dgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start}
+.dcard,.dgrid>.card,.dgrid>.card+.card{min-width:0;margin:0;padding:18px 20px}
+.dg-sales{grid-column:span 8}
+.dg-pipe{grid-column:span 4}
+.dg-recent{grid-column:span 8}
+.dg-alerts{grid-column:span 4}
+.dg-top,.dg-cat,.dg-store{grid-column:span 4}
+.dg-low{grid-column:1/-1}
+.dg-sales,.dg-pipe{align-self:stretch}
+.dg-recent,.dg-alerts{align-self:stretch}
+.dcard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;margin-bottom:14px}
+.dcard-head h2{margin:0}
+.dcard-head .card-sub{margin:3px 0 0}
+.dsales-sum{display:flex;flex-wrap:wrap;gap:12px 36px;margin:0 0 12px;padding:0 0 14px;border-bottom:1px solid var(--hairline)}
+.dsales-sum>div{min-width:0}
+.dsales-sum dt{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--muted)}
+.dsales-sum dd{margin:3px 0 0;font-size:20px;font-weight:650;letter-spacing:-.015em;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.dsales-sum dd small{display:block;margin-top:1px;font-size:12px;font-weight:400;letter-spacing:0;color:var(--muted)}
+.dkey{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+.dkey.now{background:var(--chart-now)}
+.dkey.prev{height:0;border-top:2px dashed var(--chart-prev);border-radius:0}
+.dash .chart{margin:0 -4px}
+.chart-tip{padding:10px 12px;font-size:12.5px;display:grid;gap:3px}
+.chart-tip b{color:var(--text-strong)}
+.chart-tip small{color:var(--muted)}
+.chart-tip i{display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:2px}
+.recharts-cartesian-axis-tick text{fill:var(--muted)}
+
+.dpipe{margin:0;display:grid}
+.dpipe-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:11px 0;border-top:1px solid var(--hairline)}
+.dpipe-row:first-child{border-top:0;padding-top:2px}
+.dpipe-row dt{font-size:13px;font-weight:500;color:var(--text-2)}
+.dpipe-row dt a{color:inherit;text-decoration:none}
+.dpipe-row dt a:hover{color:var(--text-strong);text-decoration:underline;text-underline-offset:3px}
+.dpipe-row dd{grid-row:1/3;grid-column:2;margin:0;text-align:right;font-size:18px;font-weight:650;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.dpipe-sub{grid-column:1/-1;margin-top:4px;font-size:12px;color:var(--muted);line-height:1.4}
+.dpipe-bar{grid-column:1;height:4px;margin-top:6px;border-radius:2px;background:var(--surface-3);overflow:hidden}
+.dpipe-bar span{display:block;height:100%;border-radius:2px;background:var(--slate)}
+:root[data-theme=dark] .dpipe-bar span{background:var(--text-2)}
+.dpipe-row[data-alert] dd,.dpipe-row[data-alert] dt{color:var(--danger)}
+.dpipe-row[data-alert] .dpipe-bar span{background:var(--danger)}
+
+.dcount{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:var(--radius-sm);background:var(--warning-soft);color:var(--warning);font-size:12px;font-weight:600}
+.dcount.clear{background:var(--success-soft);color:var(--success)}
+.dalerts li a.dalert,.dalerts li a.dalert:hover{text-decoration:none}
+.dash .row-link{white-space:nowrap}
+.dalerts{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.dalert{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--hairline);border-radius:var(--radius);color:var(--text);text-decoration:none;
+  transition:background-color var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.dalert:hover{background:var(--surface-2);border-color:var(--border);text-decoration:none}
+.dalert>.icon{color:var(--faint)}
+.dalert-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:var(--radius-sm);background:var(--warning-soft);color:var(--warning)}
+.dalert-text{display:grid;min-width:0;line-height:1.3}
+.dalert-text b{font-size:13px;font-weight:600}
+.dalert-text small{font-size:12px;color:var(--muted)}
+.dalert-value{font-size:18px;font-weight:650;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.dalert[data-alert] .dalert-icon{background:var(--danger-soft);color:var(--danger)}
+.dalert[data-alert] .dalert-value{color:var(--danger)}
+.dalert[data-zero] .dalert-icon{background:var(--success-soft);color:var(--success)}
+.dalert[data-zero] .dalert-value{color:var(--muted)}
+
+.dash .top-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+.dash .top-list li>a,.dash .top-list li>div{display:grid;grid-template-columns:20px 36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 6px;border-radius:var(--radius);text-decoration:none;color:var(--text)}
+.dash .top-list li>a:hover{background:var(--surface-2)}
+.top-rank{color:var(--muted);font-size:12.5px;font-weight:600;text-align:center}
+.dash .pthumb{width:36px;height:44px;border-radius:var(--radius-sm);overflow:hidden;background:var(--surface-3);display:grid;place-items:center;color:var(--faint)}
+.dash .pthumb img{width:100%;height:100%;object-fit:cover}
+.top-name{display:grid;min-width:0}
+.top-name b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-name small,.top-fig small{font-size:12px;color:var(--muted)}
+.top-fig{display:grid;text-align:right;font-variant-numeric:tabular-nums}
+.top-fig b{font-size:13.5px}
+.donut-wrap{gap:18px}
+.donut-center b{color:var(--text-strong)}
+.donut-center small,.legend small{color:var(--muted)}
+
+.dstore{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin:0;background:var(--hairline);border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden}
+.dstore>div{padding:12px 14px;background:var(--surface)}
+.dstore dt{font-size:12px;font-weight:500;color:var(--muted)}
+.dstore dd{margin:4px 0 0;font-size:20px;font-weight:650;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.dstore dd small{display:block;margin-top:2px;font-size:12px;font-weight:400;color:var(--muted)}
+.dstore>div[data-alert] dd{color:var(--danger)}
+.dash .who{display:inline-flex;align-items:center;gap:8px}
+.dash .mini-avatar{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--surface-3);color:var(--text-2);font-size:10.5px;font-weight:600}
+
+/* ================= orders list: the channel column keeps its tag on one line ================= */
+.ord-table th.ord-channel,.ord-table td.ord-channel{min-width:150px}
+.ord-type{white-space:nowrap}
+.pmeta,.kb-empty{color:var(--muted)}
+
+/* ================= POS counter: same tokens, crisp tiles ================= */
+.pos-grid img{background:var(--surface-3)}
+
+/* ================= responsive ================= */
+@media (max-width:1180px){
+  .dkpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dg-sales,.dg-recent,.dg-low{grid-column:1/-1}
+  .dg-pipe,.dg-alerts,.dg-top,.dg-cat{grid-column:span 6}
+  .dg-store{grid-column:1/-1}
+  .dstore{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .dg-sales{order:1}.dg-pipe{order:2}.dg-alerts{order:3}.dg-recent{order:4}.dg-top{order:5}.dg-cat{order:6}.dg-store{order:7}.dg-low{order:8}
+}
+@media (max-width:1000px){.dhide-md{display:none}}
+@media (max-width:900px){
+  :root{--gutter:18px;--top-h:56px}
+  .main{padding:0 var(--gutter) 48px}
+  .page-head{padding-top:18px}
+  .page-head h1,h1.page-title{font-size:21px}
+  .cmd-trigger,.topbar-tools .cmd-trigger{min-width:0;width:36px;flex:none;padding:0;justify-content:center}
+  .cmd-trigger span,.cmd-trigger kbd{display:none}
+  .card,.dcard{padding:16px}
+  .tabs,.ord-views,.subnav{display:flex;flex-wrap:nowrap;width:100%;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar,.ord-views::-webkit-scrollbar{display:none}
+  .tabs .btn,.tabs a,.ord-views a{flex:none}
+}
+@media (max-width:760px){
+  .dkpis{gap:10px}
+  .dkpi{padding:12px 14px;gap:6px}
+  .dkpi dd{font-size:20px}
+  .dkpi dd small{font-size:11.5px}
+  .dkpi .spark{display:none}
+  .dkpi .delta small{display:none}
+  .dgrid{gap:12px}
+  .dg-pipe,.dg-alerts,.dg-top,.dg-cat,.dg-store{grid-column:1/-1}
+  .dg-alerts{order:0}
+  .dstore{grid-template-columns:1fr 1fr}
+  .dsales-sum{gap:10px 24px}
+  .dsales-sum dd{font-size:17px}
+  .dhide-sm{display:none}
+  .nav a{height:40px}
+}
+@media (max-width:420px){.dkpis{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ================= fixes after the first module pass (2026-10-15) ================= */
+/* filter bars (FilterForm): fields carry the same visible border as every other field */
+.filter-bar .input{height:36px;min-height:36px;border:1px solid var(--border);border-radius:var(--radius);background-color:var(--input-bg);box-shadow:none}
+.filter-bar .input:hover{border-color:var(--border-strong)}
+.filter-bar .input:focus{border-color:var(--slate);box-shadow:0 0 0 3px rgba(37,43,53,.1)}
+/* data-table search keeps room for its icon and clear button */
+.dt-search input{height:36px;min-height:36px;padding:0 30px 0 34px}
+.dt-search .icon{color:var(--muted)}
+.dt{border:0}
+/* Orders and Payments lists: the folded table (Placed and Channel inside the first cell) up to 1679px, so the last
+   column (next step) is never behind a sideways scroll with the sidebar open */
+@media(min-width:1440px) and (max-width:1679px){
+  .ord-table .ord-channel,.ord-table [data-orders-table] .ord-placed,.ord-table .ord-last{display:none}
+  .ord-table [data-orders-table] .ord-when{display:block}
+  .ord-table .ord-items{min-width:130px;max-width:190px}
+  .ord-table th,.ord-table td{padding-left:10px;padding-right:10px}
+  .ord-table th:first-child,.ord-table td:first-child{padding-left:16px}
+}
+/* module figure rows (finance, reports, shipping, carts, POS …): the same bordered tile as the dashboard figures */
+.report-kpis{gap:12px}
+.report-kpis>div{padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:none}
+.card .report-kpis>div,.report-body .report-kpis>div{background:var(--surface);border:1px solid var(--border)}
+.report-kpis dt{font-size:12.5px;font-weight:500;color:var(--muted)}
+.report-kpis dd{font-size:22px;font-weight:650;letter-spacing:-.02em;color:var(--text-strong)}
+.report-kpis dd small{color:var(--muted)}
+/* fields in side panels and dialogs never run past their panel (two date fields side by side in a drawer did) */
+.drawer-body .field,.dialog .field,.drawer-body .form>*,.drawer-body [class*=grid]>*,.drawer-body [class*=row]>*{min-width:0}
+.drawer-body input:not([type=checkbox]):not([type=radio]),.drawer-body select,.drawer-body textarea,.dialog input:not([type=checkbox]):not([type=radio]),.dialog select,.dialog textarea{max-width:100%;min-width:0;width:100%}
+
+/* ================= final polish pass (2026-10-15, second review) ================= */
+/* Data tables: columns with a responsive priority (DataTable meta.hideBelow) fold away on narrower screens; their value
+   is shown inside the main cell there instead (.dt-alt-*), so nothing operational disappears. */
+.dt-alt-lg,.dt-alt-md{display:none}
+@media(max-width:1199px){.dt .dt-hide-lg{display:none}.dt-alt-lg{display:inline}}
+@media(max-width:899px){.dt .dt-hide-md{display:none}.dt-alt-md{display:inline}}
+/* Cards that replace a wide table below 1240px (orders, inventory, payments, shipping …): the row's actions sit side by
+   side as real outlined buttons, and labelled figures read left to right. */
+@media(max-width:1240px){
+  .ord-table tbody tr{box-shadow:none;gap:6px 12px}
+  .ord-table td.ord-next{margin-top:6px;padding-top:10px;border-top:1px solid var(--hairline)}
+  .ord-table td.ord-next .row-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+  .ord-table td.ord-next .row-actions .btn{flex:1 1 0;width:auto}
+  .ord-table td.ord-next .btn.ghost{border:1px solid var(--border);background:var(--surface);color:var(--text)}
+  .ord-table td.ord-extra.num,.ord-table td.num.ord-extra{text-align:left}
+  .ord-table td.ord-extra{font-size:13px}
+}
+/* Configuration: grouped topic list beside the content on wide screens; one sideways-scrolling row below 1100px */
+.cfg-layout{display:grid;grid-template-columns:212px minmax(0,1fr);gap:24px;align-items:start}
+.cfg-main{min-width:0;display:grid;gap:16px;align-content:start}
+.cfg-main>*{margin:0}
+.cfg-nav{position:sticky;top:calc(var(--top-h) + 16px);max-height:calc(100vh - var(--top-h) - 32px);overflow-y:auto;scrollbar-width:thin}
+.topic-nav{display:grid;gap:14px;padding:4px 0}
+.topic-group{display:grid;gap:1px}
+.topic-label{margin:0 0 4px;padding:0 10px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--muted)}
+.topic-link{position:relative;display:flex;align-items:center;min-height:32px;padding:0 10px;border-radius:var(--radius-sm);color:var(--text-2);font-size:13.5px;font-weight:500;text-decoration:none;
+  transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease)}
+.topic-link:hover{background:var(--surface-3);color:var(--text-strong);text-decoration:none}
+.topic-link[aria-current]{background:var(--surface-3);color:var(--text-strong);font-weight:600}
+.topic-link[aria-current]:before{content:'';position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:0 3px 3px 0;background:var(--text-strong)}
+@media(max-width:1099px){
+  .cfg-layout{grid-template-columns:minmax(0,1fr);gap:16px}
+  .cfg-nav{position:static;max-height:none;overflow:visible}
+  .topic-nav{display:flex;gap:2px;padding:3px;border-radius:var(--radius);background:var(--surface-3);overflow-x:auto;scrollbar-width:none;scroll-behavior:smooth}
+  .topic-nav::-webkit-scrollbar{display:none}
+  .topic-group{display:contents}
+  .topic-label{display:none}
+  .topic-link{flex:none;min-height:30px;padding:0 12px;white-space:nowrap;font-size:13px}
+  .topic-link[aria-current]{background:var(--surface);box-shadow:0 1px 2px rgba(16,24,40,.08),0 0 0 1px rgba(16,24,40,.06)}
+  :root[data-theme=dark] .topic-link[aria-current]{background:var(--surface-4);box-shadow:none}
+  .topic-link[aria-current]:before{display:none}
+}
+@media (prefers-reduced-motion:reduce){.topic-nav{scroll-behavior:auto}}
+/* Keyboard focus: one visible ring everywhere, drawn as the shared --focus box-shadow (the admin's convention; a test
+   checks that links and buttons share it). The :root prefix outranks the components that set their own shadow
+   (buttons, sidebar links, tabs, chips), which used to hide the ring. Fields keep their border + soft ring. */
+:root :is(a,button,summary,[role=tab],[role=menuitem],[tabindex]):focus-visible{outline:none;box-shadow:var(--focus)}
+:root .dt tbody tr:focus-visible td{box-shadow:inset 0 1px 0 var(--slate),inset 0 -1px 0 var(--slate)}
+:root :is(input,select,textarea):focus-visible{outline:none}
+.pmeta .dt-alt-md{font-family:var(--font);font-size:12px}
+/* POS counter (Minimal White): payment methods — the chosen one solid, the others outlined (the general button rule had
+   made all three solid); a bill line gives the item name the full width, with quantity and amount on the line below;
+   on tablets the bill stays in a column beside a two-column product grid instead of below every product. */
+.btn.pos-method{background:var(--surface);color:var(--text);border:1px solid var(--border);font-weight:600}
+.btn.pos-method:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text-strong)}
+.btn.pos-method.active,.btn.pos-method.active:hover{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.pos-lines tr{grid-template-columns:minmax(0,1fr) auto auto 30px;grid-template-areas:"item item item remove" "price qty amount amount";row-gap:6px}
+.pos-lines td:nth-child(4){text-align:right}
+.pos-lines td:nth-child(2){padding-left:0}
+@media (min-width:700px) and (max-width:1100px){
+  .pos{grid-template-columns:minmax(0,1fr) minmax(290px,330px);gap:16px}
+  .pos-right{position:sticky;top:calc(var(--top-h) + 12px);max-height:calc(100vh - var(--top-h) - 24px);overflow-y:auto}
+  .pos-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .pos-bar{grid-template-columns:minmax(0,1fr)}
+}
+@media (min-width:1101px){.pos-bar{grid-template-columns:minmax(200px,290px) minmax(0,1fr)}}
+.pos-bar select.input{text-overflow:ellipsis}

@@ -25,6 +25,10 @@ declare module '@tanstack/react-table' {
     csv?: (row: TData) => string | number | null | undefined;
     /** Always shown (not offered in the column menu). */
     required?: boolean;
+    /** Responsive priority: folded away on narrower screens ('lg' below 1200px, 'md' below 900px) so the row fits without a
+        sideways scroll. The page shows the same value inside another cell there (see .dt-alt-lg / .dt-alt-md); the CSV
+        export and the View menu are unchanged. */
+    hideBelow?: 'lg' | 'md';
   }
 }
 
@@ -185,7 +189,7 @@ export default function DataTable<T>({
               <tr key={hg.id}>{hg.headers.map(h => {
                 const meta = h.column.columnDef.meta;
                 const sorted = h.column.getIsSorted();
-                const cls = [h.column.id === '_select' ? 'select-col' : '', h.column.id === '_menu' ? 'actions-col' : '', meta?.numeric ? 'num' : '', meta?.sticky ? 'sticky-col' : ''].filter(Boolean).join(' ');
+                const cls = [h.column.id === '_select' ? 'select-col' : '', h.column.id === '_menu' ? 'actions-col' : '', meta?.numeric ? 'num' : '', meta?.sticky ? 'sticky-col' : '', meta?.hideBelow ? `dt-hide-${meta.hideBelow}` : ''].filter(Boolean).join(' ');
                 return (
                   <th key={h.id} className={cls || undefined} aria-sort={sorted ? (sorted === 'asc' ? 'ascending' : 'descending') : undefined} scope="col">
                     {h.isPlaceholder ? null : h.column.getCanSort() ? (
@@ -204,7 +208,7 @@ export default function DataTable<T>({
                 <tr key={r.id} {...rowAttrs?.(r.original)} data-href={href} data-selected={r.getIsSelected() || undefined} onClick={e => onRowClick(e, href)}>
                   {r.getVisibleCells().map(c => {
                     const meta = c.column.columnDef.meta;
-                    const cls = [c.column.id === '_select' ? 'select-col' : '', c.column.id === '_menu' ? 'actions-col' : '', meta?.numeric ? 'num' : '', meta?.sticky ? 'sticky-col' : ''].filter(Boolean).join(' ');
+                    const cls = [c.column.id === '_select' ? 'select-col' : '', c.column.id === '_menu' ? 'actions-col' : '', meta?.numeric ? 'num' : '', meta?.sticky ? 'sticky-col' : '', meta?.hideBelow ? `dt-hide-${meta.hideBelow}` : ''].filter(Boolean).join(' ');
                     return <td key={c.id} className={cls || undefined}>{flexRender(c.column.columnDef.cell, c.getContext())}</td>;
                   })}
                 </tr>

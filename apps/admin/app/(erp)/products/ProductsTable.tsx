@@ -122,15 +122,15 @@ export default function ProductsTable({ rows, categories, collections = [], filt
                 </Tooltip.Root>
               )}
             </div>
-            <div className="pmeta">{p.id}</div>
+            <div className="pmeta">{p.id}<span className="dt-alt-lg"> · <span className="mono">{p.sku}</span></span><span className="dt-alt-md"> · {p.categoryLabel}{p.subcategoryLabel ? ` / ${p.subcategoryLabel}` : ''}</span></div>
           </div>
         </div>
       ),
     },
-    { id: 'sku', accessorKey: 'sku', header: 'SKU', meta: { label: 'SKU', csv: r => r.sku }, cell: ({ getValue }) => <span className="mono nowrap">{String(getValue())}</span> },
+    { id: 'sku', accessorKey: 'sku', header: 'SKU', meta: { label: 'SKU', hideBelow: 'lg', csv: r => r.sku }, cell: ({ getValue }) => <span className="mono nowrap">{String(getValue())}</span> },
     {
       id: 'category', accessorFn: r => `${r.categoryLabel} ${r.subcategoryLabel ?? ''}`, header: 'Category',
-      meta: { label: 'Category', csv: r => r.subcategoryLabel ? `${r.categoryLabel} / ${r.subcategoryLabel}` : r.categoryLabel },
+      meta: { label: 'Category', hideBelow: 'md', csv: r => r.subcategoryLabel ? `${r.categoryLabel} / ${r.subcategoryLabel}` : r.categoryLabel },
       cell: ({ row: { original: p } }) => <div className="cat-cell">{p.categoryLabel}{p.subcategoryLabel && <small>{p.subcategoryLabel}</small>}</div>,
     },
     {

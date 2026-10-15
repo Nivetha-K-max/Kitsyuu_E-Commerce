@@ -8,12 +8,21 @@ import { Forbidden, PageHead } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
 import { db, requireActor } from '@/lib/server';
 import { updateSettingAction } from './actions';
-import { ViewTabs, Workspace } from '@/components/frame';
+import { Workspace } from '@/components/frame';
+import TopicNav, { type TopicGroup } from '@/components/TopicNav';
 
 export const metadata: Metadata = { title: 'Configuration' };
 
 const anchor = (group: string) => `g-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 const slug = (group: string) => anchor(group).slice(2);
+/* How the topics are grouped in the navigation (2026-10-15, Minimal White): headings only, to find a topic faster. The
+   topics themselves are the registry's groups; one this list does not name appears under "More". Nothing else changes. */
+const SECTIONS: { label: string; groups: string[] }[] = [
+  { label: 'Business', groups: ['Company', 'Store', 'Billing', 'Payments'] },
+  { label: 'Selling', groups: ['Checkout', 'Carts', 'Discounts', 'Shipping', 'Returns'] },
+  { label: 'Customers', groups: ['Account security', 'Customer emails', 'Reviews', 'Loyalty', 'Referrals'] },
+  { label: 'Operations', groups: ['Inventory', 'Staff alerts'] },
+];
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
@@ -66,13 +75,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
   const unknown = overview && asked !== '';
   // In "All settings" an area points at a group further down the page; everywhere else it opens that group's tab.
   const topicHref = (g: string) => (all ? `#${anchor(g)}` : `/settings?group=${slug(g)}`);
-  const tabs = [{ id: 'overview', label: 'Overview', href: '/settings' }, ...groups.map(g => ({ id: slug(g.group), label: g.group, href: `/settings?group=${slug(g.group)}` })),
-    { id: 'policies', label: 'Store policies', href: '/settings?group=policies' }, { id: 'all', label: 'All settings', href: '/settings?group=all' }];
+  const topic = (g: string) => ({ id: slug(g), label: g, href: `/settings?group=${slug(g)}` });
+  const grouped = new Set(SECTIONS.flatMap(x => x.groups));
+  const nav: TopicGroup[] = [
+    { items: [{ id: 'overview', label: 'Overview', href: '/settings' }] },
+    ...SECTIONS.map(x => ({ label: x.label, items: x.groups.filter(g => has.has(g)).map(topic) })),
+    { label: 'More', items: groups.filter(g => !grouped.has(g.group)).map(g => topic(g.group)) },
+    { label: 'Reference', items: [{ id: 'policies', label: 'Store policies', href: '/settings?group=policies' }, { id: 'all', label: 'All settings', href: '/settings?group=all' }] },
+  ].filter(x => x.items.length > 0);
   return (
     <Workspace name="configuration" title="Configuration"
       summary={chosen ? `${chosen.group}: ${chosen.items.length} setting${chosen.items.length === 1 ? '' : 's'}, ${chosen.items.filter(s => s.editable).length} can be changed; the rest are locked business rules. Every change is audited.`
         : onPolicies ? 'Store policies: rules that live in code or deployment configuration. Shown for reference.' : 'Business rules are locked here; only safe operational settings can be changed, and every change is audited.'}>
-      <div data-config-topics><ViewTabs label="Configuration topics" current={all ? 'all' : onPolicies ? 'policies' : chosen ? slug(chosen.group) : 'overview'} items={tabs} /></div>
+      <div className="cfg-layout">
+      <div className="cfg-nav" data-config-topics><TopicNav label="Configuration topics" current={all ? 'all' : onPolicies ? 'policies' : chosen ? slug(chosen.group) : 'overview'} groups={nav} /></div>
+      <div className="cfg-main">
       {unknown && <p className="msg" data-config-unknown>There is no configuration topic called “{asked}”. Choose one above.</p>}
       {(overview || all) && (
       <section className="card" aria-labelledby="areas-h" data-section="config-areas">
@@ -122,6 +139,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: SP 
           <ul className="plain">{unregistered.map(u => <li key={u.key}><span className="mono">{u.key}</span> <span className="note">{JSON.stringify(u.value)}</span></li>)}</ul>
         </section>
       )}
+      </div>
+      </div>
     </Workspace>
   );
 }
