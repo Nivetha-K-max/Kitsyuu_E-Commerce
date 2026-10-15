@@ -93,13 +93,13 @@ for (const [vw, vh, mobile, tag] of [[1440, 900, false, 'desktop'], [390, 844, t
   await b.goto(`${B}/collections/new-arrivals`, READY);
   const colPage = await b.eval(`({n:document.querySelectorAll('main .st-grid>li').length,canon:document.querySelector('link[rel=canonical]')?.href,ld:[...document.querySelectorAll('script[type="application/ld+json"]')].flatMap(s=>[JSON.parse(s.textContent)].flat()).map(x=>x['@type']).join()})`);
   ok(`[${tag}] /collections/new-arrivals: 4 products, canonical, CollectionPage JSON-LD`, colPage.n === 4 && !!colPage.canon?.endsWith('/collections/new-arrivals') && colPage.ld === 'CollectionPage,BreadcrumbList' && b.errors.length === 0, JSON.stringify(colPage));
-  // Dark by default; the header switch turns the page light, the choice is kept, and switching back restores dark.
+  // Light by default (redesign 2026-10-14); the header switch turns the page dark, the choice is kept, and switching back restores light.
   await b.goto(`${B}/shop`, READY);
   const th = await b.eval(`(async()=>{const w=c=>new Promise(r=>{const t=Date.now();(function f(){if(c()||Date.now()-t>5000)return r();setTimeout(f,50)})()});localStorage.removeItem('kitsyuu-theme');
     const bg=()=>getComputedStyle(document.body).backgroundColor,d=document.documentElement,btn=()=>document.querySelector('[data-theme-toggle]');
-    await w(()=>btn()?.dataset.themeToggle==='dark');const a=[d.dataset.theme,bg()];btn().click();await w(()=>d.dataset.theme==='light');const b=[d.dataset.theme,bg(),localStorage.getItem('kitsyuu-theme')];
-    btn().click();await w(()=>d.dataset.theme==='dark');const c=[d.dataset.theme,bg()];localStorage.removeItem('kitsyuu-theme');return {a,b,c}})()`);
-  ok(`[${tag}] theme: dark by default; the switch turns it light (kept) and back`, th.a[0] === 'dark' && th.b[0] === 'light' && th.b[1] !== th.a[1] && th.b[2] === 'light' && th.c[0] === 'dark' && th.c[1] === th.a[1], JSON.stringify(th));
+    await w(()=>btn()?.dataset.themeToggle==='light');const a=[d.dataset.theme,bg()];btn().click();await w(()=>d.dataset.theme==='dark');const b=[d.dataset.theme,bg(),localStorage.getItem('kitsyuu-theme')];
+    btn().click();await w(()=>d.dataset.theme==='light');const c=[d.dataset.theme,bg()];localStorage.removeItem('kitsyuu-theme');return {a,b,c}})()`);
+  ok(`[${tag}] theme: light by default; the switch turns it dark (kept) and back`, th.a[0] === 'light' && th.b[0] === 'dark' && th.b[1] !== th.a[1] && th.b[2] === 'dark' && th.c[0] === 'light' && th.c[1] === th.a[1], JSON.stringify(th));
   await b.goto(`${B}/shop?category=nope`, READY);
   ok(`[${tag}] unknown category shows not-found`, (await b.eval('document.querySelector("h1")?.textContent')) === 'Category not found');
 

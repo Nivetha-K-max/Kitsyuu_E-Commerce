@@ -91,8 +91,11 @@ try {
   await ev(`scrollTo({top:${key1.b + 1500},behavior:'instant'})`); await sleep(500);
   ok('[desktop] a programmatic jump below the hero (anchor, restored position) is not pulled back', (await state()).y === key1.b + 1500);
 
-  // ------------------------------------------------------------ desktop: the pinned reels (new arrivals, categories) play through too
-  for (const sel of ['.ch-na-reel', '.ch-cat-reel', '.ch-ow-reel']) {
+  // ------------------------------------------------------------ desktop: the pinned reels (new arrivals, outerwear) play through too
+  // Redesign 2026-10-14: categories is no longer a pinned reel (three tiles); new arrivals keeps its reel.
+  const plain = await ev(`(()=>{const s=sel=>document.querySelector(sel);return {catReel:!!s('.ch-cat-reel'),tiles:document.querySelectorAll('.ch-cat-tile').length,catH:s('.ch-cats')?.offsetHeight??0,vh:innerHeight}})()`);
+  ok('[desktop] categories is a plain section (three tiles, no pinned reel), under two screens tall', !plain.catReel && plain.tiles === 3 && plain.catH < plain.vh * 2, JSON.stringify(plain));
+  for (const sel of ['.ch-na-reel', '.ch-ow-reel']) {
     const R = `(()=>{const r=document.querySelector('${sel}');if(!r)return null;const s=r.firstElementChild,cs=getComputedStyle(s),top=Math.max(0,r.getBoundingClientRect().top+scrollY-(parseFloat(cs.top)||0));
       return {y:Math.round(scrollY),a:Math.round(top),b:Math.round(top+r.offsetHeight-s.offsetHeight),n:Number(r.dataset.steps),t:Number(r.style.getPropertyValue('--t')||0),step:Number(r.dataset.step||0),sticky:cs.position==='sticky',
         stageTop:Math.round(s.getBoundingClientRect().top),head:parseFloat(cs.top)||0}})()`;

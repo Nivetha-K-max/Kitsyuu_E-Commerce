@@ -87,6 +87,13 @@ export function gateScroll(g: ScrollGate): { release: () => void; stop: () => vo
     }
     lastY = y; g.wake();
   };
+  /* 2026-10-14: End / Home are deliberate jumps (see the header), but the browser animates them, and on a shorter page each
+     animation step is under a screen and a half, so they looked like ordinary scrolling and were held at a pinned section.
+     The key itself now marks the jump as free (not when typing in a field). */
+  const onKey = (e: KeyboardEvent) => {
+    if ((e.key === 'End' || e.key === 'Home') && !e.altKey && !e.ctrlKey && !e.metaKey
+      && !(e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable]'))) free();
+  };
   const onTouchStart = () => { touching = true; lastY = scrollY; };
   const onTouchEnd = (e: TouchEvent) => { if (e.touches.length) return; touching = false; touchUntil = performance.now() + 1500; };
   if (!wheelers.size) addEventListener('wheel', onWheel, { passive: false });
@@ -98,6 +105,7 @@ export function gateScroll(g: ScrollGate): { release: () => void; stop: () => vo
   addEventListener('popstate', free);
   addEventListener('hashchange', free);
   addEventListener('pageshow', free);
+  addEventListener('keydown', onKey);
   return {
     release,
     stop() {
@@ -110,6 +118,7 @@ export function gateScroll(g: ScrollGate): { release: () => void; stop: () => vo
       removeEventListener('popstate', free);
       removeEventListener('hashchange', free);
       removeEventListener('pageshow', free);
+      removeEventListener('keydown', onKey);
       release();
     },
   };

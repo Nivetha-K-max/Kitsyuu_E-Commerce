@@ -1,5 +1,15 @@
 /* KITSYUU store. Loads after ../styles.css and reuses its tokens (--ink, --paper, --red, --muted, --line, --display, --body, --mono),
    focus rings, skip link, .eyebrow, .button, .text-link and .section-label. Store classes use the st- prefix so nothing leaks into the landing page. */
+/* ---------- Design foundation (redesign 2026-10-14). One scale for the whole store; new and redesigned rules use these.
+   Labels (menu, eyebrows, breadcrumbs, counts) were a 9–11 px monospace: they now use the body face at 12 px or more
+   (--mono is re-pointed for the store only; the brand landing keeps its own monospace). ---------- */
+:root{--fs-label:12px;--fs-small:13px;--fs-body:15px;--fs-lead:18px;--fs-h3:22px;--fs-h2:clamp(30px,3.6vw,48px);--fs-h1:clamp(38px,5.6vw,80px);
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:64px;--sp-9:96px;
+  --radius:2px;--radius-pill:999px;--ease-out:cubic-bezier(.2,.7,.2,1);--dur-fast:.15s;--dur:.25s;
+  --elev-1:0 1px 2px #0000000d,0 6px 20px #00000012;--elev-2:0 2px 6px #00000014,0 18px 48px #0000001f;
+  --focus-ring:0 0 0 2px var(--ink),0 0 0 4px var(--paper)}
+.store{--mono:var(--body)}
+.kitsyuu-landing{--mono:'Courier New',monospace}
 :root{--st-gutter:clamp(16px,4vw,64px);--st-max:1560px;--st-head:72px;--st-stage:#d8d4cc;--st-stage-hover:#ceC9c0;--st-panel:#171719;--st-soft:#191719}
 html.st{scroll-padding-top:calc(var(--st-head) + 16px)}
 body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--ink)}
@@ -11,7 +21,7 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-reduce *,.st-reduce *:before,.st-reduce *:after{transition:none!important;animation:none!important}
 
 /* Prototype notice */
-.st-notice{margin:0;padding:9px var(--st-gutter);background:var(--st-notice-bg);border-bottom:1px solid var(--line);color:var(--muted);font:10px/1.6 var(--mono);letter-spacing:1.4px;text-transform:uppercase;text-align:center}
+.st-notice{margin:0;padding:9px var(--st-gutter);background:var(--st-notice-bg);border-bottom:1px solid var(--line);color:var(--muted);font:12px/1.6 var(--mono);letter-spacing:1.4px;text-transform:uppercase;text-align:center}
 .st-notice b{color:var(--paper);font-weight:400}
 
 /* Header */
@@ -21,17 +31,17 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-wordmark{font:700 21px/1 var(--body);letter-spacing:-.06em;text-transform:uppercase}
 .st-brand:hover .st-wordmark{color:var(--red)}
 .st-nav-main{display:flex;gap:34px}
-.st-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-nav a{position:relative;display:inline-flex;align-items:center;min-height:44px;font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-nav a:hover{color:var(--red)}
 .st-nav-main>li>a[aria-current],.st-nav-main>li>a.is-active{color:var(--paper)}
 .st-nav-main>li>a[aria-current]:after,.st-nav-main>li>a.is-active:after{content:'';position:absolute;left:0;right:0;bottom:8px;height:2px;background:var(--red)}
 .st-nav-sub,.st-nav-extra{display:none}
 .st-tools{display:flex;align-items:center;justify-content:flex-end;gap:6px}
-.st-tool{display:inline-flex;align-items:center;gap:8px;min-height:44px;min-width:44px;justify-content:center;padding:0 8px;white-space:nowrap;background:none;border:0;color:var(--paper);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-tool{display:inline-flex;align-items:center;gap:8px;min-height:44px;min-width:44px;justify-content:center;padding:0 8px;white-space:nowrap;background:none;border:0;color:var(--paper);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-tool svg{width:18px;height:18px;flex:none}
 .st-tool:hover{color:var(--red)}
 .st-tool[aria-disabled=true]{cursor:default}
-.st-count-badge{font:10px var(--mono);color:var(--muted)}
+.st-count-badge{font:12px var(--mono);color:var(--muted)}
 .st-menu-toggle{display:none}
 
 /* Toast for controls that connect in phase 2 */
@@ -58,7 +68,7 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-hero-copy :is(h1,h2) em{color:var(--red);font-style:normal}
 .st-hero-copy>p:not(.eyebrow){max-width:380px;color:#c9c7c1;line-height:1.8;margin:0 0 30px}
 .st-hero-actions{display:flex;flex-wrap:wrap;align-items:center;gap:18px 32px}
-.st-caption{position:absolute;right:var(--st-gutter);bottom:30px;font:10px var(--mono);letter-spacing:1.4px;color:#aaa79f;text-transform:uppercase}
+.st-caption{position:absolute;right:var(--st-gutter);bottom:30px;font:12px var(--mono);letter-spacing:1.4px;color:#aaa79f;text-transform:uppercase}
 
 /* Product grid and card */
 .st-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:52px 20px}
@@ -68,19 +78,19 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-card:hover .st-card-media{background:var(--st-stage-hover)}
 .st-card:hover .st-card-media img{transform:translateY(-5px)}
 .st-card-media.is-held,.st-card:hover .st-card-media.is-held{background:var(--st-panel)}
-.st-tag{position:absolute;left:10px;top:10px;z-index:1;padding:6px 8px;background:var(--ink);color:var(--paper);font:10px/1 var(--mono);letter-spacing:1px}
+.st-tag{position:absolute;left:10px;top:10px;z-index:1;padding:6px 8px;background:var(--ink);color:var(--paper);font:12px/1 var(--mono);letter-spacing:1px}
 .st-tag-new{top:auto;bottom:10px;background:var(--red);text-transform:uppercase}
 .st-index{position:absolute;left:12px;bottom:4px;z-index:1;font:600 clamp(30px,2.8vw,44px)/1 var(--display);color:var(--ink);opacity:.9}
 .is-held .st-index{color:var(--paper)}
 .st-card-body{flex:1;display:flex;flex-direction:column;gap:7px;padding-top:15px}
-.st-card-cat{order:-1;margin:0;color:var(--muted);font:10px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-card-cat{order:-1;margin:0;color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-card-name{font:600 23px/1 var(--display);letter-spacing:.2px;text-transform:uppercase}
 .st-card-name a:after{content:'';position:absolute;inset:0;z-index:1}
 .st-card-name a:focus-visible{outline:0}
 .st-card-name a:focus-visible:after{outline:2px solid var(--red);outline-offset:5px}
 .st-card:hover .st-card-name a{color:var(--red)}
 .st-price{margin:auto 0 0;font:500 15px var(--body)}
-.st-price small{margin-left:7px;color:var(--muted);font:9px var(--mono);letter-spacing:1px}
+.st-price small{margin-left:7px;color:var(--muted);font:12px var(--mono);letter-spacing:1px}
 .st-wish{position:absolute;top:4px;right:4px;z-index:2;display:grid;place-items:center;width:44px;height:44px;padding:0;background:none;border:0;color:var(--ink)}
 .st-wish svg{width:19px;height:19px}
 .st-wish:hover{color:var(--red)}
@@ -98,8 +108,8 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-cat-name{font:600 clamp(26px,2.4vw,38px)/1 var(--display);letter-spacing:.015em;text-transform:uppercase}
 .st-cat-name:after{content:' ↗';font:400 .45em Arial,sans-serif;color:var(--red);vertical-align:.6em}
 .st-cat:hover .st-cat-name{color:var(--red)}
-.st-cat-count{color:var(--muted);font:10px var(--mono);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}
-.st-cat-index{position:absolute;left:12px;top:12px;font:10px var(--mono);letter-spacing:1px;background:var(--ink);padding:6px 8px}
+.st-cat-count{color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}
+.st-cat-index{position:absolute;left:12px;top:12px;font:12px var(--mono);letter-spacing:1px;background:var(--ink);padding:6px 8px}
 .st-cat-subs{display:flex;flex-wrap:wrap;gap:4px 18px;padding-top:6px}
 .st-cat-subs a{display:inline-flex;align-items:center;min-height:40px;color:var(--muted);font-size:13px}
 .st-cat-subs a:hover{color:var(--paper)}
@@ -126,33 +136,33 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-news{padding:84px 0;background:#762639}
 .st-news-inner{display:grid;grid-template-columns:1fr minmax(0,520px);gap:40px 80px;align-items:end}
 .st-news h2{font:600 clamp(38px,4.2vw,64px)/.96 var(--display);letter-spacing:.005em;margin-top:18px;text-transform:uppercase}
-.st-news label{display:block;margin-bottom:10px;font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-news label{display:block;margin-bottom:10px;font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-news-row{display:flex;gap:12px;align-items:stretch}
 .st-news input{flex:1;min-width:0;min-height:50px;padding:12px 2px;background:transparent;border:0;border-bottom:1px solid #e9e5dfaa;border-radius:0;color:var(--paper)}
 .st-news input::placeholder{color:#e9e5df99}
 .st-news .button{flex:none;gap:28px}
 .st-news .button:hover{background:var(--ink);border-color:var(--ink)}
-.st-note{margin:14px 0 0;font:11px/1.6 var(--mono);letter-spacing:.4px;color:var(--st-note)}
+.st-note{margin:14px 0 0;font:12px/1.6 var(--mono);letter-spacing:.4px;color:var(--st-note)}
 .st-news-msg{margin:10px 0 0;font-size:14px;line-height:1.6}
 .st-news-msg:empty{display:none}
 
 /* Footer */
 .st-footer{display:block;padding:0;margin-top:0;border-top:1px solid var(--line);background:var(--st-footer-bg)}
 .st-footer-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1.5fr;gap:40px;padding-top:64px;padding-bottom:56px}
-.st-footer h2{margin:0 0 16px;color:var(--muted);font:10px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-footer h2{margin:0 0 16px;color:var(--muted);font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
 .st-footer li a{display:inline-flex;align-items:center;min-height:36px;font-size:14px}
 .st-footer li a:hover{color:var(--red)}
-.st-footer-brand p{margin:18px 0 0;font:11px/1.7 var(--mono);letter-spacing:.8px}
+.st-footer-brand p{margin:18px 0 0;font:12px/1.7 var(--mono);letter-spacing:.8px}
 .st-footer-brand .st-brand .logo-crop{width:36px;height:52px}
 .st-footer-top>:last-child{grid-column:-2/-1}
 .st-footer-note{margin:0;color:var(--muted);font-size:13px;line-height:1.75}
-.st-footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;padding-top:22px;padding-bottom:30px;border-top:1px solid var(--line);color:var(--muted);font:11px var(--mono);letter-spacing:.8px}
+.st-footer-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;padding-top:22px;padding-bottom:30px;border-top:1px solid var(--line);color:var(--muted);font:12px var(--mono);letter-spacing:.8px}
 .st-footer-bottom a{display:inline-flex;align-items:center;min-height:44px;color:var(--paper)}
 .st-footer-bottom a:hover{color:var(--red)}
 
 /* Listing page */
 .st-crumbs{padding-top:26px}
-.st-crumbs ol{display:flex;flex-wrap:wrap;gap:6px 10px;margin:0;padding:0;list-style:none;color:var(--muted);font:10px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-crumbs ol{display:flex;flex-wrap:wrap;gap:6px 10px;margin:0;padding:0;list-style:none;color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-crumbs li{display:flex;align-items:center;min-height:28px}
 .st-crumbs li+li:before{content:'/';margin-right:10px;color:var(--st-line-5)}
 .st-crumbs a{display:inline-flex;min-height:28px;align-items:center}
@@ -160,18 +170,18 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-crumbs [aria-current]{color:var(--paper)}
 .st-plp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;padding:34px 0 30px}
 .st-plp-head h1{font:600 clamp(36px,4vw,60px)/.96 var(--display);letter-spacing:.01em;text-transform:uppercase}
-.st-plp-head h1 small{display:block;margin-bottom:14px;color:var(--muted);font:11px var(--mono);letter-spacing:1.4px}
+.st-plp-head h1 small{display:block;margin-bottom:14px;color:var(--muted);font:12px var(--mono);letter-spacing:1.4px}
 .st-plp-aside{max-width:340px}
 .st-plp-aside p{margin:0;color:var(--muted);font-size:14px;line-height:1.75}
-.st-result-count{display:block;margin-bottom:10px;color:var(--paper)!important;font:11px var(--mono)!important;letter-spacing:1.4px;text-transform:uppercase}
+.st-result-count{display:block;margin-bottom:10px;color:var(--paper)!important;font:12px var(--mono)!important;letter-spacing:1.4px;text-transform:uppercase}
 .st-subnav{margin-bottom:36px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .st-subnav::-webkit-scrollbar{display:none}
 .st-subnav ul{display:flex;gap:28px;width:max-content}
 .st-subnav a{display:inline-flex;align-items:center;gap:6px;min-height:48px;padding:0 1px;border-bottom:2px solid transparent;color:var(--muted);font-size:14px;white-space:nowrap}
 .st-subnav a:hover{color:var(--paper)}
 .st-subnav a[aria-current]{color:var(--paper);border-color:var(--red)}
-.st-subnav sup{font:10px var(--mono);color:var(--muted)}
-.st-footnote{margin:64px 0 0;padding:20px 0 90px;border-top:1px solid var(--line);color:var(--muted);font:11px/1.7 var(--mono);letter-spacing:.4px}
+.st-subnav sup{font:12px var(--mono);color:var(--muted)}
+.st-footnote{margin:64px 0 0;padding:20px 0 90px;border-top:1px solid var(--line);color:var(--muted);font:12px/1.7 var(--mono);letter-spacing:.4px}
 .st-status{padding:120px 0;color:var(--muted);font:12px var(--mono);letter-spacing:1px;text-transform:uppercase}
 .st-empty{padding:110px 0 130px}
 .st-empty h1{font:600 clamp(36px,4vw,60px)/.96 var(--display);letter-spacing:.005em;margin:20px 0 22px;text-transform:uppercase}
@@ -194,24 +204,24 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-soon-title{position:relative;margin-top:6cqi;font:600 clamp(20px,9.5cqi,56px)/.92 var(--display);letter-spacing:.01em;text-transform:uppercase}
 .st-soon-label{position:relative;display:inline-flex;align-items:center;gap:8px;margin-top:clamp(10px,4cqi,22px);color:var(--muted);font:clamp(8px,2.6cqi,11px)/1.4 var(--mono);letter-spacing:.16em}
 .st-soon-label:before{content:'';width:6px;height:6px;background:var(--red);flex:none}
-.st-gallery-main figcaption{display:flex;justify-content:space-between;gap:16px;padding-top:12px;color:var(--muted);font:10px/1.6 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-gallery-main figcaption{display:flex;justify-content:space-between;gap:16px;padding-top:12px;color:var(--muted);font:12px/1.6 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
 .st-thumbs{display:flex;gap:10px;margin-top:14px}
 .st-thumbs button{width:72px;aspect-ratio:4/5;padding:4px;background:var(--st-stage);border:1px solid transparent}
 .st-thumbs button[aria-pressed=true]{border-color:var(--red)}
 .st-thumbs img{width:100%;height:100%;object-fit:contain}
 .st-info{position:sticky;top:calc(var(--st-head) + 28px)}
-.st-pdp-meta{margin:0 0 18px;color:var(--muted);font:10px/1.7 var(--mono);letter-spacing:1.3px;text-transform:uppercase}
+.st-pdp-meta{margin:0 0 18px;color:var(--muted);font:12px/1.7 var(--mono);letter-spacing:1.3px;text-transform:uppercase}
 .st-pdp-meta b{color:var(--paper);font-weight:400}
 .st-info h1{font:600 clamp(32px,2.9vw,46px)/1 var(--display);letter-spacing:.01em;text-transform:uppercase}
 .st-pdp-price{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:24px 0 0;font:500 24px var(--body)}
-.st-pdp-price small{color:var(--muted);font:10px/1.6 var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-pdp-price small{color:var(--muted);font:12px/1.6 var(--mono);letter-spacing:1px;text-transform:uppercase}
 .st-colour{display:flex;align-items:center;gap:10px;margin:18px 0 0;font-size:14px;color:var(--muted)}
 .st-colour i{width:14px;height:14px;border:1px solid var(--st-line-5);border-radius:50%;flex:none}
 .st-colour b{color:var(--paper);font-weight:500}
 .st-desc{margin:24px 0 0;padding-top:24px;border-top:1px solid var(--line);color:var(--st-text-2);line-height:1.8;max-width:520px}
 .st-buy{margin-top:30px}
 .st-fieldset{margin:0 0 24px;padding:0;border:0}
-.st-fieldset legend{display:flex;justify-content:space-between;width:100%;padding:0;margin-bottom:12px;font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-fieldset legend{display:flex;justify-content:space-between;width:100%;padding:0;margin-bottom:12px;font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-fieldset legend span{color:var(--muted)}
 .st-sizes{display:flex;flex-wrap:wrap;gap:8px}
 .st-size input{position:absolute;opacity:0;width:1px;height:1px}
@@ -233,10 +243,10 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-wish-btn svg{width:17px;height:17px}
 .st-wish-btn:hover{border-color:var(--paper)}
 .st-wish-btn[aria-disabled=true]{cursor:default}
-.st-phase-note{margin:12px 0 0;color:var(--muted);font:11px/1.6 var(--mono);letter-spacing:.3px}
+.st-phase-note{margin:12px 0 0;color:var(--muted);font:12px/1.6 var(--mono);letter-spacing:.3px}
 .st-details{margin-top:30px;border-bottom:1px solid var(--line)}
 .st-details details{border-top:1px solid var(--line)}
-.st-details summary{display:flex;justify-content:space-between;align-items:center;min-height:54px;cursor:pointer;list-style:none;font:11px var(--mono);letter-spacing:1.3px;text-transform:uppercase}
+.st-details summary{display:flex;justify-content:space-between;align-items:center;min-height:54px;cursor:pointer;list-style:none;font:12px var(--mono);letter-spacing:1.3px;text-transform:uppercase}
 .st-details summary::-webkit-details-marker{display:none}
 .st-details summary:after{content:'+';font:300 20px var(--body);color:var(--red)}
 .st-details details[open] summary:after{content:'−'}
@@ -245,7 +255,7 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-details li:before{content:'';position:absolute;left:0;top:14px;width:8px;height:1px;background:var(--red)}
 .st-details p{margin:0 0 20px;color:var(--muted);font-size:14px;line-height:1.7}
 .st-details dl{display:grid;grid-template-columns:auto 1fr;gap:8px 20px;margin:0 0 20px;font-size:13px}
-.st-details dt{color:var(--muted);font:10px/1.9 var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-details dt{color:var(--muted);font:12px/1.9 var(--mono);letter-spacing:1px;text-transform:uppercase}
 .st-details dd{margin:0}
 .st-rail{margin-top:110px}
 .st-rail .st-section-head{margin:18px 0 28px}
@@ -263,8 +273,8 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-buy-status a:hover{color:var(--red)}
 .st-toolbar{display:flex;align-items:center;gap:12px 20px;margin:-14px 0 28px;padding-bottom:18px;border-bottom:1px solid var(--line)}
 .st-toolbar-sort{display:flex;align-items:center;gap:12px;margin-left:auto}
-.st-toolbar-count{color:var(--muted);font:10px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
-.st-toolbar label{color:var(--muted);font:10px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-toolbar-count{color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-toolbar label{color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-toolbar select{min-height:44px;padding:0 12px;background:var(--ink);border:1px solid var(--st-line-4);border-radius:0;color:var(--paper);color-scheme:var(--st-scheme);font-size:14px;cursor:pointer}
 .st-toolbar select:hover{border-color:var(--paper)}
 .st-clear{min-height:44px;padding:0 4px;background:none;border:0;border-bottom:1px solid var(--st-link-line);color:var(--paper);font-size:13px}
@@ -278,10 +288,10 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-line-media img{max-width:80%;max-height:86%;width:auto;height:auto;object-fit:contain}
 .st-line-name{font:600 24px/1 var(--display);text-transform:uppercase;letter-spacing:.2px}
 .st-line-name a:hover{color:var(--red)}
-.st-line-meta{margin:10px 0 0;color:var(--muted);font:10px/1.9 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-line-meta{margin:10px 0 0;color:var(--muted);font:12px/1.9 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
 .st-line-meta b{color:var(--paper);font-weight:400}
 .st-line-unit{margin:10px 0 0;font-size:14px}
-.st-line-unit small{color:var(--muted);font:10px var(--mono)}
+.st-line-unit small{color:var(--muted);font:12px var(--mono)}
 .st-line-controls{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 .st-line-controls .st-qty button{width:44px;min-height:44px}
 .st-line-controls .st-qty input{width:46px}
@@ -289,10 +299,10 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-line-remove:hover{color:var(--red)}
 .st-line-total{margin:0;font:500 16px var(--body);text-align:right;white-space:nowrap}
 .st-summary{position:sticky;top:calc(var(--st-head) + 24px);padding:28px;background:var(--st-soft);border:1px solid var(--line)}
-.st-summary h2{margin-bottom:18px;color:var(--muted);font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-summary h2{margin-bottom:18px;color:var(--muted);font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
 .st-summary dl{display:grid;grid-template-columns:1fr auto;gap:12px 16px;margin:0 0 24px;padding-top:16px;border-top:1px solid var(--line)}
 .st-summary dt{font-size:14px}
-.st-summary dt small{color:var(--muted);font:10px var(--mono)}
+.st-summary dt small{color:var(--muted);font:12px var(--mono)}
 .st-summary dd{margin:0;text-align:right;font-size:14px}
 .st-summary dl>dd:first-of-type{font:500 20px var(--body)}
 .st-summary dl>dd:nth-of-type(2){color:var(--muted)}
@@ -305,22 +315,22 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-mini-media{display:grid;place-items:center;aspect-ratio:4/5;background:var(--st-stage)}
 .st-mini-media img{max-width:82%;max-height:86%;width:auto;height:auto}
 .st-mini-info b{display:block;font:600 16px/1.05 var(--display);text-transform:uppercase}
-.st-mini-info small{display:block;margin-top:5px;color:var(--muted);font:9px/1.6 var(--mono);letter-spacing:.8px;text-transform:uppercase}
+.st-mini-info small{display:block;margin-top:5px;color:var(--muted);font:12px/1.6 var(--mono);letter-spacing:.8px;text-transform:uppercase}
 .st-mini-info small+small{margin-top:0}
 .st-mini-total{font-size:14px;white-space:nowrap}
 .st-form-alert{margin-bottom:18px;padding:14px 16px;border-left:3px solid var(--st-error);background:var(--st-alert-bg);font-size:14px;line-height:1.6}
 .st-form-group{margin:0;padding:26px 0 30px;border:0;border-top:1px solid var(--line);min-width:0}
-.st-form-group legend,.st-form-group h2{float:left;width:100%;margin:0 0 20px;padding:0;color:var(--muted);font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-form-group legend,.st-form-group h2{float:left;width:100%;margin:0 0 20px;padding:0;color:var(--muted);font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
 .st-form-group legend+*,.st-form-group h2+*{clear:both}
 .st-fields{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px}
 .st-field-wide{grid-column:1/-1}
-.st-field label,.st-field-label{display:block;margin-bottom:8px;font:10px var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-field label,.st-field-label{display:block;margin-bottom:8px;font:12px var(--mono);letter-spacing:1.1px;text-transform:uppercase}
 .st-field input{width:100%;min-height:50px;padding:12px 14px;background:var(--st-field-bg);border:1px solid var(--st-line-3);border-radius:0;color:var(--paper)}
 .st-field input:hover{border-color:var(--st-line-6)}
 .st-field input[aria-invalid=true]{border-color:var(--st-error)}
 .st-field-error{margin:6px 0 0;color:var(--st-error);font-size:13px}
 .st-field-static{margin:0;min-height:50px;display:flex;align-items:center;color:var(--muted)}
-.st-proto-tag{margin-left:10px;padding:4px 7px;background:var(--red);color:var(--paper);font:9px var(--mono);letter-spacing:1px;vertical-align:1px}
+.st-proto-tag{margin-left:10px;padding:4px 7px;background:var(--red);color:var(--paper);font:12px var(--mono);letter-spacing:1px;vertical-align:1px}
 .st-pay p{margin:0;max-width:520px;color:var(--muted);font-size:14px;line-height:1.75;clear:both}
 .st-place{width:100%;justify-content:space-between;margin-top:6px}
 .st-checkout-form .st-note{color:var(--muted)}
@@ -329,14 +339,14 @@ body.store{min-height:100vh;display:flex;flex-direction:column;background:var(--
 .st-confirm h1 em{color:var(--red);font-style:normal}
 .st-confirm-lead{max-width:520px;color:var(--st-text-2);line-height:1.8}
 .st-confirm-ref{display:inline-grid;gap:8px;margin:18px 0 0;padding:18px 22px;border:1px solid var(--line)}
-.st-confirm-ref dt{color:var(--muted);font:10px var(--mono);letter-spacing:1.3px;text-transform:uppercase}
+.st-confirm-ref dt{color:var(--muted);font:12px var(--mono);letter-spacing:1.3px;text-transform:uppercase}
 .st-confirm-ref dd{margin:0;font:600 26px var(--display);letter-spacing:.5px}
 .st-confirm-details p{clear:both;margin:0;line-height:1.8;color:var(--st-text-2)}
 .st-confirm-details .button{margin-top:10px}
 
 /* Search */
 .st-search{max-width:860px;padding-top:4px}
-.st-search label{display:block;margin-bottom:12px;color:var(--muted);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-search label{display:block;margin-bottom:12px;color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-search-row{display:flex;gap:14px;align-items:stretch}
 .st-search input{flex:1;min-width:0;min-height:56px;padding:10px 2px;background:transparent;border:0;border-bottom:1px solid var(--st-input-line);border-radius:0;color:var(--paper);font-size:22px}
 .st-search input::placeholder{color:var(--st-placeholder-2)}
@@ -492,9 +502,9 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 @supports not (-webkit-text-stroke:1px red){:is(.st-section-head h2,.st-hero-copy :is(h1,h2),.st-editorial-copy h2,.st-feature-copy h2,.st-confirm h1) em{color:var(--red)}}
 
 /* Shop: Filter & sort panel (a native <dialog>: a drawer from the right, a bottom sheet on phones), active-filter chips */
-.st-filter-open{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 16px;background:none;border:1px solid var(--st-line-4);color:var(--paper);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-filter-open{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 16px;background:none;border:1px solid var(--st-line-4);color:var(--paper);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-filter-open:hover{border-color:var(--paper)}
-.st-filter-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;background:var(--red);color:var(--paper);font:10px var(--mono);letter-spacing:0}
+.st-filter-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;background:var(--red);color:var(--paper);font:12px var(--mono);letter-spacing:0}
 .store .st-chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:-10px 0 28px}
 .st-chips button:not(.st-clear){display:inline-flex;align-items:center;gap:10px;min-height:34px;padding:0 12px;background:var(--st-chip-bg);border:1px solid var(--line);color:var(--paper);font-size:13px}
 .st-chips button:not(.st-clear):hover{border-color:var(--red)}
@@ -514,7 +524,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-filter-x:hover{border-color:var(--line);color:var(--red)}
 .st-filter-body{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:4px 28px 20px}
 .st-facet{border-bottom:1px solid var(--line)}
-.st-facet summary{display:flex;justify-content:space-between;align-items:center;min-height:58px;cursor:pointer;list-style:none;font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-facet summary{display:flex;justify-content:space-between;align-items:center;min-height:58px;cursor:pointer;list-style:none;font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
 .st-facet summary::-webkit-details-marker{display:none}
 .st-facet summary:after{content:'+';color:var(--muted);font:300 20px var(--body)}
 .st-facet[open] summary:after{content:'–'}
@@ -523,7 +533,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-facet-opts.is-sizes{grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:8px}
 .st-opt{display:flex;align-items:center;gap:12px;min-height:38px;cursor:pointer;font-size:14px;color:var(--st-text-3)}
 .st-opt:hover{color:var(--paper)}
-.st-opt small{margin-left:auto;color:var(--muted);font:10px var(--mono)}
+.st-opt small{margin-left:auto;color:var(--muted);font:12px var(--mono)}
 .st-opt input{appearance:none;flex:none;width:16px;height:16px;margin:0;border:1px solid var(--st-line-6);background:none;display:grid;place-items:center;cursor:pointer}
 .st-opt input[type=radio]{border-radius:50%}
 .st-opt input:checked{border-color:var(--red);background:var(--red);box-shadow:inset 0 0 0 3px var(--ink)}
@@ -535,10 +545,10 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .is-sizes .st-opt:has(input:focus-visible){outline:2px solid var(--red);outline-offset:3px}
 .st-price{display:flex;align-items:flex-end;gap:12px;padding-bottom:10px}
 .st-price label{flex:1}
-.st-price label span{display:block;margin-bottom:8px;color:var(--muted);font:10px var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-price label span{display:block;margin-bottom:8px;color:var(--muted);font:12px var(--mono);letter-spacing:1.1px;text-transform:uppercase}
 .st-price input{width:100%;min-height:46px;padding:10px 12px;background:var(--st-field-bg);border:1px solid var(--st-line-3);border-radius:0;color:var(--paper);color-scheme:var(--st-scheme)}
 .st-price>span{padding-bottom:14px;color:var(--muted)}
-.st-price-hint{margin:0 0 18px;color:var(--muted);font:10px var(--mono);letter-spacing:.8px}
+.st-price-hint{margin:0 0 18px;color:var(--muted);font:12px var(--mono);letter-spacing:.8px}
 .st-filter-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 28px;border-top:1px solid var(--line);background:var(--st-sheet-foot)}
 .st-filter-foot .button{flex:1;max-width:240px}
 .st-filter-foot .st-clear:disabled{opacity:.35;cursor:default}
@@ -561,12 +571,12 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-review-body{color:var(--st-text-3);line-height:1.7;white-space:pre-line}
 .st-review-photos{display:flex;gap:8px;flex-wrap:wrap}
 .st-review-photos img{width:88px;height:88px;object-fit:cover;border:1px solid var(--line)}
-.st-review-meta{color:var(--muted);font:10px var(--mono)!important;letter-spacing:1px;text-transform:uppercase}
+.st-review-meta{color:var(--muted);font:12px var(--mono)!important;letter-spacing:1px;text-transform:uppercase}
 .st-account-section{margin:0 0 40px}
 .st-account-section h2{margin:0 0 14px;font:600 24px/1 var(--display);text-transform:uppercase;letter-spacing:.02em}
 .store .st-review-todo,.store .st-review-mine{display:grid;gap:10px}
 .st-review-todo li,.st-review-mine li{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line)}
-.st-review-todo small,.st-review-mine small{display:block;color:var(--muted);font:10px var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-review-todo small,.st-review-mine small{display:block;color:var(--muted);font:12px var(--mono);letter-spacing:1px;text-transform:uppercase}
 .st-review-mine li[data-status=approved] small{color:var(--st-ok)}
 .st-review-mine li[data-status=rejected] small{color:var(--st-error)}
 .st-textarea,.st-file{width:100%;padding:12px 14px;background:var(--st-field-bg);border:1px solid var(--st-line-3);border-radius:0;color:var(--paper);font:inherit}
@@ -574,7 +584,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-review-form .st-radio-group .st-radio span{color:var(--st-star);letter-spacing:3px}
 
 /* Announcement bar (M17): one line of text set in the admin, above the header */
-.st-announce{margin:0;padding:9px var(--st-gutter);background:var(--red);color:var(--paper);text-align:center;font:11px/1.4 var(--mono);letter-spacing:1.2px;text-transform:uppercase}
+.st-announce{margin:0;padding:9px var(--st-gutter);background:var(--red);color:var(--paper);text-align:center;font:12px/1.4 var(--mono);letter-spacing:1.2px;text-transform:uppercase}
 .st-announce a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 
 /* ============================ KITSYUU v2 — homepage image choreography ============================
@@ -585,7 +595,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 :root{--ch-ease:cubic-bezier(.2,.7,.2,1);--ch-slow:1.15s}
 .ch-frame{position:relative;display:block;overflow:hidden;background:var(--st-stage)}
 .ch-frame img{display:block;width:100%;height:100%;object-fit:cover}
-.ch-count{display:block;font:11px var(--mono);letter-spacing:1.4px;color:var(--muted)}
+.ch-count{display:block;font:12px var(--mono);letter-spacing:1.4px;color:var(--muted)}
 .ch-count b{color:var(--paper);font-weight:400}
 .ch-progress{display:none}
 
@@ -718,7 +728,7 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
   .has-mega:hover>.st-mega,.has-mega:focus-within>.st-mega{visibility:visible;opacity:1;transform:none;transition-delay:.05s,.05s,0s}
   .has-mega.is-off>.st-mega{visibility:hidden;opacity:0}
   .st-mega-cols{display:grid;grid-auto-flow:column;grid-auto-columns:max-content;gap:0 48px;align-content:start}
-  .st-mega-h{margin:0 0 12px;font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--red)}
+  .st-mega-h{margin:0 0 12px;font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase;color:var(--red)}
   .st-mega ul{list-style:none;margin:0;padding:0}
   .st-mega-col li a{min-height:0;padding:5px 0;font:14px/1.4 var(--body);letter-spacing:0;text-transform:none;color:var(--st-text-2)}
   .st-mega-col li a:hover{color:var(--paper)}
@@ -812,12 +822,12 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 .st-help-head p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5}
 .st-help-close{position:absolute;top:6px;right:6px;width:44px;height:44px;display:grid;place-items:center;background:none;border:0;color:inherit;font-size:26px;line-height:1;cursor:pointer}
 .st-help-tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)}
-.st-help-tabs button{min-height:44px;padding:6px 4px;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:500 11px var(--mono);letter-spacing:.8px;text-transform:uppercase;cursor:pointer}
+.st-help-tabs button{min-height:44px;padding:6px 4px;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:500 12px var(--mono);letter-spacing:.8px;text-transform:uppercase;cursor:pointer}
 .st-help-tabs button.is-on{color:var(--paper);border-bottom-color:var(--paper)}
 .st-help-body{padding:16px 18px 18px;overflow:auto;font-size:14px;line-height:1.55}
 .st-help-note{margin:10px 0;color:var(--muted);font-size:13px}
 .st-help-body .text-link{background:none;border:0;padding:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;min-height:24px}
-.st-help-ask label,.st-help-form label{display:block;margin:12px 0 6px;font:11px var(--mono);letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.st-help-ask label,.st-help-form label{display:block;margin:12px 0 6px;font:12px var(--mono);letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
 .st-help-ask label{margin-top:0}
 .st-help-row{display:flex;gap:8px}
 .st-help-row input{flex:1;min-width:0}
@@ -874,3 +884,61 @@ html:has(.kitsyuu-landing){scroll-behavior:auto}
 /* The help window could not load: the message and its "Try again" button (2026-10-12). */
 .st-help [data-help-unavailable] p{margin:0 0 12px}
 .st-help [data-help-unavailable] .button{width:100%}
+
+/* ---------- Redesign 2026-10-14, batch B1: help launcher. One compact pill (the robot keeps its motion, smaller), so it no
+   longer covers a product card's name and price. Same buttons and behaviour (components/HelpWidget.tsx). ---------- */
+.st-help-launch{min-height:44px;padding:0 18px;border-radius:var(--radius-pill);border-color:var(--st-line-3);box-shadow:var(--elev-1);font:600 var(--fs-label) var(--body);letter-spacing:.06em}
+.st-help-robot{width:60px;height:66px}
+@media (max-width:700px){.st-help-robot{width:48px;height:53px}.st-help-launch{min-height:40px;padding:0 14px}}
+
+/* ---------- Redesign 2026-10-14, batch C1: product page and cards. ---------- */
+/* Wishlist hearts sit on the light photo stage in both themes: always dark ink there. */
+.st-card .st-wish{color:#141413}
+.st-card .st-wish:hover{color:var(--red)}
+@media (max-width:700px){
+  /* One-line breadcrumb that scrolls sideways instead of wrapping onto two lines. */
+  .st-crumbs ol{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+  .st-crumbs ol::-webkit-scrollbar{display:none}
+  /* The photo leaves room for the name and price on the first screen. */
+  .st-pdp .st-gallery-stage{aspect-ratio:auto;height:min(62svh,125vw)}
+  /* Quantity and Add to cart stay in reach while the size, details and size chart scroll by. */
+  .st-pdp .st-qty-row{position:sticky;bottom:0;z-index:5;margin-inline:calc(var(--st-gutter) * -1);padding:var(--sp-3) var(--st-gutter);background:var(--ink);border-top:1px solid var(--st-line-2);box-shadow:0 -8px 24px #0000000d}
+  /* The help launcher moves up on the product page so it never covers Add to cart. */
+  body:has(.st-pdp) .st-help{bottom:84px}
+}
+/* Breadcrumb links: muted ink, never the browser's default link colour (it showed blue in the light theme). */
+.st-crumbs a{color:var(--muted);text-decoration:none}
+.st-crumbs a:hover{color:var(--paper)}
+.st-crumbs [aria-current]{color:var(--paper)}
+/* Phones, product page: the Help pill stays, the robot (which covered the product name) is left out there only. */
+@media (max-width:700px){body:has(.st-pdp) .st-help-robot{display:none}}
+/* Light header is opaque: scrolled text no longer shows through it. */
+:root[data-theme=light]{--st-header-bg:#f4f1eb;--st-mega-bg:#f4f1eb}
+
+/* ---------- Redesign 2026-10-14, batch C2: homepage. The categories reel (one picture per screen) is now three tiles.
+   New arrivals keeps its original pinned reel (the owner's choice, 2026-10-14).
+   The brand film, the rotation hero, the editorial band and the outerwear wipe keep their motion. ---------- */
+.ch-cats{padding-bottom:var(--sp-9)}
+.ch-cat-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-5);margin-top:var(--sp-6)}
+.ch-cat-tile{display:flex;flex-direction:column;min-width:0}
+.ch-cat-tile-media{display:block;aspect-ratio:4/5;overflow:hidden;background:var(--st-stage)}
+.ch-cat-tile-media img{display:block;width:100%;height:100%;object-fit:cover;transition:transform var(--dur) var(--ease-out)}
+.ch-cat-tile:hover .ch-cat-tile-media img{transform:scale(1.03)}
+.ch-cat-tile .st-cat-name{color:var(--paper)}
+.ch-cat-tile .st-cat:hover .st-cat-name{color:var(--red)}
+.ch-cat-tile .st-cat-subs a{color:var(--muted);font-size:var(--fs-small)}
+.ch-cat-tile .st-cat-subs a:hover{color:var(--paper)}
+@media (max-width:900px){.ch-cat-tiles{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.ch-cat-tiles{grid-template-columns:1fr;gap:var(--sp-6)}.ch-cat-tile-media{aspect-ratio:3/2}}
+@media (prefers-reduced-motion:reduce){.ch-cat-tile-media img{transition:none}}
+.ch-cat-tile .ch-cat-link .st-cat-name{font-size:clamp(28px,2.6vw,40px);line-height:1}
+.ch-cat-tile .ch-cat-link .st-cat-meta{padding-top:var(--sp-4)}
+/* Photo-led bands keep the dark palette in the light theme (see "Themes"): their surfaces too, not only their text.
+   Before, the editorial band's copy panel (background --st-soft) stayed light under light text (2026-10-15). */
+:root[data-theme=light] :is(.st-brand-hero,.st-hero,.st-editorial,.st-news,.kitsyuu-landing,.st-soon){--st-soft:#191719;--st-panel:#171719;
+  --st-line-2:#ffffff1f;--st-line-3:#ffffff2e;--st-line-5:#ffffff4d;--st-line-6:#ffffff66;--st-text-2:#c9c7c1;--st-text-3:#d8d5ce;--st-chip-bg:#1b1b1d;--st-field-bg:#161617}
+/* Text on the product photo stage (always light, both themes): dark ink. The featured index numbers were light-on-light
+   (1.3:1) in the light theme. The New tag: white on red (5.9:1; dark text was 3:1), and not smaller than 11px on phones. */
+.st-card .st-index{color:#141413}
+.st-tag-new{color:#fff}
+@media (max-width:700px){.st-tag{font-size:11px}}

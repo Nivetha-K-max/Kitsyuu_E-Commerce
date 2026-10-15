@@ -39,7 +39,8 @@ export default async function ProductPage({ params }: { params: Params }) {
   const firstColour = p.colours?.length ? (p.colours.find(c => p.variants.some(v => v.colour === c.slug && v.available)) ?? p.colours[0]).slug : null;
   const trail = [{ label: 'Home', href: url.home }, { label: 'Shop', href: url.shop() }, { label: idx.catLabel(p.category), href: url.shop({ category: p.category }) },
     ...(sub && sub !== idx.catLabel(p.category) ? [{ label: sub, href: url.shop({ category: p.subcategory }) }] : []), { label: p.name }];
-  const caption: [string, string] = img.held ? ['Photo coming soon', 'Product photography in preparation'] : ['Product image', ''];
+  // Redesign 2026-10-14: a caption only says something when there is no photo yet ("Product image" under a photo said nothing).
+  const caption: [string, string] | null = img.held ? ['Photo coming soon', 'Product photography in preparation'] : null;
   return (
     <div className="st-wrap">
       <JsonLd data={[productLd(idx, p), breadcrumbLd(trail, url.product(p))]} />

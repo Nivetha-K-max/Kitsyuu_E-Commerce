@@ -11,10 +11,10 @@
 .st-account .st-form-group{max-width:760px}
 .st-account .st-form-group p{clear:both;margin:0 0 12px;color:var(--st-text-2);line-height:1.8}
 .st-account-dl{clear:both;display:grid;grid-template-columns:170px 1fr;gap:12px 20px;margin:0;font-size:15px}
-.st-account-dl dt{color:var(--muted);font:10px/2.2 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
+.st-account-dl dt{color:var(--muted);font:12px/2.2 var(--mono);letter-spacing:1.1px;text-transform:uppercase}
 .st-account-dl dd{margin:0;overflow-wrap:anywhere}
 .st-account-actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px 30px;max-width:760px;padding:28px 0 110px;border-top:1px solid var(--line)}
-.st-tool-label-admin{font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;border:1px solid var(--red);padding:4px 7px}
+.st-tool-label-admin{font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;border:1px solid var(--red);padding:4px 7px}
 @media(max-width:900px){.st-tool-admin{display:none}}
 @media(max-width:700px){
  .st-account-dl{grid-template-columns:1fr;gap:2px}
@@ -28,11 +28,11 @@
 .st-account-greeting{margin:0;font:600 26px/1 var(--display);text-transform:uppercase;overflow-wrap:anywhere}
 .st-account-nav ul{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
 .st-account-nav li{border-bottom:1px solid var(--line)}
-.st-account-nav a{display:block;padding:12px 0;color:var(--muted);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;text-decoration:none}
+.st-account-nav a{display:block;padding:12px 0;color:var(--muted);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;text-decoration:none}
 .st-account-nav a:hover,.st-account-nav a[aria-current=page]{color:var(--paper)}
 .st-account-nav a[aria-current=page]{box-shadow:inset 2px 0 0 var(--red);padding-left:12px}
 /* Log out: a clear outlined button (it was faint underlined grey text, hard to find in the light theme). */
-.st-account-logout{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 16px;background:none;border:1px solid var(--paper);color:var(--paper);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
+.st-account-logout{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 16px;background:none;border:1px solid var(--paper);color:var(--paper);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
 .st-account-logout:before{content:"\2192";color:var(--red)}
 .st-account-logout:hover{border-color:var(--red);background:var(--red);color:#fff}
 .st-account-logout:hover:before{color:#fff}
@@ -50,7 +50,7 @@
 .st-check input{width:18px;height:18px;accent-color:var(--red)}
 .st-auth-secondary{max-width:480px;padding-top:24px;border-top:1px solid var(--line)}
 .st-auth-secondary h2{margin-bottom:8px}
-.st-link-button{background:none;border:0;padding:0;color:var(--paper);font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+.st-link-button{background:none;border:0;padding:0;color:var(--paper);font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
 .st-link-button:hover{color:var(--red)}
 .st-link-button:focus-visible,.st-account-logout:focus-visible{outline:2px solid var(--red);outline-offset:4px}
 .st-link-button.st-danger{color:var(--st-danger)}
@@ -59,7 +59,7 @@
 .st-address-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin:0;padding:0;list-style:none}
 .st-address-card{padding:20px;border:1px solid var(--line);display:grid;gap:14px;align-content:start}
 .st-address-card[data-default]{border-color:var(--st-line-5)}
-.st-address-tag{display:inline-block;margin:0 0 0 8px;padding:3px 7px;border:1px solid var(--st-line-5);font:10px var(--mono);letter-spacing:1.1px;text-transform:uppercase;color:var(--paper);vertical-align:middle}
+.st-address-tag{display:inline-block;margin:0 0 0 8px;padding:3px 7px;border:1px solid var(--st-line-5);font:12px var(--mono);letter-spacing:1.1px;text-transform:uppercase;color:var(--paper);vertical-align:middle}
 .st-address-card>.st-address-tag{margin:0;justify-self:start}
 .st-address-text{font-style:normal;line-height:1.75;color:var(--st-text-2)}
 .st-address-actions-row,.st-address-actions{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
@@ -72,7 +72,7 @@
 .st-table-wrap{overflow-x:auto;border-top:1px solid var(--line)}
 .st-order-table{width:100%;border-collapse:collapse;font-size:14px}
 .st-order-table th,.st-order-table td{padding:14px 12px 14px 0;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
-.st-order-table thead th{color:var(--muted);font:10px var(--mono);letter-spacing:1.1px;text-transform:uppercase;font-weight:400}
+.st-order-table thead th{color:var(--muted);font:12px var(--mono);letter-spacing:1.1px;text-transform:uppercase;font-weight:400}
 .st-order-table .num{text-align:right}
 .st-order-table tbody th a{color:var(--paper);font:12px var(--mono);letter-spacing:.6px}
 .st-order-table tbody th a:hover{color:var(--red)}
@@ -122,7 +122,7 @@
 .st-mini li.has-problem{opacity:.6}
 .st-summary .st-form-alert{margin:0 0 14px}
 .st-radio-group{margin:0 0 12px;padding:0;border:0;min-width:0}
-.st-radio-group legend{margin-bottom:12px;color:var(--muted);font:11px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
+.st-radio-group legend{margin-bottom:12px;color:var(--muted);font:12px var(--mono);letter-spacing:1.4px;text-transform:uppercase}
 .st-radio{display:flex;gap:12px;align-items:flex-start;margin:0 0 10px;padding:14px 16px;border:1px solid var(--line);cursor:pointer;line-height:1.55;font-size:14px;overflow-wrap:anywhere}
 .st-radio:has(input:checked){border-color:var(--paper)}
 .st-radio input{flex:none;width:18px;height:18px;margin-top:2px;accent-color:var(--red)}
@@ -167,7 +167,7 @@
 
 /* Delivery steps on the order page (2026-10-01): Processing → Packed → Shipped → Delivered. */
 .st-track-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 20px;padding:0;list-style:none;counter-reset:step}
-.st-track-steps li{position:relative;padding:12px 0 0;border-top:3px solid var(--st-line-4);color:var(--muted);font:11px/1.4 var(--mono);letter-spacing:1px;text-transform:uppercase}
+.st-track-steps li{position:relative;padding:12px 0 0;border-top:3px solid var(--st-line-4);color:var(--muted);font:12px/1.4 var(--mono);letter-spacing:1px;text-transform:uppercase}
 .st-track-steps li[data-done]{border-top-color:var(--red);color:var(--paper)}
 .st-track-steps li[aria-current=step]{font-weight:700}
 @media (max-width:480px){.st-track-steps{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:14px}}
@@ -178,7 +178,7 @@
 .st-invoice th,.st-invoice td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .st-invoice .num{text-align:right;white-space:nowrap}
 .st-invoice-parties{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:20px 0}
-.st-invoice-parties h2{margin:0 0 6px;font:11px var(--mono);letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.st-invoice-parties h2{margin:0 0 6px;font:12px var(--mono);letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
 .st-invoice-totals{margin:16px 0 0 auto;max-width:360px}
 .st-invoice-totals div{display:flex;justify-content:space-between;gap:20px;padding:5px 0}
 .st-invoice-totals .grand{border-top:1px solid var(--paper);margin-top:6px;padding-top:10px;font-weight:700}

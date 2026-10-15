@@ -10,13 +10,17 @@ import { ProductGrid } from './ui';
 /* Performance (2026-10-01): the page itself (heading, search box, categories) for a given starting query. Rendered on
    the server with no query as the page's fallback, so the real page replaces it without the layout jumping (it used to
    show "Loading…" and then the whole page). */
+/* 2026-10-14: the query this page last wrote into the address bar itself (history.replaceState while typing). Next.js reports
+   that as a URL change; the page must not be rebuilt for it, or the search box loses focus after every letter. */
+let written: string | null = null;
+
 export function SearchBody({ initial }: { initial: string }) {
   const { idx } = useStore();
   const [value, setValue] = useState(initial), [q, setQ] = useState(initial.trim());
   const input = useRef<HTMLInputElement>(null), timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => { if (!initial) input.current?.focus(); }, [initial]);
   useEffect(() => () => clearTimeout(timer.current), []);
-  const run = (v: string) => { const t = v.trim(); setQ(t); history.replaceState(null, '', url.search(t)); };
+  const run = (v: string) => { const t = v.trim(); setQ(t); written = t; history.replaceState(null, '', url.search(t)); };
   // Worked out when the (debounced) query changes, not on every keystroke's render.
   const hits = useMemo(() => searchProducts(idx, q), [idx, q]);
   const browse = (
@@ -46,8 +50,11 @@ export function SearchBody({ initial }: { initial: string }) {
   );
 }
 
-/** The search page: the starting query comes from the URL (read in the browser). */
+/** The search page: the starting query comes from the URL (read in the browser). It starts over only when the URL changes
+    for another reason (Back / Forward, a link to a search), not when the page wrote the query itself while typing. */
 export default function SearchView() {
   const initial = useSearchParams().get('q') || '';
-  return <SearchBody key={initial} initial={initial} />;
+  const shown = useRef(initial);
+  if (initial !== shown.current && initial !== written) shown.current = initial;
+  return <SearchBody key={shown.current} initial={shown.current} />;
 }

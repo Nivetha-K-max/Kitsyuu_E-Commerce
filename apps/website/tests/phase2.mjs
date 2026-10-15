@@ -120,6 +120,14 @@ for (const [vw, vh, mob, tag] of [[1440, 900, false, 'desktop'], [390, 844, true
   const none = await q1('zzqx'); const emptyTxt = await ev(`document.querySelector('.st-search-empty h2')?.textContent`);
   ok(`[${tag}] search empty state`, none.length === 0 && emptyTxt === 'No products match “zzqx”.' && (await ev(`document.querySelectorAll('.st-search-browse a').length`)) === 10, emptyTxt);
   ok(`[${tag}] search URL keeps query`, (await ev('location.search')) === '?q=zzqx');
+  // 2026-10-14 regression: typing letter by letter (real key input, each pause longer than the search delay) keeps the focus in
+  // the box. Before, each search's address-bar update rebuilt the page and the box lost focus after one letter.
+  await go('search');
+  await ev(`document.querySelector('#st-q').focus()`);
+  for (const ch of 'jeans') { await b.send('Input.insertText', {text: ch}); await w(260); }
+  await settle(`document.querySelector('#st-search-count').textContent.endsWith('for “jeans”')`);
+  const typed = await ev(`({focus:document.activeElement?.id,value:document.querySelector('#st-q').value,url:location.search})`);
+  ok(`[${tag}] search: typing letter by letter keeps the focus and every letter`, typed.focus === 'st-q' && typed.value === 'jeans' && typed.url === '?q=jeans', JSON.stringify(typed));
   await q1('jeans'); await b.shot(`p2-${tag}-search.png`);
 
   // Category navigation + sorting

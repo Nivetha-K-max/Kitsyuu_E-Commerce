@@ -6,7 +6,7 @@ import { ComingSoon } from './ui';
 import { useColour } from './ColourScope';
 
 /* Primary image plus thumbnails when official photos are added to media.gallery. Zoom stays off. */
-export default function Gallery({ p, images: all, caption }: { p: Product; images: ImageInfo[]; caption: [string, string] }) {
+export default function Gallery({ p, images: all, caption }: { p: Product; images: ImageInfo[]; caption: [string, string] | null }) {
   // Third pass: with a colour chosen, that colour's photos first, then the general ones; other colours' photos are hidden.
   const { colour } = useColour();
   const shown = colour ? [...all.filter(m => m.colour === colour), ...all.filter(m => !m.colour)] : all;
@@ -19,7 +19,7 @@ export default function Gallery({ p, images: all, caption }: { p: Product; image
         <div className="st-gallery-stage">
           {img.held ? <ComingSoon p={p} label /> : <img id="st-main-img" src={img.src} alt={img.alt} width={img.width} height={img.height} style={{ ['--w' as string]: img.width + 'px' }} decoding="async" fetchPriority="high" />}
         </div>
-        <figcaption><span>{caption[0]}</span><span>{caption[1]}</span></figcaption>
+        {caption && <figcaption><span>{caption[0]}</span><span>{caption[1]}</span></figcaption>}
       </figure>
       {images.length > 1 && (
         <ul className="st-thumbs" aria-label="Choose an image">

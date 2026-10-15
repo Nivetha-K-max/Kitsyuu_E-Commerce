@@ -37,7 +37,7 @@ export default async function StoreHome() {
   const naList = na?.products ?? [];
   const cats = idx.top.map(c => {
     const list = idx.inCategory(c.id), shown = list.filter(p => !imageOf(p).held);
-    return { c, list, lead: shown[0], second: shown[1] };
+    return { c, list, lead: shown[0] };
   });
   const rotation = [idx.inCategory('outerwear').find(p => !imageOf(p).held), naList.find(p => !imageOf(p).held)].filter((p): p is Product => !!p);
 
@@ -51,6 +51,7 @@ export default async function StoreHome() {
           <div className="section-label"><span>01 — NEW ARRIVALS</span><span data-count="new-arrivals">{na ? plural(naList.length, 'piece') : ''}</span></div>
           <div className="st-section-head"><h2 id="st-na-title">New<br /><em>arrivals.</em></h2><IntentLink className="text-link" href={url.collection('new-arrivals')}>View all new arrivals <span aria-hidden="true">↗</span></IntentLink></div>
         </div>
+        {/* 2026-10-14: kept as the original pinned reel at the owner's request (the redesign's grid was reverted here). */}
         {naList.length > 0 && (
           <div className="ch-na-reel" data-scroll="pin" data-steps={naList.length} style={{ ['--n' as string]: naList.length }}>
             <div className="ch-na-stage st-wrap">
@@ -110,35 +111,25 @@ export default async function StoreHome() {
           <div className="section-label"><span>02 — SHOP BY CATEGORY</span><span>TOPS / BOTTOMS / OUTERWEAR</span></div>
           <div className="st-section-head"><h2 id="st-cat-title">Start with<br /><em>the shape.</em></h2><IntentLink className="text-link" href={url.shop()}>All products <span aria-hidden="true">↗</span></IntentLink></div>
         </div>
-        <div className="ch-cat-reel" data-scroll="pin" data-steps={cats.length} style={{ ['--n' as string]: cats.length }}>
-          <div className="ch-cat-stage st-wrap">
-            <ul className="ch-cat-list">
-              {cats.map(({ c, list, lead, second }, i) => {
-                const photo = CATEGORY_PHOTO[c.id];
-                return (
-                  <li key={c.id} className={`ch-cat-item${i === 0 ? ' is-current' : ''}`} data-step-item={i} style={{ ['--i' as string]: i }}>
-                    <div className="ch-cat-text">
-                      <span className="ch-count" aria-hidden="true"><b>{pad(i + 1)}</b> / {pad(cats.length)}</span>
-                      <IntentLink className="st-cat ch-cat-link" href={url.shop({ category: c.id })}>
-                        <span className="st-cat-meta"><span className="st-cat-name">{c.label}</span><span className="st-cat-count">{plural(list.length, 'piece')}</span></span>
-                      </IntentLink>
-                      <ul className="st-cat-subs" aria-label={`${c.label} categories`}>
-                        {idx.children(c.id).map(s => <li key={s.id}><IntentLink href={url.shop({ category: s.id })}>{s.label}</IntentLink></li>)}
-                      </ul>
-                    </div>
-                    <IntentLink className="ch-cat-visual" href={url.shop({ category: c.id })} tabIndex={-1} aria-hidden="true">
-                      <span className="ch-frame ch-cat-photo">
-                        {photo ? <img src={photo.src} alt="" width={photo.w} height={photo.h} loading="lazy" decoding="async" /> : lead && <Cutout p={lead} />}
-                      </span>
-                      {lead && <span className="ch-frame ch-cat-piece">{photo ? <Cutout p={lead} /> : second && <Cutout p={second} />}</span>}
-                    </IntentLink>
-                  </li>
-                );
-              })}
-            </ul>
-            <span className="ch-progress" aria-hidden="true" />
-          </div>
-        </div>
+        {/* Redesign 2026-10-14: the pinned reel is now three tiles (photo, name, count, subcategories). */}
+        <div className="st-wrap"><ul className="ch-cat-tiles">
+          {cats.map(({ c, list, lead }) => {
+            const photo = CATEGORY_PHOTO[c.id];
+            return (
+              <li key={c.id} className="ch-cat-tile">
+                <IntentLink className="ch-cat-tile-media" href={url.shop({ category: c.id })} tabIndex={-1} aria-hidden="true">
+                  {photo ? <img src={photo.src} alt="" width={photo.w} height={photo.h} loading="lazy" decoding="async" /> : lead && <Cutout p={lead} />}
+                </IntentLink>
+                <IntentLink className="st-cat ch-cat-link" href={url.shop({ category: c.id })}>
+                  <span className="st-cat-meta"><span className="st-cat-name">{c.label}</span><span className="st-cat-count">{plural(list.length, 'piece')}</span></span>
+                </IntentLink>
+                <ul className="st-cat-subs" aria-label={`${c.label} categories`}>
+                  {idx.children(c.id).map(sub => <li key={sub.id}><IntentLink href={url.shop({ category: sub.id })}>{sub.label}</IntentLink></li>)}
+                </ul>
+              </li>
+            );
+          })}
+        </ul></div>
       </section>
 
       {/* 03 — After hours: a campaign spread; the photographs move at different speeds, the copy stays put. */}
