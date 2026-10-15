@@ -25,6 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* The ERP's one typeface (Inter, variable weight), served from this app: needed for the first paint. */}
         <link rel="preload" href="/assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="stylesheet" href="/admin.css" />
+        {/* Redesign 2026-10-15: the ERP design system 2.0, last so it sets the look (public/erp.css). */}
+        <link rel="stylesheet" href="/erp.css" />
       </head>
       <body>
         <a className="skip" href="#main">Skip to content</a>

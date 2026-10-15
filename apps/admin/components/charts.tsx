@@ -1,9 +1,8 @@
 'use client';
 /* Dashboard charts (Recharts): soft gridlines, custom tooltips, no default chart chrome. Money arrives in paise.
-   The Sales line is coloured by what sales did between one day and the next: green where they rose, red where they
-   fell, slate where they stayed about the same. The colours come from the data on every render, never from a fixed
-   rule about the period as a whole. */
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+   Sales: slate bars per day against a dashed previous-period line; the tooltip says (in words, green or red) what
+   sales did from one day to the next, worked out from the data on every render. */
+import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const inr = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const compact = (paise: number) => {
@@ -15,8 +14,7 @@ const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateStri
 type Point = { day: string; revenue: number; prevRevenue: number; orders: number };
 
 type Direction = 'up' | 'down' | 'flat';
-/* Lines and dots use the soft trend tones; the sentence in the tooltip uses the stronger text tokens so it stays readable. */
-const TONE: Record<Direction, string> = { up: 'var(--trend-up)', down: 'var(--trend-down)', flat: 'var(--trend-flat)' };
+/* The tooltip says how a day moved in words, coloured with the text tokens so it stays readable. */
 const TEXT_TONE: Record<Direction, string> = { up: 'var(--success)', down: 'var(--danger)', flat: 'var(--muted)' };
 const WORD: Record<Direction, string> = { up: 'Up', down: 'Down', flat: 'No change' };
 /** How sales moved from one value to the next. "About the same" is a move smaller than 2% of the largest day in view
@@ -33,29 +31,21 @@ export function RevenueChart({ data }: { data: Point[] }) {
   // the line's width: a left-to-right gradient with a hard stop at each day gives every segment its own colour.
   const segments = data.slice(1).map((d, i) => direction(data[i]!.revenue, d.revenue, scale));
   const dirAt = new Map(data.map((d, i) => [d.day, i === 0 ? 'flat' as Direction : segments[i - 1]!]));
-  const n = Math.max(1, segments.length);
-  const stops = segments.flatMap((dir, i) => [{ at: i / n, dir }, { at: (i + 1) / n, dir }]);
-  // A line with no rise or fall at all has no height for a gradient to map onto: it is simply drawn in slate.
-  const varied = segments.some(s => s !== 'flat');
-  const stroke = varied ? 'url(#rev-line)' : TONE.flat;
+  /* Minimal White (2026-10-15): one slate bar per day for this period and a dashed grey line for the same days of the
+     previous period, on light gridlines with readable axis labels. How a day moved from the one before is told in the
+     tooltip (in words and colour), not by colouring the bars, so the chart stays calm. */
   return (
     <div className="chart" style={{ height: 260 }} data-sales-chart data-segments={segments.join(',')}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="rev-line" x1="0" y1="0" x2="1" y2="0">
-              {stops.map((s, i) => <stop key={i} offset={`${(s.at * 100).toFixed(3)}%`} stopColor={TONE[s.dir]} />)}
-            </linearGradient>
-          </defs>
+        <ComposedChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
           <CartesianGrid vertical={false} stroke="var(--hairline)" />
-          <XAxis dataKey="day" tickFormatter={dayLabel} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={28}
-            tick={{ fill: 'var(--faint)', fontSize: 12 }} dy={6} />
-          <YAxis tickFormatter={compact} tickLine={false} axisLine={false} width={56} tick={{ fill: 'var(--faint)', fontSize: 12 }} />
-          <Tooltip cursor={{ stroke: 'var(--border-strong)', strokeDasharray: '3 3' }} content={<RevenueTip data={data} dirAt={dirAt} />} />
-          <Area type="monotone" dataKey="prevRevenue" name="Previous 30 days" stroke="var(--faint)" strokeWidth={1.5} strokeDasharray="4 4" fill="none" dot={false} activeDot={false} />
-          <Area type="monotone" dataKey="revenue" name="Last 30 days" stroke={stroke} strokeWidth={2} fill={stroke} fillOpacity={0.12} dot={false} isAnimationActive={false}
-            activeDot={(p: { cx?: number; cy?: number; payload?: Point }) => <circle cx={p.cx} cy={p.cy} r={4} stroke="var(--surface)" strokeWidth={2} fill={TONE[dirAt.get(p.payload?.day ?? '') ?? 'flat']} />} />
-        </AreaChart>
+          <XAxis dataKey="day" tickFormatter={dayLabel} tickLine={false} axisLine={{ stroke: 'var(--border)' }} interval="preserveStartEnd" minTickGap={28}
+            tick={{ fill: 'var(--muted)', fontSize: 12 }} dy={6} />
+          <YAxis tickFormatter={compact} tickLine={false} axisLine={false} width={56} tick={{ fill: 'var(--muted)', fontSize: 12 }} />
+          <Tooltip cursor={{ fill: 'var(--surface-3)', radius: 6 }} content={<RevenueTip data={data} dirAt={dirAt} />} />
+          <Bar dataKey="revenue" name="This period" fill="var(--chart-now)" radius={[4, 4, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+          <Line type="monotone" dataKey="prevRevenue" name="Previous period" stroke="var(--chart-prev)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={false} isAnimationActive={false} />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
@@ -70,9 +60,9 @@ function RevenueTip({ active, payload, data, dirAt }: { active?: boolean; payloa
   return (
     <div className="chart-tip" data-direction={dir}>
       <b>{dayLabel(p.day)}</b>
-      <span><i style={{ background: TONE[dir] }} />Sales {inr(p.revenue)}</span>
+      <span><i style={{ background: 'var(--chart-now)' }} />Sales {inr(p.revenue)}</span>
       {i > 0 && <span style={{ color: TEXT_TONE[dir] }}>{WORD[dir]}{dir === 'flat' ? '' : ` ${inr(Math.abs(diff))}`} from the day before</span>}
-      <span><i style={{ background: 'var(--faint)' }} />Same day, previous period {inr(p.prevRevenue)}</span>
+      <span><i style={{ background: 'var(--chart-prev)' }} />Same day, previous period {inr(p.prevRevenue)}</span>
       <small>{p.orders} {p.orders === 1 ? 'order' : 'orders'}</small>
     </div>
   );
@@ -132,14 +122,14 @@ export function SalesBars({ rows, from, to }: { rows: { day: string; orders: num
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--hairline)" />
-          <XAxis dataKey="key" tickFormatter={label} tickLine={false} axisLine={false} minTickGap={24} tick={{ fill: 'var(--faint)', fontSize: 12 }} dy={6} />
-          <YAxis tickFormatter={compact} tickLine={false} axisLine={false} width={56} tick={{ fill: 'var(--faint)', fontSize: 12 }} />
+          <XAxis dataKey="key" tickFormatter={label} tickLine={false} axisLine={{ stroke: 'var(--border)' }} minTickGap={24} tick={{ fill: 'var(--muted)', fontSize: 12 }} dy={6} />
+          <YAxis tickFormatter={compact} tickLine={false} axisLine={false} width={56} tick={{ fill: 'var(--muted)', fontSize: 12 }} />
           <Tooltip cursor={{ fill: 'var(--surface-3)' }} content={({ active, payload }) => {
             if (!active || !payload?.length) return null;
             const p = payload[0]!.payload as { key: string; revenue: number; orders: number };
             return <div className="chart-tip"><b>{label(p.key)}</b><span><i style={{ background: 'var(--accent)' }} />Sales {inr(p.revenue)}</span><small>{p.orders} {p.orders === 1 ? 'order' : 'orders'}</small></div>;
           }} />
-          <Bar dataKey="revenue" fill="var(--accent)" radius={[6, 6, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="revenue" fill="var(--chart-now)" radius={[4, 4, 0, 0]} maxBarSize={28} />
         </BarChart>
       </ResponsiveContainer>
     </div>

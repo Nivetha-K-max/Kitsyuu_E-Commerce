@@ -49,8 +49,15 @@ export async function getStaff(db: Db, actor: StaffPrincipal, staffId: string) {
 // ---------------------------------------------------------------- branch scope (2026-10-14)
 /** The locations a staff member is assigned to (empty = every location). */
 async function staffLocationsOf(q: Queryable, staffId: string) {
-  return q.selectFrom('staff_locations as sl').innerJoin('locations as l', 'l.id', 'sl.location_id')
-    .select(['l.id', 'l.code', 'l.name', 'l.is_online', 'l.is_active']).where('sl.staff_user_id', '=', staffId).orderBy('l.is_online', 'desc').orderBy('l.sort_order').orderBy('l.name').execute();
+  try {
+    return await q.selectFrom('staff_locations as sl').innerJoin('locations as l', 'l.id', 'sl.location_id')
+      .select(['l.id', 'l.code', 'l.name', 'l.is_online', 'l.is_active']).where('sl.staff_user_id', '=', staffId).orderBy('l.is_online', 'desc').orderBy('l.sort_order').orderBy('l.name').execute();
+  } catch (e) {
+    // 2026-10-15: before migration 20261014005000 has run there is no table and nobody is assigned anywhere (as in
+    // loadLocationScope): the staff page shows "All branches" instead of failing.
+    if ((e as { code?: string })?.code === '42P01') return [];
+    throw e;
+  }
 }
 
 /** True when assignments do not limit this person (they hold staff.manage): the same rule as loadLocationScope, so the

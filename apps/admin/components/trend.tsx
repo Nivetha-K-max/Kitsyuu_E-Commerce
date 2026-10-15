@@ -23,15 +23,13 @@ export function Sparkline({ values, width = 96, height = 32, tone }: { values: n
   /** Colour it by direction (green up, red down, slate unchanged). Without it the sparkline uses the accent. */
   tone?: 'up' | 'down' | 'flat' }) {
   if (values.length < 2) return null;
-  const max = Math.max(...values), min = Math.min(...values);
-  const span = max - min || 1;
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * width, height - 3 - ((v - min) / span) * (height - 6)] as const);
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const flat = max === min;
+  /* Redesign 2026-10-15: one small bar per day (like the sales chart), so a day with a sale reads as a day, not a spike.
+     Bars start from zero; a day with nothing sold shows a hairline stub. */
+  const max = Math.max(...values, 0) || 1, gap = 1.5, w = Math.max(1, (width - gap * (values.length - 1)) / values.length);
   return (
-    <svg className={`spark${tone ? ` ${tone}` : ''}`} data-tone={tone} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" focusable="false">
-      {!flat && <path d={`${line} L${width},${height} L0,${height} Z`} className="spark-fill" />}
-      <path d={flat ? `M0,${height - 3} L${width},${height - 3}` : line} className="spark-line" />
+    <svg className={`spark spark-bars${tone ? ` ${tone}` : ''}`} data-tone={tone} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" focusable="false">
+      {values.map((v, i) => { const h = v > 0 ? Math.max(2, (v / max) * (height - 2)) : 1;
+        return <rect key={i} className={v > 0 ? 'spark-bar' : 'spark-stub'} x={(i * (w + gap)).toFixed(1)} y={(height - h).toFixed(1)} width={w.toFixed(1)} height={h.toFixed(1)} rx={Math.min(1.5, w / 2)} />; })}
     </svg>
   );
 }
