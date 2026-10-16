@@ -497,3 +497,49 @@ td img,.thumb,.product-thumb,.pthumb,.pthumb img,.pos-grid img{border-radius:var
 }
 @media (min-width:1101px){.pos-bar{grid-template-columns:minmax(200px,290px) minmax(0,1fr)}}
 .pos-bar select.input{text-overflow:ellipsis}
+
+/* ================= Products: Table / Grid layout (2026-10-16) ================= */
+/* layout switch: a two-button segmented control beside Sort / View / Export */
+.dt-layout{display:inline-flex;gap:2px;padding:3px;border-radius:var(--radius);background:var(--surface-3)}
+.dt-layout button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-2);font:500 12.5px/1 var(--font);cursor:pointer;
+  transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease)}
+.dt-layout button:hover{color:var(--text-strong)}
+.dt-layout button[aria-pressed=true]{background:var(--surface);color:var(--text-strong);font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.08),0 0 0 1px rgba(16,24,40,.06)}
+:root[data-theme=dark] .dt-layout button[aria-pressed=true]{background:var(--surface-4);box-shadow:none}
+/* the grid: same rows, same page as the table; 3–4 cards a row on desktop, 2 on a phone */
+.dt-grid{margin-top:12px}
+.pgrid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.pcard{position:relative;display:flex;flex-direction:column;min-width:0;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden;
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.pcard:hover{border-color:var(--border-strong);box-shadow:0 4px 16px rgba(16,24,40,.06)}
+.pcard[data-selected]{border-color:var(--slate);box-shadow:0 0 0 1px var(--slate)}
+:root[data-theme=dark] .pcard[data-selected]{border-color:var(--text-2);box-shadow:0 0 0 1px var(--text-2)}
+.pcard-media{display:block;aspect-ratio:4/5;background:var(--surface-3);overflow:hidden}
+.pcard-media img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .3s var(--ease)}
+.pcard:hover .pcard-media img{transform:scale(1.02)}
+.pcard[data-stock=out] .pcard-media img,.pcard[data-stock=none] .pcard-media img{opacity:.55}
+.pcard-noimg{display:grid;place-items:center;align-content:center;gap:6px;height:100%;color:var(--muted);font-size:12px}
+.pcard-check{position:absolute;top:10px;left:10px;display:grid;place-items:center;width:30px;height:30px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--surface) 92%,transparent);box-shadow:0 1px 2px rgba(16,24,40,.12);cursor:pointer}
+.pcard-check input{width:16px;height:16px;margin:0;cursor:pointer}
+.icon-btn.pcard-menu{position:absolute;top:8px;right:8px;width:32px;height:32px;background:color-mix(in srgb,var(--surface) 92%,transparent);box-shadow:0 1px 2px rgba(16,24,40,.12);opacity:0;transition:opacity var(--dur) var(--ease)}
+.pcard:hover .pcard-menu,.pcard:focus-within .pcard-menu,.pcard-menu[data-state=open]{opacity:1}
+@media (hover:none){.icon-btn.pcard-menu{opacity:1}}
+.pcard-body{display:grid;gap:5px;align-content:start;padding:12px 14px 14px}
+.pcard-status{display:flex;align-items:center;gap:6px;min-height:22px}
+.pcard-status .star{color:var(--text-strong);display:inline-flex}
+.pcard-name{margin:0;font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pcard-name .row-link{text-decoration:none}
+.pcard-name .row-link:hover{text-decoration:underline;text-underline-offset:3px}
+.pcard-meta{margin:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard-meta .mono{font-size:11.5px}
+.pcard-figs{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;margin-top:4px}
+.pcard-price{font-size:15px;font-weight:650;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.pcard-stock{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pcard-stock b{color:var(--text);font-weight:600}
+.pcard-warn{display:flex;align-items:center;gap:6px;margin:2px 0 0;font-size:12px;font-weight:600;color:var(--warning)}
+.pcard[data-stock=out] .pcard-warn,.pcard[data-stock=none] .pcard-warn{color:var(--danger)}
+.pcard-next{justify-self:start;margin-top:6px}
+@media (max-width:600px){.pgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pcard-body{padding:10px 10px 12px}.dt-layout button span{display:none}}
+@media (prefers-reduced-motion:reduce){.pcard-media img{transition:none}.pcard:hover .pcard-media img{transform:none}}
+.pgrid .pcard-name a.row-link{text-decoration:none}
+.pgrid .pcard-name a.row-link:hover{text-decoration:underline;text-underline-offset:3px}

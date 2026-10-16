@@ -1,11 +1,13 @@
 'use client';
 /* Product list: search and filters apply as you type (the URL holds them, the server does the searching), sortable
    columns, a "⋯" menu per row, and a floating bar for bulk status changes. Every change still goes through the same
-   server actions as before (checked, locked and audited in core). */
+   server actions as before (checked, locked and audited in core).
+   2026-10-16: a Grid layout (product cards) beside the Table. It shows the same rows (same search, filters, sort, page
+   and selection, see DataTable's grid option) and the same "⋯" actions; the choice is remembered per browser. */
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Popover from '@radix-ui/react-popover';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
+import type { ColumnDef, Row, RowSelectionState } from '@tanstack/react-table';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { startTransition, useEffect, useMemo, useState, useTransition } from 'react';
@@ -193,6 +195,25 @@ export default function ProductsTable({ rows, categories, collections = [], filt
     </div>
   ) : null;
 
+  // The "⋯" actions: the same for a table row and a card. Archive / Move to draft go through statusAction (server-checked).
+  const menu = (p: ProductRowView) => (
+    <>
+      <Dropdown.Item asChild className="menu-item"><Link href={`/products/${p.id}`}><Icon name="edit" />{canWrite ? 'Edit product' : 'View product'}</Link></Dropdown.Item>
+      {p.storeUrl && p.status === 'active' && (
+        <Dropdown.Item asChild className="menu-item"><a href={p.storeUrl} target="_blank" rel="noreferrer"><Icon name="external" />View in store</a></Dropdown.Item>
+      )}
+      <Dropdown.Item className="menu-item" onSelect={() => { navigator.clipboard?.writeText(p.id).then(() => toast.success(`Copied ${p.id}`)).catch(() => {}); }}>
+        <Icon name="products" />Copy product ID
+      </Dropdown.Item>
+      {canWrite && <>
+        <Dropdown.Separator className="menu-sep" />
+        {p.status === 'archived'
+          ? <Dropdown.Item className="menu-item" onSelect={() => setStatus(p, 'draft')}><Icon name="restore" />Move to draft</Dropdown.Item>
+          : <Dropdown.Item className="menu-item danger" onSelect={() => setStatus(p, 'archived')}><Icon name="archive" />Archive</Dropdown.Item>}
+      </>}
+    </>
+  );
+
   return (
     <>
       <DataTable
@@ -202,23 +223,12 @@ export default function ProductsTable({ rows, categories, collections = [], filt
         tableAttrs={{ 'data-products-table': '' }}
         selection={canWrite ? { name: 'productIds[]', form: 'bulk-status-form', label: r => r.name, value: selected, onChange: setSelected } : undefined}
         rowMenuLabel={r => `Actions for ${r.name}`}
-        rowMenu={p => (
-          <>
-            <Dropdown.Item asChild className="menu-item"><Link href={`/products/${p.id}`}><Icon name="edit" />{canWrite ? 'Edit product' : 'View product'}</Link></Dropdown.Item>
-            {p.storeUrl && p.status === 'active' && (
-              <Dropdown.Item asChild className="menu-item"><a href={p.storeUrl} target="_blank" rel="noreferrer"><Icon name="external" />View in store</a></Dropdown.Item>
-            )}
-            <Dropdown.Item className="menu-item" onSelect={() => { navigator.clipboard?.writeText(p.id).then(() => toast.success(`Copied ${p.id}`)).catch(() => {}); }}>
-              <Icon name="products" />Copy product ID
-            </Dropdown.Item>
-            {canWrite && <>
-              <Dropdown.Separator className="menu-sep" />
-              {p.status === 'archived'
-                ? <Dropdown.Item className="menu-item" onSelect={() => setStatus(p, 'draft')}><Icon name="restore" />Move to draft</Dropdown.Item>
-                : <Dropdown.Item className="menu-item danger" onSelect={() => setStatus(p, 'archived')}><Icon name="archive" />Archive</Dropdown.Item>}
-            </>}
-          </>
-        )}
+        rowMenu={menu}
+        grid={{ label: 'Grid', render: page => (
+          <ul className="pgrid" data-products-grid aria-label="Products">
+            {page.map(r => <ProductCard key={r.id} row={r} selectable={canWrite} menu={menu} next={nextStep(r.original, canWrite, canPublish)} />)}
+          </ul>
+        ) }}
         toolbar={toolbar}
         chips={chips}
         empty={
@@ -257,6 +267,48 @@ function nextStep(p: ProductRowView, canWrite: boolean, canPublish: boolean): { 
   if (p.status === 'draft' && canWrite) return { id: 'finish', label: 'Finish draft', href: base };
   if (p.status === 'active' && p.attentionVariants > 0) return { id: 'stock', label: 'Check stock', href: `${base}?tab=variants` };
   return null;
+}
+
+/** One product as a card: picture (or a "No photo" tile), status, name, SKU, category, price, stock and sizes, a low or
+    sold-out warning from the same figures as the table, the row's next step, its "⋯" actions and (for editors) a
+    selection box that feeds the same bulk bar. */
+function ProductCard({ row, selectable, menu, next }: {
+  row: Row<ProductRowView>; selectable: boolean; menu: (p: ProductRowView) => React.ReactNode; next: { id: string; label: string; href: string } | null;
+}) {
+  const p = row.original, href = `/products/${p.id}`;
+  const stock = p.variants === 0 ? 'none' : p.stockUnits === 0 ? 'out' : p.attentionVariants > 0 ? 'low' : 'ok';
+  return (
+    <li className="pcard" data-product-card={p.id} data-stock={stock} data-selected={row.getIsSelected() || undefined}>
+      <Link className="pcard-media" href={href} tabIndex={-1} aria-hidden="true">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" />
+          : <span className="pcard-noimg"><Icon name="no-image" size={22} /><small>No photo yet</small></span>}
+      </Link>
+      {selectable && (
+        <label className="pcard-check"><input type="checkbox" checked={row.getIsSelected()} onChange={e => row.toggleSelected(e.currentTarget.checked)} aria-label={`Select ${p.name}`} /></label>
+      )}
+      <Dropdown.Root>
+        <Dropdown.Trigger className="icon-btn pcard-menu" aria-label={`Actions for ${p.name}`}><Icon name="more" /></Dropdown.Trigger>
+        <Dropdown.Portal><Dropdown.Content className="menu" align="end" sideOffset={4}>{menu(p)}</Dropdown.Content></Dropdown.Portal>
+      </Dropdown.Root>
+      <div className="pcard-body">
+        <div className="pcard-status"><ProductStatusPill status={p.status} />{p.isFeatured && <span className="star" aria-label="Featured" title="Featured in the store"><Icon name="star" size={13} fill /></span>}</div>
+        <h3 className="pcard-name"><Link className="row-link" href={href}>{p.name}</Link></h3>
+        <p className="pcard-meta"><span className="mono">{p.sku}</span> · {p.categoryLabel}{p.subcategoryLabel ? ` / ${p.subcategoryLabel}` : ''}</p>
+        <div className="pcard-figs">
+          <span className="pcard-price money" data-price>{rupees(p.pricePaise)}</span>
+          <span className="pcard-stock"><b>{p.stockUnits.toLocaleString('en-IN')}</b> in stock · {p.sellableVariants}/{p.variants} sizes</span>
+        </div>
+        {stock !== 'ok' && (
+          <p className="pcard-warn" data-attention>
+            <Icon name="alert" size={13} />
+            {stock === 'none' ? 'No sizes yet' : stock === 'out' ? 'Sold out' : `${p.attentionVariants} ${p.attentionVariants === 1 ? 'size' : 'sizes'} low or out`}
+          </p>
+        )}
+        {next && <Link className="btn ghost sm pcard-next" href={next.href} data-next-step={next.id}>{next.label}<span aria-hidden="true"> →</span></Link>}
+      </div>
+    </li>
+  );
 }
 
 function Chip({ name, value, onRemove }: { name: string; value: string; onRemove: () => void }) {

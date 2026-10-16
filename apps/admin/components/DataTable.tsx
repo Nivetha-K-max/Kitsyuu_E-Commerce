@@ -6,7 +6,7 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
   flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, useReactTable,
-  type ColumnDef, type OnChangeFn, type RowData, type RowSelectionState, type SortingState, type VisibilityState,
+  type ColumnDef, type OnChangeFn, type Row, type RowData, type RowSelectionState, type SortingState, type VisibilityState,
 } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
@@ -52,12 +52,16 @@ export interface DataTableProps<T> {
   exportName?: string;
   storageKey: string;
   defaultPageSize?: number;
+  /** Optional second layout (e.g. product cards). It is drawn from the SAME rows as the table, already searched, sorted
+      and on the current page, with the same selection, so switching layout keeps the search, filters, sort, page and
+      selection. The choice is remembered per browser with the other table preferences. */
+  grid?: { render: (rows: Row<T>[]) => ReactNode; label?: string };
 }
 
 const PAGE_SIZES = [25, 50, 100];
 const INTERACTIVE = 'a,button,input,label,select,textarea,[role=menuitem],[data-no-row-click]';
 
-function readPrefs(key: string): { density?: 'comfortable' | 'compact'; hidden?: VisibilityState; pageSize?: number } {
+function readPrefs(key: string): { density?: 'comfortable' | 'compact'; hidden?: VisibilityState; pageSize?: number; layout?: 'table' | 'grid' } {
   try { return JSON.parse(localStorage.getItem(`kitsyuu-table:${key}`) ?? '{}'); } catch { return {}; }
 }
 function writePrefs(key: string, prefs: object) {
@@ -71,22 +75,25 @@ function csvCell(v: unknown) {
 
 export default function DataTable<T>({
   data, columns, getRowId, rowHref, rowAttrs, tableAttrs, selection, rowMenu, rowMenuLabel, toolbar, chips, empty, busy,
-  exportName, storageKey, defaultPageSize = 50,
+  exportName, storageKey, defaultPageSize = 50, grid,
 }: DataTableProps<T>) {
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [visibility, setVisibility] = useState<VisibilityState>({});
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: defaultPageSize });
+  const [layout, setLayout] = useState<'table' | 'grid'>('table');
   const loaded = useRef(false);
   useEffect(() => {
     const p = readPrefs(storageKey);
     if (p.density) setDensity(p.density);
     if (p.hidden) setVisibility(p.hidden);
     if (p.pageSize && PAGE_SIZES.includes(p.pageSize)) setPagination(s => ({ ...s, pageSize: p.pageSize! }));
+    if (p.layout === 'grid') setLayout('grid');
     loaded.current = true;
   }, [storageKey]);
-  useEffect(() => { if (loaded.current) writePrefs(storageKey, { density, hidden: visibility, pageSize: pagination.pageSize }); }, [storageKey, density, visibility, pagination.pageSize]);
+  useEffect(() => { if (loaded.current) writePrefs(storageKey, { density, hidden: visibility, pageSize: pagination.pageSize, layout }); }, [storageKey, density, visibility, pagination.pageSize, layout]);
+  const asGrid = !!grid && layout === 'grid';
   // A new result set (filters changed) starts on the first page.
   useEffect(() => { setPagination(s => ({ ...s, pageIndex: 0 })); }, [data]);
 
@@ -155,7 +162,14 @@ export default function DataTable<T>({
       <div className="dt-toolbar">
         {toolbar}
         <span className="dt-spacer" />
-        <Dropdown.Root>
+        {grid && (
+          <div className="dt-layout" role="group" aria-label="Layout" data-layout-switch>
+            <button type="button" aria-pressed={!asGrid} onClick={() => setLayout('table')} data-layout="table" title="Table"><Icon name="list" size={15} /><span>Table</span></button>
+            <button type="button" aria-pressed={asGrid} onClick={() => setLayout('grid')} data-layout="grid" title={grid.label ?? 'Grid'}><Icon name="grid" size={15} /><span>{grid.label ?? 'Grid'}</span></button>
+          </div>
+        )}
+        {asGrid && <SortMenu table={table} />}
+        {!asGrid && <Dropdown.Root>
           <Dropdown.Trigger className="btn ghost sm" aria-label="Table view options"><Icon name="columns" size={15} />View</Dropdown.Trigger>
           <Dropdown.Portal>
             <Dropdown.Content className="menu" align="end" sideOffset={6} style={{ minWidth: 210 }}>
@@ -177,11 +191,12 @@ export default function DataTable<T>({
               ))}
             </Dropdown.Content>
           </Dropdown.Portal>
-        </Dropdown.Root>
+        </Dropdown.Root>}
         {exportName && <button type="button" className="btn ghost sm" onClick={exportCsv} disabled={total === 0} data-export-csv>
           <Icon name="download" size={15} />Export</button>}
       </div>
       {chips}
+      {asGrid ? (total === 0 ? <div className="table-wrap"><div className="dt-empty-wrap">{empty}</div></div> : <div className="dt-grid" data-layout-view="grid">{grid!.render(rows)}</div>) : (
       <div className="table-wrap">
         {total === 0 ? <div className="dt-empty-wrap">{empty}</div> : (
           <table {...tableAttrs}>
@@ -216,12 +231,12 @@ export default function DataTable<T>({
             })}</tbody>
           </table>
         )}
-      </div>
+      </div>)}
       {total > 0 && (
         <div className="dt-foot">
           <span data-result-count>{from === 1 && to === total ? `${total.toLocaleString('en-IN')} ${total === 1 ? 'result' : 'results'}` : `${from}–${to} of ${total.toLocaleString('en-IN')}`}</span>
           <div className="dt-foot-right">
-            <label className="nowrap">Rows per page{' '}
+            <label className="nowrap">{asGrid ? 'Per page' : 'Rows per page'}{' '}
               <select className="dt-size" value={pageSize} onChange={e => table.setPageSize(Number(e.currentTarget.value))}>
                 {PAGE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -252,5 +267,34 @@ export function TableEmpty({ title, children, actions, kind }: { title: string; 
       {children && <p>{children}</p>}
       {actions && <div className="actions">{actions}</div>}
     </div>
+  );
+}
+
+/** Sorting for the grid layout (the table sorts from its column headers): the same sortable columns, either way. */
+function SortMenu<T>({ table }: { table: ReturnType<typeof useReactTable<T>> }) {
+  const cols = table.getAllLeafColumns().filter(c => c.getCanSort() && c.getIsVisible());
+  const cur = table.getState().sorting[0];
+  const value = cur ? `${cur.id}:${cur.desc ? 'desc' : 'asc'}` : 'none';
+  const name = (c: (typeof cols)[number]) => c.columnDef.meta?.label ?? c.id;
+  const curCol = cur && cols.find(c => c.id === cur.id);
+  return (
+    <Dropdown.Root>
+      <Dropdown.Trigger className="btn ghost sm" aria-label="Sort" data-grid-sort>
+        <Icon name="sort" size={15} />{curCol ? `${name(curCol)} ${cur!.desc ? '↓' : '↑'}` : 'Sort'}
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content className="menu" align="end" sideOffset={6} style={{ minWidth: 220 }}>
+          <Dropdown.RadioGroup value={value} onValueChange={v => { if (v === 'none') table.setSorting([]); else { const [id, d] = v.split(':'); table.setSorting([{ id: id!, desc: d === 'desc' }]); } }}>
+            <Dropdown.RadioItem value="none" className="menu-item">Default order<Dropdown.ItemIndicator className="menu-check"><Icon name="check" size={14} /></Dropdown.ItemIndicator></Dropdown.RadioItem>
+            {cols.flatMap(c => (['asc', 'desc'] as const).map(d => (
+              <Dropdown.RadioItem key={`${c.id}:${d}`} value={`${c.id}:${d}`} className="menu-item">
+                {name(c)} {c.columnDef.meta?.numeric ? (d === 'asc' ? '(low to high)' : '(high to low)') : (d === 'asc' ? '(A–Z)' : '(Z–A)')}
+                <Dropdown.ItemIndicator className="menu-check"><Icon name="check" size={14} /></Dropdown.ItemIndicator>
+              </Dropdown.RadioItem>
+            )))}
+          </Dropdown.RadioGroup>
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
   );
 }
